@@ -1886,6 +1886,76 @@ class RulesTests: XCTestCase {
         XCTAssertThrowsError(try format(input, rules: [FormatRules.fileHeader], options: options))
     }
 
+    func testFileHeaderWithPreserveCreatedByComment() {
+        let input = """
+        //
+        // AppDelegate.swift
+        // Module
+        //
+        // Created by Nick Lockwood on 12/08/2016.
+        // Copyright © 2019 ChouTi. All rights reserved.
+        //
+
+        import UIKit
+
+        enum A {}
+
+        """
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+
+        let output = """
+        //
+        // MyFile.swift
+        //
+        // Created by Nick Lockwood on 12/08/2016.
+        // Copyright © \(formatter.string(from: Date())) Nick Lockwood. All rights reserved.
+        //
+
+        import UIKit
+
+        enum A {}
+
+        """
+        let options = FormatOptions(fileHeader: "//\n// {file}\n//\n// {created_by}\n// Copyright © {year} Nick Lockwood. All rights reserved.\n//", fileInfo: FileInfo(filePath: "~/MyFile.swift"))
+        testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testFileHeaderWithPreserveCreatedByCommentIfNoCreatedLine() {
+        let input = """
+        //
+        // AppDelegate.swift
+        // Module
+        //
+        // Copyright © 2019 ChouTi. All rights reserved.
+        //
+
+        import UIKit
+
+        enum A {}
+
+        """
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+
+        let output = """
+        //
+        // MyFile.swift
+        //
+        // Copyright © \(formatter.string(from: Date())) Nick Lockwood. All rights reserved.
+        //
+
+        import UIKit
+
+        enum A {}
+
+        """
+        let options = FormatOptions(fileHeader: "//\n// {file}\n//\n// {created_by}\n// Copyright © {year} Nick Lockwood. All rights reserved.\n//", fileInfo: FileInfo(filePath: "~/MyFile.swift"))
+        testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
+    }
+
     // MARK: - sortedSwitchCases
 
     func testSortedSwitchCaseMultilineWithComments() {

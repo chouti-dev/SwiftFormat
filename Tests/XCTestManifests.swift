@@ -753,6 +753,8 @@ extension RulesTests {
         ("testFileHeaderFileReplacement", testFileHeaderFileReplacement),
         ("testFileHeaderRuleThrowsIfCreationDateUnavailable", testFileHeaderRuleThrowsIfCreationDateUnavailable),
         ("testFileHeaderRuleThrowsIfFileNameUnavailable", testFileHeaderRuleThrowsIfFileNameUnavailable),
+        ("testFileHeaderWithPreserveCreatedByComment", testFileHeaderWithPreserveCreatedByComment),
+        ("testFileHeaderWithPreserveCreatedByCommentIfNoCreatedLine", testFileHeaderWithPreserveCreatedByCommentIfNoCreatedLine),
         ("testFileHeaderYearReplacement", testFileHeaderYearReplacement),
         ("testFileprivateClassMemberChangedToPrivateEvenIfConstructorCalledOutsideType", testFileprivateClassMemberChangedToPrivateEvenIfConstructorCalledOutsideType),
         ("testFileprivateClassTypeMemberNotChangedToPrivate", testFileprivateClassTypeMemberNotChangedToPrivate),
