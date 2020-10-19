@@ -3847,7 +3847,7 @@ public struct _FormatRules {
     ) { formatter in
         guard !formatter.options.fragment else { return }
 
-        let header: String
+        var header: String
         switch formatter.options.fileHeader {
         case .ignore:
             return
@@ -3935,6 +3935,30 @@ public struct _FormatRules {
                 break
             }
         }
+
+        if let range = header.range(of: "{created_by}") {
+            // replace {created_by} with the line "Created by ..." in the original headers if have.
+            var createdByComment: String?
+            let createdByCommentTokenIndex = formatter.index(before: lastHeaderTokenIndex, where: {
+                if case let .commentBody(comment) = $0 {
+                    if comment.hasPrefix("Created by") {
+                        createdByComment = comment
+                        return true
+                    }
+                }
+                return false
+            })
+
+            if let createdByComment = createdByComment {
+                header.replaceSubrange(range, with: createdByComment)
+            } else {
+                // remove {created_by} line
+                let lineBegin = header.index(range.lowerBound, offsetBy: -3)
+                let lineEnd = header.index(range.upperBound, offsetBy: 1)
+                header.replaceSubrange(lineBegin ..< lineEnd, with: "")
+            }
+        }
+
         if header.isEmpty {
             formatter.removeTokens(in: 0 ..< lastHeaderTokenIndex + 1)
             return

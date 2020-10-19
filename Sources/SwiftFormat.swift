@@ -503,19 +503,35 @@ private func applyRules(
 
     // Check if required FileInfo is available
     if rules.contains(FormatRules.fileHeader) {
-        if options.fileHeader.rawValue.contains("{created"),
+        if options.fileHeader.rawValue.contains("{created}"),
            options.fileInfo.creationDate == nil
         {
             throw FormatError.options(
                 "Failed to apply {created} template in file header as file info is unavailable"
             )
         }
-        if options.fileHeader.rawValue.contains("{file"),
+        if options.fileHeader.rawValue.contains("{file}"),
            options.fileInfo.fileName == nil
         {
             throw FormatError.options(
                 "Failed to apply {file} template in file header as file name was not provided"
             )
+        }
+        if let range = options.fileHeader.rawValue.range(of: "{created_by}") {
+            // "// {created_by}\n" must be in a separated line.
+            let lineBegin = options.fileHeader.rawValue.index(range.lowerBound, offsetBy: -3)
+            let prefix = options.fileHeader.rawValue[lineBegin ..< range.lowerBound]
+            if prefix != "// " {
+                throw FormatError.options(
+                    "Failed to apply {created_by} template in file header as {created_by} should be used in '// {created_by}\n' exclusively."
+                )
+            }
+            let lineEnd = options.fileHeader.rawValue.index(range.upperBound, offsetBy: 2)
+            if options.fileHeader.rawValue[range.upperBound ..< lineEnd] != "\\n" {
+                throw FormatError.options(
+                    "Failed to apply {created_by} template in file header as {created_by} should be used in '// {created_by}\n' exclusively."
+                )
+            }
         }
     }
 
