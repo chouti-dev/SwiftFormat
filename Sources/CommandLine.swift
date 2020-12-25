@@ -86,13 +86,9 @@ private func printWarnings(_ errors: [Error]) -> Bool {
         }
         let isError: Bool
         switch error {
-        case let .options(string):
-            isError = ["File not found", "Malformed", "--minversion"].contains(where: {
-                string.contains($0)
-            })
         case let .writing(string):
             isError = !string.contains(" cache ")
-        case .parsing, .reading:
+        case .parsing, .reading, .options:
             isError = true
         }
         if isError {
@@ -853,7 +849,7 @@ func processInput(_ inputURLs: [URL],
     var shownWarnings = Set<String>()
     var showedConfigurationWarnings = false
     func showConfigurationWarnings(_ options: Options) {
-        for warning in warningsForArguments(argumentsFor(options)) where !shownWarnings.contains(warning) {
+        for warning in warningsForArguments(argumentsFor(options, excludingDefaults: true)) where !shownWarnings.contains(warning) {
             shownWarnings.insert(warning)
             print("warning: \(warning)", as: .warning)
         }

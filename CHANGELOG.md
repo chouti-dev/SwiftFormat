@@ -1,5 +1,87 @@
 # Change Log
 
+## [0.47.9](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.9) (2020-12-24)
+
+- Fixed bug with `redundantType` rule removing required type in `if let` expressions
+- Fixed a bug in `organizeDeclarations` when file contains a class-bound protocol
+- Improved `sortedSwitchCases` ordering
+- Removed erroneous space inserted into array initializer by the `spaceAroundParens` rule
+- Comments followed by a continuation character in SwiftFormat config files now handled correctly 
+- Removed spurious blank lines in console output introduced in 0.47.8
+
+## [0.47.8](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.8) (2020-12-10)
+
+- Fixed additional cases where `fileprivate` was incorrectly converted to `private` in extensions
+- Added preliminary support for upcoming async/await syntax
+
+## [0.47.7](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.7) (2020-12-09)
+
+- Fixed critical bug where `fileprivate` was incorrectly converted to `private` in some cases
+
+## [0.47.6](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.6) (2020-12-08)
+ 
+- Fixed bug in `redundantReturn` when the `return` statement is not the last line in a block
+- Fixed sorting of tuple cases when using `sortedSwitchCases` rule
+- Added `--nevertrailing` option for excluding functions from the `trailingClosures` rule
+- Added `trailingClosures` exception for Nimble `expect()` function
+- The `redundantFileprivate` rule is now applied correctly to extension members
+- Fixed some bugs with static members when using the `--redundanttype explicit` option
+- SwiftFormat command line tool is now signed for better compliance with Big Sur
+- Updated icon for Big Sur (thanks to Jim Puls for the icon design)
+
+## [0.47.5](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.5) (2020-11-27)
+
+- Added `--redundanttype` option for controlling how redundant types are resolved
+- Numeric case values are now sorted naturally instead of alphabetically
+- Fixed bug where `redundantFileprivate` rule broke trailing-closure inits
+- Fixed various `enumNamespaces` rule edge-cases
+- Broken symlinks no longer raise an error if they are ignored in config
+- File creation date can now be used in header formats on Linux
+- The `--symlinks` option now works correctly on Linux
+
+## [0.47.4](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.4) (2020-11-15)
+
+- Command-line tool now includes an arm64 slice for Apple Silicon
+- Increased strictness of grouped extensions logic
+- Fixed issue where `markTypes` rule would mistake an import declaration as a type
+- Fixed some additional bugs with unhoisting pattern let
+- Fixed bug with trailing comma being inserted in capture lists
+- Added warning when setting options for disabled rules
+- Fixed bug with `sortedImports` mangling file header comment
+- Fixed bug with indenting of multiline comments
+
+## [0.47.3](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.3) (2020-11-09)
+
+- Fixed bug with `extensionAccessControl` increasing extension access level beyond extended type
+- Fixed regression with non-standard `.swift-version` contents being flagged as an error
+- Fixed bug in `hoistPatternLet` rule when using `--patternlet inline`
+- Fixed case where `enumNamespaces` was incorrectly applied
+- Fixed indenting of wrapped line starting with a closing paren or brace
+- Fixed indenting of blocks starting on same line as a switch case
+- Fixed indenting of wrapped closure parameter
+- Fixed bug in `--allman` inference
+
+## [0.47.2](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.2) (2020-10-30)
+
+- The `markTypes`, `organizeDeclarations` and`extensionAccessControl` rules now respect comment directives
+- Errors in `.swiftformat` config files no longer fail silently
+- Fixed bug in `--modifierorder` config and added support for SwiftLint modifierorder syntax
+- Fixed issue where `hoistPatternLet` breaks compilation due to a quirk in Swift parser
+- Fixed bug in `hoistPatternLet` when expression is wrapped or contains spaces
+- The `typeSugar` rule is now applied in more cases
+- Fixed bug in cache logic resulting in slower formatting when using certain config options
+- Fixed crash in `indent` rule
+- Fixed bug in wrapped `else` indent
+
+## [0.47.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.1) (2020-10-26)
+
+- Fixed a crash when using the `fileHeader` rule
+- Fixed occasional out-of-bounds crash in `markTypes` rule
+- Fixed bug where `wrapArguments` rule unexpectedly indented blank lines inside braces or brackets
+- Added `--wrapconditions` option for controlling how multiline conditional statements are wrapped
+- Unicode whitespace characters other than space and tab are no longer treated as an error
+- Indenting of `else` clauses now matches Xcode 12
+
 ## [0.47.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.0) (2020-10-14)
  
 - Indenting of wrapped `if`, `guard`, `while`, etc. now matches Xcode 12 behavior

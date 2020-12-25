@@ -141,6 +141,15 @@ class ArgumentsTests: XCTestCase {
         ]), output)
     }
 
+    func testInvalidArgumentThrows() {
+        XCTAssertThrowsError(try preprocessArguments(["", "--vers"], [
+            "verbose",
+            "version",
+        ])) { error in
+            XCTAssertEqual("\(error)", "Unknown option --vers. Did you mean --version?")
+        }
+    }
+
     // merging
 
     func testDuplicateDisableArgumentsAreMerged() {
@@ -335,6 +344,24 @@ class ArgumentsTests: XCTestCase {
         let args = try parseConfigFile(data)
         XCTAssertEqual(args["rules"], "braces, fileHeader, andOperator, typeSugar")
         XCTAssertEqual(args["allman"], "true")
+        XCTAssertEqual(args["hexgrouping"], "4, 8")
+    }
+
+    func testCommentsInConsecutiveLines() throws {
+        let config = """
+        --rules braces, \\
+                # some comment
+                fileHeader, \\
+                # another comment invalidating this line separator \\
+                # yet another comment
+                andOperator
+        --hexgrouping   \\
+                4,      \\  # comment after line separator
+                8           # comment invalidating this line separator \\
+        """
+        let data = Data(config.utf8)
+        let args = try parseConfigFile(data)
+        XCTAssertEqual(args["rules"], "braces, fileHeader, andOperator")
         XCTAssertEqual(args["hexgrouping"], "4, 8")
     }
 

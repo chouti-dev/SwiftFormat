@@ -32,7 +32,7 @@
 import Foundation
 
 /// The indenting mode to use for #if/#endif statements
-public enum IndentMode: String {
+public enum IndentMode: String, CaseIterable {
     case indent
     case noIndent = "no-indent"
     case outdent
@@ -52,7 +52,7 @@ public enum IndentMode: String {
 }
 
 /// Wrap mode for arguments
-public enum WrapMode: String {
+public enum WrapMode: String, CaseIterable {
     case beforeFirst = "before-first"
     case afterFirst = "after-first"
     case preserve
@@ -78,36 +78,42 @@ public enum WrapMode: String {
 }
 
 /// Argument type for stripping
-public enum ArgumentStrippingMode: String {
+public enum ArgumentStrippingMode: String, CaseIterable {
     case unnamedOnly = "unnamed-only"
     case closureOnly = "closure-only"
     case all = "always"
 }
 
 // Wrap mode for @ attributes
-public enum AttributeMode: String {
+public enum AttributeMode: String, CaseIterable {
     case prevLine = "prev-line"
     case sameLine = "same-line"
     case preserve
 }
 
 /// Argument type for else position
-public enum ElsePosition: String {
+public enum ElsePosition: String, CaseIterable {
     case sameLine = "same-line"
     case nextLine = "next-line"
     case auto
 }
 
 /// Where to place the access control keyword of an extension
-public enum ExtensionACLPlacement: String {
+public enum ExtensionACLPlacement: String, CaseIterable {
     case onExtension = "on-extension"
     case onDeclarations = "on-declarations"
 }
 
 /// Wrapping behavior for the return type of a function declaration
-public enum WrapReturnType: String {
+public enum WrapReturnType: String, CaseIterable {
     case ifMultiline = "if-multiline"
     case preserve
+}
+
+/// Annotation which should be kept when removing a redundant type
+public enum RedundantType: String, CaseIterable {
+    case explicit
+    case inferred
 }
 
 /// Version number wrapper
@@ -247,39 +253,39 @@ public enum Grouping: Equatable, RawRepresentable, CustomStringConvertible {
 }
 
 /// Grouping for sorting imports
-public enum ImportGrouping: String {
+public enum ImportGrouping: String, CaseIterable {
     case alphabetized
     case testableTop = "testable-top"
     case testableBottom = "testable-bottom"
 }
 
 /// Self insertion mode
-public enum SelfMode: String {
+public enum SelfMode: String, CaseIterable {
     case insert
     case remove
     case initOnly = "init-only"
 }
 
 /// Optionals mode
-public enum OptionalsMode: String {
+public enum OptionalsMode: String, CaseIterable {
     case exceptProperties = "except-properties"
     case always
 }
 
 /// Argument type for yoda conditions
-public enum YodaMode: String {
+public enum YodaMode: String, CaseIterable {
     case literalsOnly = "literals-only"
     case always
 }
 
 /// Argument type for asset literals
-public enum AssetLiteralWidth: String {
+public enum AssetLiteralWidth: String, CaseIterable {
     case actualWidth = "actual-width"
     case visualWidth = "visual-width"
 }
 
 /// Whether or not to mark types / extensions
-public enum MarkMode: String {
+public enum MarkMode: String, CaseIterable {
     case always
     case never
     case ifNotEmpty = "if-not-empty"
@@ -307,6 +313,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var wrapCollections: WrapMode
     public var closingParenOnSameLine: Bool
     public var wrapReturnType: WrapReturnType
+    public var wrapConditions: WrapMode
     public var uppercaseHex: Bool
     public var uppercaseExponent: Bool
     public var decimalGrouping: Grouping
@@ -324,6 +331,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var experimentalRules: Bool
     public var importGrouping: ImportGrouping
     public var trailingClosures: Set<String>
+    public var neverTrailing: Set<String>
     public var xcodeIndentation: Bool
     public var tabWidth: Int
     public var maxWidth: Int
@@ -351,6 +359,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var organizeExtensionThreshold: Int
     public var yodaSwap: YodaMode
     public var extensionACLPlacement: ExtensionACLPlacement
+    public var redundantType: RedundantType
 
     // Deprecated
     public var indentComments: Bool
@@ -383,6 +392,7 @@ public struct FormatOptions: CustomStringConvertible {
                 wrapCollections: WrapMode = .preserve,
                 closingParenOnSameLine: Bool = false,
                 wrapReturnType: WrapReturnType = .preserve,
+                wrapConditions: WrapMode = .preserve,
                 uppercaseHex: Bool = true,
                 uppercaseExponent: Bool = false,
                 decimalGrouping: Grouping = .group(3, 6),
@@ -400,6 +410,7 @@ public struct FormatOptions: CustomStringConvertible {
                 experimentalRules: Bool = false,
                 importGrouping: ImportGrouping = .alphabetized,
                 trailingClosures: Set<String> = [],
+                neverTrailing: Set<String> = [],
                 xcodeIndentation: Bool = false,
                 tabWidth: Int = 0,
                 maxWidth: Int = 0,
@@ -427,6 +438,7 @@ public struct FormatOptions: CustomStringConvertible {
                 organizeExtensionThreshold: Int = 0,
                 yodaSwap: YodaMode = .always,
                 extensionACLPlacement: ExtensionACLPlacement = .onExtension,
+                redundantType: RedundantType = .inferred,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
@@ -453,6 +465,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.wrapCollections = wrapCollections
         self.closingParenOnSameLine = closingParenOnSameLine
         self.wrapReturnType = wrapReturnType
+        self.wrapConditions = wrapConditions
         self.uppercaseHex = uppercaseHex
         self.uppercaseExponent = uppercaseExponent
         self.decimalGrouping = decimalGrouping
@@ -470,6 +483,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.experimentalRules = experimentalRules
         self.importGrouping = importGrouping
         self.trailingClosures = trailingClosures
+        self.neverTrailing = neverTrailing
         self.xcodeIndentation = xcodeIndentation
         self.tabWidth = tabWidth
         self.maxWidth = maxWidth
@@ -497,6 +511,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.organizeExtensionThreshold = organizeExtensionThreshold
         self.yodaSwap = yodaSwap
         self.extensionACLPlacement = extensionACLPlacement
+        self.redundantType = redundantType
         // Doesn't really belong here, but hard to put elsewhere
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers
@@ -517,8 +532,9 @@ public struct FormatOptions: CustomStringConvertible {
 
     public var description: String {
         let allowedCharacters = CharacterSet.newlines.inverted
-        return Mirror(reflecting: self).children.map {
-            "\($0.value);".addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? ""
+        return Mirror(reflecting: self).children.compactMap { child in
+            let value = (child.value as? Set<AnyHashable>).map { $0.sorted as Any } ?? child.value
+            return "\(value);".addingPercentEncoding(withAllowedCharacters: allowedCharacters)
         }.joined()
     }
 }

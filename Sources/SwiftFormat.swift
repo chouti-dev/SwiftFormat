@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.47.0"
+let swiftFormatVersion = "0.47.9"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -115,57 +115,6 @@ public func enumerateFiles(withInputURL inputURL: URL,
 
     let queue = concurrent ? DispatchQueue.global(qos: .userInitiated) : completionQueue
 
-    func resolveInputURL(_ inputURL: URL, options: Options) -> (URL, ResourceValues, Options)? {
-        let fileOptions = options.fileOptions ?? .default
-        let inputURL = inputURL.standardizedFileURL
-        do {
-            let resourceValues = try getResourceValues(for: inputURL, keys: keys)
-            if resourceValues.isAliasFile == true {
-                #if os(macOS)
-                    if fileOptions.followSymlinks {
-                        let resolvedURL = try URL(resolvingAliasFileAt: inputURL)
-                        return (resolvedURL, try getResourceValues(for: resolvedURL, keys: keys), options)
-                    } else if let handler = skipped {
-                        onComplete(try handler(inputURL, inputURL, options))
-                        return nil
-                    }
-                #endif
-            } else if resourceValues.isSymbolicLink == true {
-                if fileOptions.followSymlinks {
-                    let resolvedURL = inputURL.resolvingSymlinksInPath()
-                    return (resolvedURL, try getResourceValues(for: resolvedURL, keys: keys), options)
-                } else if let handler = skipped {
-                    onComplete(try handler(inputURL, inputURL, options))
-                    return nil
-                }
-            }
-            return (inputURL, resourceValues, options)
-        } catch {
-            onComplete { throw error }
-            return nil
-        }
-    }
-
-    let fileOptions = baseOptions.fileOptions ?? .default
-    do {
-        let resourceValues = try getResourceValues(for: inputURL.standardizedFileURL, keys: keys)
-        if !fileOptions.followSymlinks,
-           resourceValues.isAliasFile == true || resourceValues.isSymbolicLink == true
-        {
-            return [FormatError.options("Symbolic link or alias was skipped: \(inputURL.path)")]
-        }
-    } catch {
-        return [error]
-    }
-    guard let (inputURL, resourceValues, _) = resolveInputURL(inputURL, options: baseOptions) else {
-        return []
-    }
-    if resourceValues.isDirectory == false,
-       !fileOptions.supportedFileExtensions.contains(inputURL.pathExtension)
-    {
-        return [FormatError.options("Unsupported file type: \(inputURL.path)")]
-    }
-
     func wasSkipped(_ inputURL: URL, with options: Options) -> Bool {
         guard shouldSkipFile(inputURL, with: options) else {
             return false
@@ -178,6 +127,54 @@ public func enumerateFiles(withInputURL inputURL: URL,
             }
         }
         return true
+    }
+
+    func resolveInputURL(_ inputURL: URL, options: Options) -> (URL, ResourceValues, Options)? {
+        let fileOptions = options.fileOptions ?? .default
+        let inputURL = inputURL.standardizedFileURL
+        if wasSkipped(inputURL, with: options) {
+            return nil
+        }
+        do {
+            let resourceValues = try getResourceValues(for: inputURL, keys: keys)
+            #if os(macOS)
+                if resourceValues.isAliasFile == true {
+                    if fileOptions.followSymlinks {
+                        guard let resolvedURL = try? URL(resolvingAliasFileAt: inputURL) else {
+                            throw FormatError.options("Could not resolve alias at \(inputURL.path)")
+                        }
+                        if wasSkipped(resolvedURL, with: options) {
+                            return nil
+                        }
+                        return resolveInputURL(resolvedURL, options: options)
+                    } else {
+                        if let handler = skipped {
+                            onComplete(try handler(inputURL, inputURL, options))
+                        }
+                        return nil
+                    }
+                }
+            #endif
+            if resourceValues.isSymbolicLink == true {
+                if fileOptions.followSymlinks {
+                    let resolvedURL = inputURL.resolvingSymlinksInPath()
+                    if wasSkipped(resolvedURL, with: options) {
+                        return nil
+                    }
+                    return resolveInputURL(resolvedURL, options: options)
+                } else {
+                    if let handler = skipped {
+                        onComplete(try handler(inputURL, inputURL, options))
+                    }
+                    return nil
+                }
+            } else {
+                return (inputURL, resourceValues, options)
+            }
+        } catch {
+            onComplete { throw error }
+            return nil
+        }
     }
 
     func enumerate(inputURL: URL,
@@ -215,15 +212,10 @@ public func enumerateFiles(withInputURL inputURL: URL,
             do {
                 try processDirectory(inputURL, with: &options, logger: logger)
             } catch {
-                // Non-fatal error - no need to return
                 onComplete { throw error }
+                return
             }
-            let enumerationOptions: FileManager.DirectoryEnumerationOptions
-            #if os(macOS)
-                enumerationOptions = .skipsHiddenFiles
-            #else
-                enumerationOptions = []
-            #endif
+            let enumerationOptions: FileManager.DirectoryEnumerationOptions = .skipsHiddenFiles
             guard let files = try? manager.contentsOfDirectory(
                 at: inputURL, includingPropertiesForKeys: keys, options: enumerationOptions
             ) else {
@@ -242,23 +234,26 @@ public func enumerateFiles(withInputURL inputURL: URL,
     }
 
     queue.async(group: group) {
-        if !manager.fileExists(atPath: inputURL.path) {
-            onComplete { throw FormatError.options("File not found at \(inputURL.path)") }
-            return
-        }
         var options = baseOptions
+        var inputURL = inputURL
         if options.formatOptions == nil {
             options.formatOptions = .default
         }
-        options.formatOptions?.fileInfo = FileInfo(
-            filePath: resourceValues.path,
-            creationDate: resourceValues.creationDate
-        )
         do {
             try gatherOptions(&options, for: inputURL, with: logger)
+            guard let (resolvedURL, resourceValues, _) = resolveInputURL(inputURL, options: options) else {
+                return
+            }
+            inputURL = resolvedURL
+            let fileOptions = options.fileOptions ?? .default
+            if resourceValues.isDirectory == false,
+               !fileOptions.supportedFileExtensions.contains(inputURL.pathExtension)
+            {
+                throw FormatError.options("Unsupported file type: \(inputURL.path)")
+            }
         } catch {
-            // Non-fatal error - no need to return
             onComplete { throw error }
+            return
         }
         enumerate(inputURL: inputURL, outputURL: outputURL, options: options)
     }
@@ -292,7 +287,7 @@ private func shouldSkipFile(_ inputURL: URL, with options: Options) -> Bool {
     guard let excludedGlobs = options.fileOptions?.excludedGlobs else {
         return false
     }
-    let path = inputURL.path
+    let path = inputURL.standardizedFileURL.path
     for excluded in excludedGlobs {
         guard excluded.matches(path) else {
             continue
@@ -320,12 +315,15 @@ private func processDirectory(_ inputURL: URL, with options: inout Options, logg
     let versionFile = inputURL.appendingPathComponent(swiftVersionFile)
     if manager.fileExists(atPath: versionFile.path) {
         let versionString = try String(contentsOf: versionFile, encoding: .utf8)
-        guard let version = Version(rawValue: versionString) else {
-            throw FormatError.options("Unrecognized swift version string '\(versionString)' "
-                + "found in file \(versionFile.path)")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let version = Version(rawValue: versionString) {
+            assert(options.formatOptions != nil)
+            options.formatOptions?.swiftVersion = version
+        } else {
+            // Don't treat as error, per: https://github.com/nicklockwood/SwiftFormat/issues/639
+            // TODO: find a better solution for logging warnings here
+            logger?("Unrecognized swift version string '\(versionString)' in \(versionFile.path)")
         }
-        assert(options.formatOptions != nil)
-        options.formatOptions?.swiftVersion = version
     }
 }
 
@@ -644,12 +642,16 @@ func getResourceValues(for url: URL, keys: [URLResourceKey]) throws -> ResourceV
     #else
         var isDirectory: ObjCBool = false
         if manager.fileExists(atPath: url.path, isDirectory: &isDirectory) {
+            guard let attributes = try? manager.attributesOfItem(atPath: url.path) else {
+                throw FormatError.reading("Failed to read attributes for \(url.path)")
+            }
+            let isSymbolicLink = url.resolvingSymlinksInPath() != url
             return ResourceValues(
-                isRegularFile: !isDirectory.boolValue,
+                isRegularFile: !isDirectory.boolValue && !isSymbolicLink,
                 isDirectory: isDirectory.boolValue,
                 isAliasFile: false,
-                isSymbolicLink: false,
-                creationDate: nil,
+                isSymbolicLink: isSymbolicLink,
+                creationDate: attributes[.creationDate] as? Date,
                 path: url.path
             )
         }

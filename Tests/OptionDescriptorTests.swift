@@ -240,4 +240,17 @@ class OptionDescriptorTests: XCTestCase {
         var options = FormatOptions()
         XCTAssertNoThrow(try descriptor.toOptions("+,+", &options))
     }
+
+    func testModifierOrder() {
+        let descriptor = Descriptors.modifierOrder
+        var options = FormatOptions()
+        let swiftLintDefaults = "override,acl,setterACL,dynamic,mutators,lazy,final,required,convenience,typeMethods,owned"
+        XCTAssertNoThrow(try descriptor.toOptions(swiftLintDefaults, &options))
+    }
+
+    func testFormatOptionsDescriptionConsistency() {
+        let options1 = FormatOptions(selfRequired: ["foo", "bar", "baz"])
+        let options2 = FormatOptions(selfRequired: ["baz", "bar", "foo"])
+        XCTAssertEqual(options1.description, options2.description)
+    }
 }

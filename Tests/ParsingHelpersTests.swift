@@ -352,6 +352,23 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssert(formatter.isStartOfClosure(at: 21))
     }
 
+    // async / await
+
+    func testAsyncClosure() {
+        let formatter = Formatter(tokenize("{ (foo) async in foo }"))
+        XCTAssert(formatter.isStartOfClosure(at: 0))
+    }
+
+    func testFunctionNamedAsync() {
+        let formatter = Formatter(tokenize("foo = async { bar }"))
+        XCTAssert(formatter.isStartOfClosure(at: 6))
+    }
+
+    func testAwaitClosure() {
+        let formatter = Formatter(tokenize("foo = await { bar }"))
+        XCTAssert(formatter.isStartOfClosure(at: 6))
+    }
+
     // edge cases
 
     func testMultipleNestedTrailingClosures() {
@@ -570,8 +587,9 @@ class ParsingHelpersTests: XCTestCase {
         let formatter = Formatter([], options: options)
         XCTAssertEqual(formatter.modifierOrder, [
             "private", "fileprivate", "internal", "public", "open",
-            "private(set)", "fileprivate(set)", "internal(set)", "public(set)",
-            "final", "dynamic",
+            "private(set)", "fileprivate(set)", "internal(set)", "public(set)", "open(set)",
+            "final",
+            "dynamic",
             "optional", "required",
             "convenience",
             "override",
@@ -584,13 +602,42 @@ class ParsingHelpersTests: XCTestCase {
         ])
     }
 
+    func testModifierOrder2() {
+        let options = FormatOptions(modifierOrder: [
+            "override", "acl", "setterACL", "dynamic", "mutators",
+            "lazy", "final", "required", "convenience", "typeMethods", "owned",
+        ])
+        let formatter = Formatter([], options: options)
+        XCTAssertEqual(formatter.modifierOrder, [
+            "override",
+            "private", "fileprivate", "internal", "public", "open",
+            "private(set)", "fileprivate(set)", "internal(set)", "public(set)", "open(set)",
+            "dynamic", "indirect",
+            "static", "class",
+            "mutating", "nonmutating",
+            "lazy",
+            "final",
+            "optional", "required",
+            "convenience",
+            "weak", "unowned",
+            "prefix", "infix", "postfix",
+        ])
+    }
+
     // MARK: startOfModifiers
 
     func testStartOfModifiers() {
         let formatter = Formatter(tokenize("""
-        class Foo { public required init() {} }
+        class Foo { @objc public required init() {} }
         """))
-        XCTAssertEqual(formatter.startOfModifiers(at: 10), 6)
+        XCTAssertEqual(formatter.startOfModifiers(at: 12, includingAttributes: false), 8)
+    }
+
+    func testStartOfModifiersIncludingAttributes() {
+        let formatter = Formatter(tokenize("""
+        class Foo { @objc public required init() {} }
+        """))
+        XCTAssertEqual(formatter.startOfModifiers(at: 12, includingAttributes: true), 6)
     }
 
     // MARK: processDeclaredVariables

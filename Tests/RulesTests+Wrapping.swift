@@ -70,6 +70,45 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.elseOnSameLine)
     }
 
+    func testElseOnSameLineInferenceEdgeCase() {
+        let input = """
+        func foo() {
+            if let foo == bar {
+                // ...
+            } else {
+                // ...
+            }
+
+            if let foo == bar,
+               let baz = quux
+            {
+                print()
+            }
+
+            if let foo == bar,
+               let baz = quux
+            {
+                print()
+            }
+
+            if let foo == bar,
+               let baz = quux
+            {
+                print()
+            }
+
+            if let foo == bar,
+               let baz = quux
+            {
+                print()
+            }
+        }
+        """
+        let options = FormatOptions(elseOnNextLine: false)
+        testFormatting(for: input, rule: FormatRules.elseOnSameLine, options: options,
+                       exclude: ["braces"])
+    }
+
     // guardelse = auto
 
     func testSingleLineGuardElseNotWrappedByDefault() {
@@ -1381,6 +1420,19 @@ extension RulesTests {
                        exclude: ["wrap"])
     }
 
+    func testWrapArgumentsNoIndentBlankLines() {
+        let input = """
+        let foo = [
+
+            bar,
+
+        ]
+        """
+        let options = FormatOptions(wrapCollections: .beforeFirst)
+        testFormatting(for: input, rule: FormatRules.wrapArguments, options: options,
+                       exclude: ["wrap", "blankLinesAtStartOfScope", "blankLinesAtEndOfScope"])
+    }
+
     // MARK: closingParenOnSameLine = true
 
     func testParenOnSameLineWhenWrapAfterFirstConvertedToWrapBefore() {
@@ -2204,6 +2256,126 @@ extension RulesTests {
         """
         let options = FormatOptions(xcodeIndentation: true)
         testFormatting(for: input, rule: FormatRules.wrapMultilineStatementBraces, options: options)
+    }
+
+    // MARK: wrapConditions before-first
+
+    func testWrapConditionsBeforeFirst() {
+        let input = """
+        if let foo = foo,
+           let bar = bar,
+           foo == bar {}
+
+        else if foo != bar,
+                let quux = quux {}
+
+        if let baaz = baaz {}
+
+        guard baaz.filter({ $0 == foo }),
+              let bar = bar else {}
+
+        while let foo = foo,
+              let bar = bar {}
+        """
+
+        let output = """
+        if
+          let foo = foo,
+          let bar = bar,
+          foo == bar {}
+
+        else if
+          foo != bar,
+          let quux = quux {}
+
+        if let baaz = baaz {}
+
+        guard
+          baaz.filter({ $0 == foo }),
+          let bar = bar else {}
+
+        while
+          let foo = foo,
+          let bar = bar {}
+        """
+
+        testFormatting(
+            for: input, [output], rules: [FormatRules.wrapArguments, FormatRules.indent],
+            options: FormatOptions(indent: "  ", wrapConditions: .beforeFirst)
+        )
+    }
+
+    func testWrapConditionsBeforeFirstWhereShouldPreserveExisting() {
+        let input = """
+        else {}
+
+        else
+        {}
+
+        if foo == bar
+        {}
+
+        guard let foo = bar else
+        {}
+
+        guard let foo = bar
+        else {}
+        """
+
+        testFormatting(
+            for: input, rules: [FormatRules.wrapArguments, FormatRules.indent],
+            options: FormatOptions(indent: "  ", wrapConditions: .beforeFirst),
+            exclude: ["elseOnSameLine"]
+        )
+    }
+
+    func testWrapConditionsAfterFirst() {
+        let input = """
+        if
+          let foo = foo,
+          let bar = bar,
+          foo == bar {}
+
+        else if
+          foo != bar,
+          let quux = quux {}
+
+        else {}
+
+        if let baaz = baaz {}
+
+        guard
+          baaz.filter({ $0 == foo }),
+          let bar = bar else {}
+
+        while
+          let foo = foo,
+          let bar = bar {}
+        """
+
+        let output = """
+        if let foo = foo,
+           let bar = bar,
+           foo == bar {}
+
+        else if foo != bar,
+                let quux = quux {}
+
+        else {}
+
+        if let baaz = baaz {}
+
+        guard baaz.filter({ $0 == foo }),
+              let bar = bar else {}
+
+        while let foo = foo,
+              let bar = bar {}
+        """
+
+        testFormatting(
+            for: input, [output], rules: [FormatRules.wrapArguments, FormatRules.indent],
+            options: FormatOptions(indent: "  ", wrapConditions: .afterFirst)
+        )
     }
 
     // MARK: - wrapAttributes

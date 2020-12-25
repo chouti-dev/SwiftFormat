@@ -143,7 +143,7 @@ class OptionDescriptor {
                      options: DictionaryLiteral<String, String>)
     {
         let map: [String: String] = Dictionary(options.map { ($0, $1) }, uniquingKeysWith: { $1 })
-        let keys = Array(map.keys)
+        let keys = Array(map.keys).sorted()
         self.init(argumentName: argumentName,
                   displayName: displayName,
                   help: help,
@@ -185,13 +185,14 @@ class OptionDescriptor {
                               displayName: String,
                               help: String,
                               deprecationMessage: String? = nil,
-                              keyPath: WritableKeyPath<FormatOptions, T>) where T.RawValue == String
+                              keyPath: WritableKeyPath<FormatOptions, T>,
+                              type: ArgumentType) where T.RawValue == String
     {
         self.argumentName = argumentName
         self.displayName = displayName
         self.help = help
         self.deprecationMessage = deprecationMessage
-        type = .text
+        self.type = type
         toOptions = { value, options in
             guard let value = T(rawValue: value) ?? T(rawValue: value.lowercased()) else {
                 throw FormatError.options("")
@@ -208,17 +209,33 @@ class OptionDescriptor {
         displayName: String,
         help: String,
         deprecationMessage: String? = nil,
-        keyPath: WritableKeyPath<FormatOptions, T>,
-        options: [String]
+        keyPath: WritableKeyPath<FormatOptions, T>
     ) where T.RawValue == String {
         self.init(
             argumentName: argumentName,
             displayName: displayName,
             help: help,
             deprecationMessage: deprecationMessage,
-            keyPath: keyPath
+            keyPath: keyPath,
+            type: .text
         )
-        type = .enum(options)
+    }
+
+    convenience init<T: RawRepresentable & CaseIterable>(
+        argumentName: String,
+        displayName: String,
+        help: String,
+        deprecationMessage: String? = nil,
+        keyPath: WritableKeyPath<FormatOptions, T>
+    ) where T.RawValue == String {
+        self.init(
+            argumentName: argumentName,
+            displayName: displayName,
+            help: help,
+            deprecationMessage: deprecationMessage,
+            keyPath: keyPath,
+            type: .enum(T.allCases.map { $0.rawValue })
+        )
     }
 
     init(argumentName: String,
@@ -409,36 +426,37 @@ struct _Descriptors {
         argumentName: "ifdef",
         displayName: "Ifdef Indent",
         help: "#if indenting: \"indent\" (default), \"no-indent\" or \"outdent\"",
-        keyPath: \.ifdefIndent,
-        options: ["indent", "no-indent", "outdent"]
+        keyPath: \.ifdefIndent
     )
     let wrapArguments = OptionDescriptor(
         argumentName: "wraparguments",
         displayName: "Wrap Arguments",
         help: "Wrap all arguments: \"before-first\", \"after-first\", \"preserve\"",
-        keyPath: \.wrapArguments,
-        options: ["before-first", "after-first", "preserve", "disabled"]
+        keyPath: \.wrapArguments
     )
     let wrapParameters = OptionDescriptor(
         argumentName: "wrapparameters",
         displayName: "Wrap Parameters",
         help: "Wrap func params: \"before-first\", \"after-first\", \"preserve\"",
-        keyPath: \.wrapParameters,
-        options: ["before-first", "after-first", "preserve", "disabled"]
+        keyPath: \.wrapParameters
     )
     let wrapCollections = OptionDescriptor(
         argumentName: "wrapcollections",
         displayName: "Wrap Collections",
         help: "Wrap array/dict: \"before-first\", \"after-first\", \"preserve\"",
-        keyPath: \.wrapCollections,
-        options: ["before-first", "after-first", "preserve", "disabled"]
+        keyPath: \.wrapCollections
     )
     let wrapReturnType = OptionDescriptor(
         argumentName: "wrapreturntype",
         displayName: "Wrap Return Type",
         help: "Wrap return type: \"if-multiline\", \"preserve\" (default)",
-        keyPath: \.wrapReturnType,
-        options: ["if-multiline", "preserve"]
+        keyPath: \.wrapReturnType
+    )
+    let wrapConditions = OptionDescriptor(
+        argumentName: "wrapconditions",
+        displayName: "Wrap Conditions",
+        help: "Wrap conditions: \"before-first\", \"after-first\", \"preserve\"",
+        keyPath: \.wrapConditions
     )
     let closingParenOnSameLine = OptionDescriptor(
         argumentName: "closingparen",
@@ -516,8 +534,7 @@ struct _Descriptors {
         argumentName: "stripunusedargs",
         displayName: "Strip Unused Arguments",
         help: "\"closure-only\", \"unnamed-only\" or \"always\" (default)",
-        keyPath: \.stripUnusedArguments,
-        options: ["unnamed-only", "closure-only", "always"]
+        keyPath: \.stripUnusedArguments
     )
     let elseOnNextLine = OptionDescriptor(
         argumentName: "elseposition",
@@ -537,8 +554,7 @@ struct _Descriptors {
         argumentName: "self",
         displayName: "Self",
         help: "Explicit self: \"insert\", \"remove\" (default) or \"init-only\"",
-        keyPath: \.explicitSelf,
-        options: ["insert", "remove", "init-only"]
+        keyPath: \.explicitSelf
     )
     let selfRequired = OptionDescriptor(
         argumentName: "selfrequired",
@@ -550,14 +566,19 @@ struct _Descriptors {
         argumentName: "importgrouping",
         displayName: "Import Grouping",
         help: "\"testable-top\", \"testable-bottom\" or \"alphabetized\" (default)",
-        keyPath: \FormatOptions.importGrouping,
-        options: ["alphabetized", "testable-top", "testable-bottom"]
+        keyPath: \FormatOptions.importGrouping
     )
     let trailingClosures = OptionDescriptor(
         argumentName: "trailingclosures",
         displayName: "Trailing Closure Functions",
         help: "Comma-delimited list of functions that use trailing closures",
         keyPath: \FormatOptions.trailingClosures
+    )
+    let neverTrailing = OptionDescriptor(
+        argumentName: "nevertrailing",
+        displayName: "Never Trailing Functions",
+        help: "List of functions that should never use trailing closures",
+        keyPath: \FormatOptions.neverTrailing
     )
     let xcodeIndentation = OptionDescriptor(
         argumentName: "xcodeindentation",
@@ -645,7 +666,7 @@ struct _Descriptors {
         help: "Comma-delimited list of modifiers in preferred order",
         keyPath: \FormatOptions.modifierOrder,
         validate: {
-            guard _FormatRules.allModifiers.contains($0) else {
+            guard _FormatRules.mapModifiers($0) != nil else {
                 throw FormatError.options("'\($0)' is not a valid modifier")
             }
         }
@@ -654,8 +675,7 @@ struct _Descriptors {
         argumentName: "shortoptionals",
         displayName: "Short Optional Syntax",
         help: "Use ? for Optionals \"always\" (default) or \"except-properties\"",
-        keyPath: \.shortOptionals,
-        options: ["always", "except-properties"]
+        keyPath: \.shortOptionals
     )
     let markTypes = OptionDescriptor(
         argumentName: "marktypes",
@@ -773,6 +793,12 @@ struct _Descriptors {
         help: "Place ACL \"on-extension\" (default) or \"on-declarations\"",
         keyPath: \.extensionACLPlacement
     )
+    let redundantType = OptionDescriptor(
+        argumentName: "redundanttype",
+        displayName: "Redundant Type",
+        help: "Keep \"inferred\" (default) or \"explicit\" type annotation",
+        keyPath: \.redundantType
+    )
 
     // MARK: - Internal
 
@@ -865,8 +891,7 @@ struct _Descriptors {
         displayName: "Wrap Elements",
         help: "deprecated",
         deprecationMessage: "Use --wrapcollections instead.",
-        keyPath: \.wrapCollections,
-        options: ["before-first", "after-first", "preserve", "disabled"]
+        keyPath: \.wrapCollections
     ).renamed(to: "wrapCollections")
 
     let specifierOrder = OptionDescriptor(
@@ -876,7 +901,7 @@ struct _Descriptors {
         deprecationMessage: "Use --modifierorder instead.",
         keyPath: \FormatOptions.modifierOrder,
         validate: {
-            guard _FormatRules.allModifiers.contains($0) else {
+            guard _FormatRules.mapModifiers($0) != nil else {
                 throw FormatError.options("'\($0)' is not a valid specifier")
             }
         }

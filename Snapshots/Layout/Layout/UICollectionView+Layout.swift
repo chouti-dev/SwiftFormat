@@ -292,7 +292,7 @@ public extension UICollectionView {
         layoutsData![identifier] = layoutData
     }
 
-    fileprivate func registerLayout(
+    private func registerLayout(
         _ layout: Layout,
         state: Any = (),
         constants: [String: Any]...,
@@ -306,7 +306,7 @@ public extension UICollectionView {
             if cellClass == UICollectionViewCell.self {
                 cellClass = LayoutCollectionViewCell.self
             } else if !cellClass.isSubclass(of: LayoutCollectionViewCell.self),
-                !swizzled.contains(cellClass)
+                      !swizzled.contains(cellClass)
             {
                 replace(#selector(getter: intrinsicContentSize), of: cellClass,
                         with: #selector(getter: layout_intrinsicContentSize))

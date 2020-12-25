@@ -222,6 +222,41 @@ class CommandLineTests: XCTestCase {
         ])
     }
 
+    // MARK: config
+
+    func testBadConfigFails() {
+        var error = ""
+        CLI.print = { message, type in
+            if type == .error {
+                error += message + "\n"
+            }
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "Tests/BadConfig/Test.swift --unexclude Tests/BadConfig --config Tests/BadConfig/.swiftformat --lint"), .error)
+        XCTAssert(error.contains("'ifdef' is not a formatting rule"), error)
+    }
+
+    func testBadConfigFails2() {
+        var error = ""
+        CLI.print = { message, type in
+            if type == .error {
+                error += message + "\n"
+            }
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "Tests/BadConfig/Test.swift --unexclude Tests/BadConfig --lint"), .error)
+        XCTAssert(error.contains("'ifdef' is not a formatting rule"), error)
+    }
+
+    func testWarnIfOptionsSpecifiedForDisabledRule() {
+        var warning = ""
+        CLI.print = { message, type in
+            if type == .warning {
+                warning += message + "\n"
+            }
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: ". --lint --rules indent --header foo"), .ok)
+        XCTAssert(warning.contains("--header option has no effect when fileHeader rule is disabled"), warning)
+    }
+
     // MARK: snapshot/regression tests
 
     func testRegressionSuite() {

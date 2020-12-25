@@ -174,6 +174,24 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
     }
 
+    func testRemoveSpaceBetweenParenAndBracket() {
+        let input = "let foo = bar[5] ()"
+        let output = "let foo = bar[5]()"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
+    func testRemoveSpaceBetweenParenAndBracketInsideClosure() {
+        let input = "let foo = bar { [Int] () }"
+        let output = "let foo = bar { [Int]() }"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
+    func testAddSpaceBetweenParenAndCaptureList() {
+        let input = "let foo = bar { [self](foo: Int) in foo }"
+        let output = "let foo = bar { [self] (foo: Int) in foo }"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
     // MARK: - spaceInsideParens
 
     func testSpaceInsideParens() {
@@ -231,6 +249,24 @@ extension RulesTests {
     func testSpaceBeforeTupleIndexSubscript() {
         let input = "foo.1 [2]"
         let output = "foo.1[2]"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundBrackets)
+    }
+
+    func testRemoveSpaceBetweenBracketAndParen() {
+        let input = "let foo = bar[5] ()"
+        let output = "let foo = bar[5]()"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundBrackets)
+    }
+
+    func testRemoveSpaceBetweenBracketAndParenInsideClosure() {
+        let input = "let foo = bar { [Int] () }"
+        let output = "let foo = bar { [Int]() }"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundBrackets)
+    }
+
+    func testAddSpaceBetweenCaptureListAndParen() {
+        let input = "let foo = bar { [self](foo: Int) in foo }"
+        let output = "let foo = bar { [self] (foo: Int) in foo }"
         testFormatting(for: input, output, rule: FormatRules.spaceAroundBrackets)
     }
 
@@ -1045,6 +1081,19 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.spaceInsideComments)
     }
 
+    func testNoExtraTrailingSpaceAddedToDocComment() {
+        let input = """
+        class Foo {
+            /**
+            Call to configure forced disabling of Bills fallback mode.
+            Intended for use only in debug builds and automated tests.
+             */
+            func bar() {}
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.spaceInsideComments, exclude: ["indent"])
+    }
+
     // MARK: - consecutiveSpaces
 
     func testConsecutiveSpaces() {
@@ -1089,5 +1138,46 @@ extension RulesTests {
     func testConsecutiveSpacesDoesntAffectSingleLineComments() {
         let input = "//    foo  bar"
         testFormatting(for: input, rule: FormatRules.consecutiveSpaces)
+    }
+
+    // MARK: - emptyBraces
+
+    func testLinebreaksRemovedInsideBraces() {
+        let input = "func foo() {\n  \n }"
+        let output = "func foo() {}"
+        let options = FormatOptions(fragment: true)
+        testFormatting(for: input, output, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testCommentNotRemovedInsideBraces() {
+        let input = "func foo() { // foo\n}"
+        let options = FormatOptions(fragment: true)
+        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testEmptyBracesNotRemovedInDoCatch() {
+        let input = """
+        do {
+        } catch is FooError {
+        } catch {}
+        """
+        let options = FormatOptions(fragment: true)
+        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testEmptyBracesNotRemovedInIfElse() {
+        let input = """
+        if {
+        } else if foo {
+        } else {}
+        """
+        let options = FormatOptions(fragment: true)
+        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testSpaceRemovedInsideEmptybraces() {
+        let input = "foo { }"
+        let output = "foo {}"
+        testFormatting(for: input, output, rule: FormatRules.emptyBraces)
     }
 }

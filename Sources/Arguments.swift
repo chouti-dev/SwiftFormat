@@ -153,22 +153,28 @@ func bestMatches(for query: String, in options: [String]) -> [String] {
     let lowercaseQuery = query.lowercased()
     // Sort matches by Levenshtein edit distance
     return options
-        .compactMap { option -> (String, Int)? in
+        .compactMap { option -> (String, distance: Int, commonPrefix: Int)? in
             let lowercaseOption = option.lowercased()
             let distance = editDistance(lowercaseOption, lowercaseQuery)
-            guard distance <= lowercaseQuery.count / 2 ||
-                !lowercaseOption.commonPrefix(with: lowercaseQuery).isEmpty
-            else {
+            let commonPrefix = lowercaseOption.commonPrefix(with: lowercaseQuery)
+            if commonPrefix.isEmpty, distance > lowercaseQuery.count / 2 {
                 return nil
             }
-            return (option, distance)
+            return (option, distance, commonPrefix.count)
         }
-        .sorted { $0.1 < $1.1 }
+        .sorted {
+            if $0.distance == $1.distance {
+                return $0.commonPrefix > $1.commonPrefix
+            }
+            return $0.distance < $1.distance
+        }
         .map { $0.0 }
 }
 
-/// The Levenshtein edit-distance between two strings
+/// The Damerau-Levenshtein edit-distance between two strings
 func editDistance(_ lhs: String, _ rhs: String) -> Int {
+    let lhs = Array(lhs)
+    let rhs = Array(rhs)
     var dist = [[Int]]()
     for i in 0 ... lhs.count {
         dist.append([i])
@@ -177,12 +183,16 @@ func editDistance(_ lhs: String, _ rhs: String) -> Int {
         dist[0].append(j)
     }
     for i in 1 ... lhs.count {
-        let lhs = lhs[lhs.index(lhs.startIndex, offsetBy: i - 1)]
         for j in 1 ... rhs.count {
-            if lhs == rhs[rhs.index(rhs.startIndex, offsetBy: j - 1)] {
+            if lhs[i - 1] == rhs[j - 1] {
                 dist[i].append(dist[i - 1][j - 1])
             } else {
-                dist[i].append(min(min(dist[i - 1][j] + 1, dist[i][j - 1] + 1), dist[i - 1][j - 1] + 1))
+                dist[i].append(min(dist[i - 1][j] + 1,
+                                   dist[i][j - 1] + 1,
+                                   dist[i - 1][j - 1] + 1))
+            }
+            if i > 1, j > 1, lhs[i - 1] == rhs[j - 2], lhs[i - 2] == rhs[j - 1] {
+                dist[i][j] = min(dist[i][j], dist[i - 2][j - 2] + 1)
             }
         }
     }
@@ -340,16 +350,24 @@ private func cumulate(successiveLines: [String]) throws -> [String] {
     var cumulatedLines = [String]()
     var iterator = successiveLines.makeIterator()
     while let currentLine = iterator.next() {
-        var cumulatedLine = currentLine.trimmingCharacters(in: .whitespaces)
+        var cumulatedLine = effectiveContent(of: currentLine)
         while cumulatedLine.hasSuffix("\\") {
             guard let nextLine = iterator.next() else {
                 throw FormatError.reading("Configuration file ends with an illegal line continuation character '\'")
             }
-            cumulatedLine = cumulatedLine.dropLast() + nextLine
+            if !nextLine.trimmingCharacters(in: .whitespaces).starts(with: "#") {
+                cumulatedLine = cumulatedLine.dropLast() + effectiveContent(of: nextLine)
+            }
         }
-        cumulatedLines.append(cumulatedLine)
+        cumulatedLines.append(String(cumulatedLine))
     }
     return cumulatedLines
+}
+
+private func effectiveContent(of line: String) -> String {
+    return line
+        .prefix { $0 != "#" }
+        .trimmingCharacters(in: .whitespaces)
 }
 
 // Serialize a set of options into either an arguments string or a file
@@ -581,6 +599,21 @@ func warningsForArguments(_ args: [String: String]) -> [String] {
     for name in Set(rulesArguments.flatMap { (try? args[$0].map(parseRules) ?? []) ?? [] }) {
         if let message = FormatRules.byName[name]?.deprecationMessage {
             warnings.append("\(name) rule is deprecated. \(message)")
+        }
+    }
+    if let rules = try? rulesFor(args) {
+        for arg in args.keys where formattingArguments.contains(arg) {
+            if !rules.contains(where: {
+                guard let rule = FormatRules.byName[$0] else {
+                    return false
+                }
+                return rule.options.contains(arg) || rule.sharedOptions.contains(arg)
+            }) {
+                let expected = FormatRules.all.first(where: {
+                    $0.options.contains(arg)
+                })?.name ?? "associated"
+                warnings.append("--\(arg) option has no effect when \(expected) rule is disabled")
+            }
         }
     }
     return warnings

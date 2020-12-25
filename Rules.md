@@ -1185,6 +1185,10 @@ by using `--self init-only`:
 
 Remove redundant type from variable declarations.
 
+Option | Description
+--- | ---
+`--redundanttype` | Keep "inferred" (default) or "explicit" type annotation
+
 <details>
 <summary>Examples</summary>
 
@@ -1563,6 +1567,7 @@ Use trailing closure syntax where applicable.
 Option | Description
 --- | ---
 `--trailingclosures` | Comma-delimited list of functions that use trailing closures
+`--nevertrailing` | List of functions that should never use trailing closures
 
 <details>
 <summary>Examples</summary>
@@ -1749,6 +1754,7 @@ Option | Description
 `--wrapcollections` | Wrap array/dict: "before-first", "after-first", "preserve"
 `--closingparen` | Closing paren position: "balanced" (default) or "same-line"
 `--wrapreturntype` | Wrap return type: "if-multiline", "preserve" (default)
+`--wrapconditions` | Wrap conditions: "before-first", "after-first", "preserve"
 
 <details>
 <summary>Examples</summary>

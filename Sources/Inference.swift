@@ -171,8 +171,8 @@ private struct Inference {
             {
                 noSpaceOperators.insert(pair.1)
             } else if noSpaceOperators.contains(pair.1),
-                !noSpaceOperators.contains(pair.0),
-                !operators.contains(pair.0)
+                      !noSpaceOperators.contains(pair.0),
+                      !operators.contains(pair.0)
             {
                 noSpaceOperators.insert(pair.0)
             }
@@ -263,6 +263,12 @@ private struct Inference {
             guard let closingBraceIndex = formatter.index(of: .endOfScope("}"), after: i),
                   formatter.index(of: .linebreak, in: i + 1 ..< closingBraceIndex) != nil
             else {
+                return
+            }
+            // Ignore wrapped if/else/guard
+            if let keyword = formatter.lastSignificantKeyword(at: i - 1, excluding: ["else"]),
+               ["if", "guard", "while", "let", "var", "case"].contains(keyword)
+            {
                 return
             }
             // Check if brace is wrapped
@@ -579,6 +585,7 @@ private struct Inference {
                     return true
                 case .keyword("throws"),
                      .keyword("rethrows"),
+                     .keyword("async"),
                      .keyword("where"),
                      .keyword("is"):
                     return false // Keep looking
@@ -588,8 +595,7 @@ private struct Inference {
                     return false // Keep looking
                 }
             }), formatter.tokens[bodyStartIndex] == .startOfScope("{"),
-                let bodyEndIndex = formatter.index(of: .endOfScope("}"), after: bodyStartIndex)
-            else {
+            let bodyEndIndex = formatter.index(of: .endOfScope("}"), after: bodyStartIndex) else {
                 return
             }
             removeUsed(from: &argNames, with: &nameIndices, in: bodyStartIndex + 1 ..< bodyEndIndex)
@@ -721,7 +727,7 @@ private struct Inference {
             var classOrStatic = false
             while let token = formatter.token(at: index) {
                 switch token {
-                case .keyword("is"), .keyword("as"), .keyword("try"):
+                case .keyword("is"), .keyword("as"), .keyword("try"), .keyword("await"):
                     break
                 case .keyword("init"), .keyword("subscript"),
                      .keyword("func") where lastKeyword != "import":
@@ -778,7 +784,7 @@ private struct Inference {
                             formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: index)
                         {
                             switch formatter.tokens[nextIndex] {
-                            case .keyword("as"), .keyword("is"), .keyword("try"):
+                            case .keyword("is"), .keyword("as"), .keyword("try"), .keyword("await"):
                                 break
                             case .keyword, .startOfScope("{"):
                                 break loop
@@ -977,7 +983,7 @@ private struct Inference {
                         if formatter.next(.nonSpaceOrCommentOrLinebreak, after: nextIndex) == .operator("=", .infix) {
                             initUnremoved += 1
                         } else if let scopeEnd = formatter.index(of: .endOfScope(")"), after: nextIndex),
-                            formatter.next(.nonSpaceOrCommentOrLinebreak, after: scopeEnd) == .operator("=", .infix)
+                                  formatter.next(.nonSpaceOrCommentOrLinebreak, after: scopeEnd) == .operator("=", .infix)
                         {
                             initUnremoved += 1
                         } else {
@@ -1032,7 +1038,7 @@ private struct Inference {
                         if formatter.next(.nonSpaceOrCommentOrLinebreak, after: index) == .operator("=", .infix) {
                             initRemoved += 1
                         } else if let scopeEnd = formatter.index(of: .endOfScope(")"), after: index),
-                            formatter.next(.nonSpaceOrCommentOrLinebreak, after: scopeEnd) == .operator("=", .infix)
+                                  formatter.next(.nonSpaceOrCommentOrLinebreak, after: scopeEnd) == .operator("=", .infix)
                         {
                             initRemoved += 1
                         } else {
@@ -1161,6 +1167,7 @@ private struct Inference {
                     return true
                 case .keyword("throws"),
                      .keyword("rethrows"),
+                     .keyword("async"),
                      .keyword("where"),
                      .keyword("is"):
                     return false // Keep looking

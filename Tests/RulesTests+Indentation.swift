@@ -195,6 +195,18 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.indent, exclude: ["wrapArguments"])
     }
 
+    func testIndentWrappedClosureParameters() {
+        let input = """
+        foo { (
+            bar: Int,
+            baz: Int
+        ) in
+            print(bar + baz)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
     func testIndentAllmanTrailingClosureArguments() {
         let input = """
         let foo = Foo
@@ -397,6 +409,72 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.indent)
     }
 
+    func testIndentIfElse() {
+        let input = """
+        if foo {
+        } else if let bar = baz,
+                  let baz = quux {}
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testNestedIndentIfElse() {
+        let input = """
+        if bar {} else if baz,
+                          quux
+        {
+            if foo {
+            } else if let bar = baz,
+                      let baz = quux {}
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentIfCaseLet() {
+        let input = """
+        if case let foo = foo,
+           let bar = bar {}
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentMultipleIfLet() {
+        let input = """
+        if let foo = foo, let bar = bar,
+           let baz = baz {}
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentWrappedConditionAlignsWithParen() {
+        let input = """
+        do {
+            if let foo = foo(
+                bar: 5
+            ), let bar = bar,
+            baz == quux {
+                baz()
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentWrappedConditionAlignsWithParen2() {
+        let input = """
+        do {
+            if let foo = foo({
+                bar()
+            }), bar == baz,
+            let quux == baz {
+                baz()
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
     func testIndentUnknownDefault() {
         let input = """
         switch foo {
@@ -547,6 +625,17 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.indent, options: options)
     }
 
+    func testIndentSwitchCaseDo() {
+        let input = """
+        switch foo {
+        case .bar: do {
+                baz()
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
     // indentCase = true
 
     func testSwitchCaseWithIndentCaseTrue() {
@@ -629,6 +718,18 @@ extension RulesTests {
         """
         let options = FormatOptions(indentCase: true)
         testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentSwitchCaseDoWhenIndentCaseTrue() {
+        let input = """
+        switch foo {
+            case .bar: do {
+                    baz()
+                }
+        }
+        """
+        let options = FormatOptions(indentCase: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 
     // indent wrapped lines
@@ -1131,7 +1232,7 @@ extension RulesTests {
         }
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
-        testFormatting(for: input, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, rule: FormatRules.indent, options: options, exclude: ["braces"])
     }
 
     func testSingleIndentTrailingClosureBodyOfShortMethod() {
