@@ -3866,13 +3866,18 @@ public struct _FormatRules {
             formatter.removeTokens(in: 0 ..< lastHeaderTokenIndex + 1)
             return
         }
+
+        // new header tokens
         var headerTokens = tokenize(header)
+
         let endIndex = lastHeaderTokenIndex + headerTokens.count
-        if formatter.tokens.endIndex > endIndex, headerTokens == Array(formatter.tokens[
-            lastHeaderTokenIndex + 1 ... endIndex
-        ]) {
+        if formatter.tokens.endIndex > endIndex,
+           headerTokens == Array(formatter.tokens[lastHeaderTokenIndex + 1 ... endIndex])
+        {
             lastHeaderTokenIndex += headerTokens.count
         }
+
+        // add two line breaks after headers
         let headerLinebreaks = headerTokens.reduce(0) { result, token -> Int in
             result + (token.isLinebreak ? 1 : 0)
         }
@@ -3880,9 +3885,8 @@ public struct _FormatRules {
             .linebreak(formatter.options.linebreak, headerLinebreaks + 1),
             .linebreak(formatter.options.linebreak, headerLinebreaks + 2),
         ]
-        if let index = formatter.index(of: .nonSpace, after: lastHeaderTokenIndex, if: {
-            $0.isLinebreak
-        }) {
+
+        if let index = formatter.index(of: .nonSpace, after: lastHeaderTokenIndex, if: { $0.isLinebreak }) {
             lastHeaderTokenIndex = index
         }
         formatter.replaceTokens(in: 0 ..< lastHeaderTokenIndex + 1, with: headerTokens)

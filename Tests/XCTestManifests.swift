@@ -708,6 +708,7 @@ extension RulesTests {
         ("testDoubleIndentWhenScopesSeparatedByWrap", testDoubleIndentWhenScopesSeparatedByWrap),
         ("testDoubleNestedIndentedIfElseifEndifOutdenting", testDoubleNestedIndentedIfElseifEndifOutdenting),
         ("testDoublePostfixExpressionYodaCondition", testDoublePostfixExpressionYodaCondition),
+        ("testEdgeCase", testEdgeCase),
         ("testEdgeCaseHeaderEndIndexPlusNewHeaderTokensCountEqualsFileTokensEndIndex", testEdgeCaseHeaderEndIndexPlusNewHeaderTokensCountEqualsFileTokensEndIndex),
         ("testElseClauseIndenting", testElseClauseIndenting),
         ("testElseNotOnSameLineForAllman", testElseNotOnSameLineForAllman),
