@@ -320,11 +320,11 @@ class RulesTests: XCTestCase {
     func testFileHeaderWithPreserveCreatedByComment() {
         let input = """
         //
-        // AppDelegate.swift
-        // Module
+        //  AppDelegate.swift
+        //  Module
         //
-        // Created by Nick Lockwood on 12/08/2016.
-        // Copyright © 2019 Foo. All rights reserved.
+        //  Created by Nick Lockwood on 12/08/2016.
+        //  Copyright © 2019 Foo. All rights reserved.
         //
 
         import UIKit
@@ -338,10 +338,10 @@ class RulesTests: XCTestCase {
 
         let output = """
         //
-        // MyFile.swift
+        //  MyFile.swift
         //
-        // Created by Nick Lockwood on 12/08/2016.
-        // Copyright © \(formatter.string(from: Date())) Nick Lockwood. All rights reserved.
+        //  Created by Nick Lockwood on 12/08/2016.
+        //  Copyright © \(formatter.string(from: Date())) Nick Lockwood. All rights reserved.
         //
 
         import UIKit
@@ -349,17 +349,17 @@ class RulesTests: XCTestCase {
         enum A {}
 
         """
-        let options = FormatOptions(fileHeader: "//\n// {file}\n//\n// {created_by}\n// Copyright © {year} Nick Lockwood. All rights reserved.\n//", fileInfo: FileInfo(filePath: "~/MyFile.swift"))
+        let options = FormatOptions(fileHeader: "//\n//  {file}\n//\n//  {created_by}\n//  Copyright © {year} Nick Lockwood. All rights reserved.\n//", fileInfo: FileInfo(filePath: "~/MyFile.swift"))
         testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
     }
 
     func testFileHeaderWithPreserveCreatedByCommentIfNoCreatedLine() {
         let input = """
         //
-        // AppDelegate.swift
-        // Module
+        //  AppDelegate.swift
+        //  Module
         //
-        // Copyright © 2019 Foo. All rights reserved.
+        //  Copyright © 2019 Foo. All rights reserved.
         //
 
         import UIKit
@@ -373,9 +373,9 @@ class RulesTests: XCTestCase {
 
         let output = """
         //
-        // MyFile.swift
+        //  MyFile.swift
         //
-        // Copyright © \(formatter.string(from: Date())) Nick Lockwood. All rights reserved.
+        //  Copyright © \(formatter.string(from: Date())) Nick Lockwood. All rights reserved.
         //
 
         import UIKit
@@ -383,7 +383,7 @@ class RulesTests: XCTestCase {
         enum A {}
 
         """
-        let options = FormatOptions(fileHeader: "//\n// {file}\n//\n// {created_by}\n// Copyright © {year} Nick Lockwood. All rights reserved.\n//", fileInfo: FileInfo(filePath: "~/MyFile.swift"))
+        let options = FormatOptions(fileHeader: "//\n//  {file}\n//\n//  {created_by}\n//  Copyright © {year} Nick Lockwood. All rights reserved.\n//", fileInfo: FileInfo(filePath: "~/MyFile.swift"))
         testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
     }
 

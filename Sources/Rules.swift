@@ -3952,8 +3952,8 @@ public struct _FormatRules {
             if let createdByComment = createdByComment {
                 header.replaceSubrange(range, with: createdByComment)
             } else {
-                // remove {created_by} line
-                let lineBegin = header.index(range.lowerBound, offsetBy: -3)
+                // remove "//  {created_by}" line
+                let lineBegin = header.index(range.lowerBound, offsetBy: -4)
                 let lineEnd = header.index(range.upperBound, offsetBy: 1)
                 header.replaceSubrange(lineBegin ..< lineEnd, with: "")
             }

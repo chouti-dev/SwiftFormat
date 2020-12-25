@@ -518,18 +518,18 @@ private func applyRules(
             )
         }
         if let range = options.fileHeader.rawValue.range(of: "{created_by}") {
-            // "// {created_by}\n" must be in a separated line.
-            let lineBegin = options.fileHeader.rawValue.index(range.lowerBound, offsetBy: -3)
+            // "//  {created_by}\n" must be in a separated line.
+            let lineBegin = options.fileHeader.rawValue.index(range.lowerBound, offsetBy: -4)
             let prefix = options.fileHeader.rawValue[lineBegin ..< range.lowerBound]
-            if prefix != "// " {
+            if prefix != "//  " {
                 throw FormatError.options(
-                    "Failed to apply {created_by} template in file header as {created_by} should be used in '// {created_by}\n' exclusively."
+                    "Failed to apply {created_by} template in file header as {created_by} should be used in '//  {created_by}\n' exclusively."
                 )
             }
             let lineEnd = options.fileHeader.rawValue.index(range.upperBound, offsetBy: 2)
             if options.fileHeader.rawValue[range.upperBound ..< lineEnd] != "\\n" {
                 throw FormatError.options(
-                    "Failed to apply {created_by} template in file header as {created_by} should be used in '// {created_by}\n' exclusively."
+                    "Failed to apply {created_by} template in file header as {created_by} should be used in '//  {created_by}\n' exclusively."
                 )
             }
         }
