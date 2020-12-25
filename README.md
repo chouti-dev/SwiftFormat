@@ -30,6 +30,7 @@ Table of Contents
     - [Linting](#linting)
     - [Cache](#cache)
     - [File headers](#file-headers)
+- [ChouTi addons](#chouti-addons)
 - [FAQ](#faq)
 - [Known issues](#known-issues)
 - [Tip Jar](#tip-jar)
@@ -674,6 +675,10 @@ Will be formatted as:
 
 **NOTE:** the `{year}` value and `{created}` date format are determined from the current locale and timezone of the machine running the script.
 
+ChouTi addons
+---------------
+
+- Supported `{created_by}` - Keeps the original `//  Created by Nick Lockwood on 12/08/2016.` line in header comments.
 
 FAQ
 -----
@@ -742,7 +747,6 @@ Q. I don't want to be surprised by new rules added when I upgrade SwiftFormat. H
 *Q. Can I use the `SwiftFormat.framework` inside another app?*
 
 > A. Yes, the SwiftFormat framework can be included in an app or test target, and used for many kinds of parsing and processing of Swift source code besides formatting. The SwiftFormat framework is available as a [CocoaPod](https://cocoapods.org/pods/SwiftFormat) for easy integration.
-
 
 Known issues
 ---------------
