@@ -7,6 +7,7 @@ cd $(dirname $0) # cd to the command dir.
 
 # 0) prepare
 echo "➡️  git pull"
+git fetch --tags
 git pull
 
 # 1) get the tag to merge
@@ -30,18 +31,22 @@ done
 
 # 2) merge
 echo "➡️  git merge $tagToMerge --no-edit"
-git merge tagToMerge --no-edit
+git merge $tagToMerge --no-edit
+if [ $? -ne 0 ]; then
+  echo "🛑 merge failed"
+  exit 1
+fi
 
 # 3) run test
-# echo "➡️  run tests"
-# xcodebuild -project SwiftFormat.xcodeproj -scheme "SwiftFormat (Framework)" -sdk macosx clean build test | xcbeautify
+echo "➡️  run tests"
+xcodebuild -project SwiftFormat.xcodeproj -scheme "SwiftFormat (Framework)" -sdk macosx clean build test | xcbeautify
 if [ $? -ne 0 ]; then
   echo "🛑 test failed"
-  return
+  exit 1
 fi
 
 # 4) create a new tag
-newTag="chouti-$tagToMerge"
+newTag="$tagToMerge-chouti"
 while true; do
   read -p "$(echo -e '➡️  'create a new tag ${COLOR_GREEN}$newTag${COLOR_RESET}'?' '(y/n) ')" yn
   case $yn in
@@ -52,6 +57,28 @@ while true; do
 done
 
 git tag $newTag
+if [ $? -ne 0 ]; then
+  echo "🛑 creat tag failed"
+  exit 1
+fi
+
+# 5) push new tag
+while true; do
+  read -p "$(echo -e '➡️  'push new tag ${COLOR_GREEN}$newTag${COLOR_RESET} to origin'?' '(y/n) ')" yn
+  case $yn in
+      [Yy]* ) break;;
+      [Nn]* ) exit;;
+      * ) echo "Please answer yes or no.";;
+  esac
+done
+git push origin $newTag
+if [ $? -ne 0 ]; then
+  echo "🛑 push tag failed"
+  exit 1
+fi
+
+# 6) open web to create a new release
+open https://github.com/chouti-dev/SwiftFormat/releases/new?tag=$newTag
 
 # --- End ---
 
