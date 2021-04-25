@@ -194,7 +194,8 @@ func printHelp(as type: CLI.OutputType) {
     --minversion       The minimum SwiftFormat version to be used for these files
     --cache            Path to cache file, or "clear" or "ignore" the default cache
     --dryrun           Run in "dry" mode (without actually changing any files)
-    --lint             Like --dryrun, but returns an error if formatting is needed
+    --lint             Return an error for unformatted input, and list violations
+    --report           Path to a file where --lint output should be written
     --lenient          Suppress errors for unformatted code in --lint mode
     --verbose          Display detailed formatting output and warnings/errors
     --quiet            Disables non-critical output messages and warnings
@@ -205,6 +206,7 @@ func printHelp(as type: CLI.OutputType) {
     --rules            The list of rules to apply. Pass nothing to print all rules
     --disable          A list of format rules to be disabled (comma-delimited)
     --enable           A list of disabled rules to be re-enabled (comma-delimited)
+    --lintonly         A list of rules to be enabled only when using --lint mode
 
     SwiftFormat's rules can be configured using options. A given option may affect
     multiple rules. Options have no effect if the related rules have been disabled.
@@ -286,6 +288,11 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
         // Warnings
         for warning in warningsForArguments(args) {
             print("warning: \(warning)", as: .warning)
+        }
+
+        // Report output
+        let reporter = args["report"].map {
+            JSONReporter(outputURL: URL(fileURLWithPath: $0))
         }
 
         // Show help
@@ -397,16 +404,18 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
             let fileListURL = try parsePath(fileListPath, for: "filelist", in: directory)
             do {
                 let source = try String(contentsOf: fileListURL)
-                inputURLs += parseFileList(source, in: fileListURL.deletingLastPathComponent().path)
+                inputURLs += try parseFileList(source, in: fileListURL.deletingLastPathComponent().path)
             } catch {
                 throw FormatError.options("Failed to read file list at \(fileListPath)")
             }
         }
         var useStdin = false
         while let inputPath = args[String(inputURLs.count + 1)] {
-            inputURLs += try parsePaths(inputPath, for: "input", in: directory)
             if inputPath.lowercased() == "stdin" {
                 useStdin = true
+                inputURLs.append(URL(string: "stdin")!)
+            } else {
+                inputURLs += try parsePaths(inputPath, in: directory)
             }
         }
         if useStdin {
@@ -446,7 +455,7 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
             if arg.lowercased() == "stdin" {
                 useStdin = true
             } else {
-                inputURLs += try parsePaths(arg, for: "input", in: directory)
+                inputURLs += try parsePaths(arg, in: directory)
             }
         }
         try addInputPaths(for: "quiet")
@@ -466,6 +475,9 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
             } else if arg == "stdout" {
                 useStdout = true
                 return URL(string: arg)
+            }
+            if args["lint"] != nil {
+                print("warning: --output argument is unused when running in --lint mode", as: .warning)
             }
             return try parsePath(arg, for: "--output", in: directory)
         }
@@ -621,7 +633,7 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
                         }
                     }
                     let output = try applyRules(input, options: options, lineRange: lineRange,
-                                                verbose: verbose, lint: lint)
+                                                verbose: verbose, lint: lint, reporter: reporter)
                     if let outputURL = outputURL, !useStdout {
                         if (try? String(contentsOf: outputURL)) != output, !dryrun {
                             do {
@@ -689,7 +701,8 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
                                                   verbose: verbose,
                                                   dryrun: dryrun,
                                                   lint: lint,
-                                                  cacheURL: cacheURL)
+                                                  cacheURL: cacheURL,
+                                                  reporter: reporter)
             errors += _errors
         })
 
@@ -699,6 +712,10 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
         if outputFlags.filesChecked == 0, outputFlags.filesSkipped == 0 {
             let inputPaths = inputURLs.map { $0.path }.joined(separator: ", ")
             print("warning: No eligible files found at \(inputPaths).", as: .warning)
+        }
+        if let reporter = reporter {
+            print("Writing report file to \(reporter.outputURL.path)")
+            try reporter.write()
         }
         print("SwiftFormat completed in \(time).", as: .success)
         return printResult(dryrun, lint, lenient, outputFlags)
@@ -714,12 +731,11 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
     }
 }
 
-func parseFileList(_ source: String, in directory: String) -> [URL] {
-    return source
+func parseFileList(_ source: String, in directory: String) throws -> [URL] {
+    return try source
         .components(separatedBy: .newlines)
         .map { $0.components(separatedBy: "#")[0].trimmingCharacters(in: .whitespaces) }
-        .filter { !$0.isEmpty }
-        .map { expandPath($0, in: directory) }
+        .flatMap { try parsePaths($0, in: directory) }
 }
 
 func printResult(_ dryrun: Bool, _ lint: Bool, _ lenient: Bool, _ flags: OutputFlags) -> ExitCode {
@@ -775,7 +791,7 @@ func computeHash(_ source: String) -> String {
 }
 
 func applyRules(_ source: String, options: Options, lineRange: ClosedRange<Int>?,
-                verbose: Bool, lint: Bool) throws -> String
+                verbose: Bool, lint: Bool, reporter: JSONReporter?) throws -> String
 {
     // Parse source
     var tokens = tokenize(source)
@@ -793,13 +809,17 @@ func applyRules(_ source: String, options: Options, lineRange: ClosedRange<Int>?
     let formatOptions = options.formatOptions ?? .default
     var changes = [Formatter.Change]()
     let range = lineRange.map { tokenRange(forLineRange: $0, in: tokens) }
-    (tokens, changes) = try applyRules(rules, to: tokens, with: formatOptions,
-                                       trackChanges: lint || verbose, range: range)
+    (tokens, changes) = try applyRules(
+        rules, to: tokens, with: formatOptions,
+        trackChanges: lint || verbose || reporter != nil,
+        range: range
+    )
 
     // Display info
     let updatedSource = sourceCode(for: tokens)
     if lint, updatedSource != source {
         changes.forEach { print($0.description, as: .warning) }
+        reporter?.report(changes)
     }
     if verbose {
         let rulesApplied = changes.reduce(into: Set<String>()) {
@@ -825,7 +845,8 @@ func processInput(_ inputURLs: [URL],
                   verbose: Bool,
                   dryrun: Bool,
                   lint: Bool,
-                  cacheURL: URL?) -> (OutputFlags, [Error])
+                  cacheURL: URL?,
+                  reporter: JSONReporter?) -> (OutputFlags, [Error])
 {
     // Load cache
     let cacheDirectory = cacheURL?.deletingLastPathComponent().absoluteURL
@@ -912,7 +933,7 @@ func processInput(_ inputURLs: [URL],
                     }
                 } else {
                     output = try applyRules(input, options: options, lineRange: lineRange,
-                                            verbose: verbose, lint: lint)
+                                            verbose: verbose, lint: lint, reporter: reporter)
                     if output != input {
                         sourceHash = nil
                     }

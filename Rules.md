@@ -423,6 +423,10 @@ Option | Description
 
 Remove whitespace inside empty braces.
 
+Option | Description
+--- | ---
+`--emptybraces` | Empty braces: "no-space" (default), "spaced" or "linebreak"
+
 <details>
 <summary>Examples</summary>
 
@@ -823,8 +827,10 @@ Convert trivial `map { $0.foo }` closures to keyPath-based syntax.
 
 ```diff
 - let barArray = fooArray.map { $0.bar }
-
 + let barArray = fooArray.map(\.bar)
+
+- let barArray = fooArray.compactMap { $0.optionalBar }
++ let barArray = fooArray.compactMap(\.optionalBar)
 ```
 
 </details>
@@ -1257,7 +1263,7 @@ Sort import statements alphabetically.
 
 Option | Description
 --- | ---
-`--importgrouping` | "testable-top", "testable-bottom" or "alphabetized" (default)
+`--importgrouping` | "testable-first/last", "alpha" (default) or "length"
 
 <details>
 <summary>Examples</summary>

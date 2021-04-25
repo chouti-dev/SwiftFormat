@@ -616,6 +616,22 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantFileprivate, options: options)
     }
 
+    func testFileprivateVarWithPropertWrapperNotChangedToPrivateIfAccessedFromSubclass() {
+        let input = """
+        class Foo {
+            @Foo fileprivate var foo: Int = 5
+        }
+
+        class Bar: Foo {
+            func bar() {
+                return $foo
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "4")
+        testFormatting(for: input, rule: FormatRules.redundantFileprivate, options: options)
+    }
+
     // MARK: - redundantGet
 
     func testRemoveSingleLineIsolatedGet() {
@@ -1171,6 +1187,21 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantNilInit)
     }
 
+    func testRemoveNilInitInStructWithDefaultInitInSwiftVersion5_2() {
+        let input = """
+        struct Foo {
+            var bar: String? = nil
+        }
+        """
+        let output = """
+        struct Foo {
+            var bar: String?
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: FormatOptions(swiftVersion: "5.2"))
+    }
+
     func testRemoveNilInitInStructWithCustomInit() {
         let input = """
         struct Foo {
@@ -1597,6 +1628,77 @@ extension RulesTests {
         }()
         """
         testFormatting(for: input, rule: FormatRules.redundantReturn)
+    }
+
+    func testNoRemoveReturnInForWhereLoop() {
+        let input = """
+        func foo() -> Bool {
+            for bar in baz where !bar {
+                return false
+            }
+            return true
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.1")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testRedundantReturnInVoidFunction() {
+        let input = """
+        func foo() {
+            return
+        }
+        """
+        let output = """
+        func foo() {
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn,
+                       exclude: ["emptyBraces"])
+    }
+
+    func testRedundantReturnInVoidFunction2() {
+        let input = """
+        func foo() {
+            print("")
+            return
+        }
+        """
+        let output = """
+        func foo() {
+            print("")
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn)
+    }
+
+    func testRedundantReturnInVoidFunction3() {
+        let input = """
+        func foo() {
+            // empty
+            return
+        }
+        """
+        let output = """
+        func foo() {
+            // empty
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn)
+    }
+
+    func testRedundantReturnInVoidFunction4() {
+        let input = """
+        func foo() {
+            return // empty
+        }
+        """
+        let output = """
+        func foo() {
+            // empty
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn)
     }
 
     // MARK: - redundantBackticks
@@ -2591,6 +2693,95 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantSelf)
     }
 
+    func testSelfNotRemovedInDynamicMemberLookup() {
+        let input = """
+        @dynamicMemberLookup
+        struct Foo {
+            subscript(dynamicMember foo: String) -> String {
+                return foo + "bar"
+            }
+
+            func bar() {
+                if self.foo == "foobar" {
+                    return
+                }
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantSelf)
+    }
+
+    func testNoRemoveSelfAfterGuardCaseLetWithExplicitNamespace() {
+        let input = """
+        class Foo {
+            var name: String?
+
+            func bug(element: Something) {
+                guard case let Something.a(name) = element
+                else { return }
+                self.name = name
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantSelf)
+    }
+
+    func testRedundantSelfParsingBug() {
+        let input = """
+        private class Foo {
+            mutating func bar() -> Statement? {
+                let start = self
+                guard case Token.identifier(let name)? = self.popFirst() else {
+                    self = start
+                    return nil
+                }
+                return Statement.declaration(name: name)
+            }
+        }
+        """
+        let output = """
+        private class Foo {
+            mutating func bar() -> Statement? {
+                let start = self
+                guard case Token.identifier(let name)? = popFirst() else {
+                    self = start
+                    return nil
+                }
+                return Statement.declaration(name: name)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf,
+                       exclude: ["hoistPatternLet"])
+    }
+
+    func testRedundantSelfParsingBug2() {
+        let input = """
+        extension Foo {
+            private enum NonHashableEnum: RawRepresentable {
+                case foo
+                case bar
+
+                var rawValue: RuntimeTypeTests.TestStruct {
+                    return TestStruct(foo: 0)
+                }
+
+                init?(rawValue: RuntimeTypeTests.TestStruct) {
+                    switch rawValue.foo {
+                    case 0:
+                        self = .foo
+                    case 1:
+                        self = .bar
+                    default:
+                        return nil
+                    }
+                }
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantSelf)
+    }
+
     // explicitSelf = .insert
 
     func testInsertSelf() {
@@ -3052,6 +3243,71 @@ extension RulesTests {
         """
         let options = FormatOptions(explicitSelf: .insert)
         testFormatting(for: input, output, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testNoInsertSelfForVarDefinedInIfCaseLet() {
+        let input = """
+        struct A {
+            var localVar = ""
+
+            var B: String {
+                if case let .c(localVar) = self.d, localVar == .e {
+                    print(localVar)
+                }
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testNoInsertSelfForVarDefinedInUnhoistedIfCaseLet() {
+        let input = """
+        struct A {
+            var localVar = ""
+
+            var B: String {
+                if case .c(let localVar) = self.d, localVar == .e {
+                    print(localVar)
+                }
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options,
+                       exclude: ["hoistPatternLet"])
+    }
+
+    func testNoInsertSelfForVarDefinedInFor() {
+        let input = """
+        struct A {
+            var localVar = ""
+
+            var B: String {
+                for localVar in 0 ..< 6 where localVar < 5 {
+                    print(localVar)
+                }
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testNoInsertSelfForVarDefinedInWhileLet() {
+        let input = """
+        struct A {
+            var localVar = ""
+
+            var B: String {
+                while let localVar = self.localVar, localVar < 5 {
+                    print(localVar)
+                }
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
     }
 
     // explicitSelf = .initOnly

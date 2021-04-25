@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.47.9"
+let swiftFormatVersion = "0.48.0"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -272,7 +272,7 @@ public func enumerateFiles(withInputURL inputURL: URL,
 
 // Process configuration in all directories in specified path.
 func gatherOptions(_ options: inout Options, for inputURL: URL, with logger: Logger?) throws {
-    var directory = URL(fileURLWithPath: inputURL.pathComponents[0])
+    var directory = URL(fileURLWithPath: inputURL.pathComponents[0]).standardized
     for part in inputURL.pathComponents.dropFirst().dropLast() {
         directory.appendPathComponent(part)
         if shouldSkipFile(directory, with: options) {
@@ -535,6 +535,19 @@ private func applyRules(
         }
     }
 
+    // Split tokens into lines
+    func lines(in tokens: [Token]) -> [Int: ArraySlice<Token>?] {
+        var lines: [Int: ArraySlice<Token>?] = [:]
+        var start = 0
+        for (i, token) in tokens.enumerated() {
+            if case let .linebreak(_, line) = token {
+                lines[line] = tokens[start ..< i]
+                start = i + 1
+            }
+        }
+        return lines
+    }
+
     // Recursively apply rules until no changes are detected
     let group = DispatchGroup()
     let queue = DispatchQueue(label: "swiftformat.formatting", qos: .userInteractive)
@@ -557,6 +570,9 @@ private func applyRules(
         }
         changes += formatter.changes
         if tokens == formatter.tokens {
+            if changes.isEmpty {
+                return (tokens, [])
+            }
             // Sort changes
             changes.sort(by: {
                 if $0.line == $1.line {
@@ -564,13 +580,19 @@ private func applyRules(
                 }
                 return $0.line < $1.line
             })
-            // Filter out duplicates
+            // Get lines
+            let oldLines = lines(in: originalTokens)
+            let newLines = lines(in: tokens)
+            // Filter out duplicates and lines that haven't changed
             var last: Formatter.Change?
             return (tokens, changes.filter { change in
                 if last == change {
                     return false
                 }
                 last = change
+                if newLines[change.line] == oldLines[change.line] {
+                    return false
+                }
                 return true
             })
         }
@@ -622,12 +644,12 @@ public func lint(
 
 public func expandPath(_ path: String, in directory: String) -> URL {
     if path.hasPrefix("/") {
-        return URL(fileURLWithPath: path)
+        return URL(fileURLWithPath: path).standardized
     }
     if path.hasPrefix("~") {
-        return URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
+        return URL(fileURLWithPath: NSString(string: path).expandingTildeInPath).standardized
     }
-    return URL(fileURLWithPath: directory).appendingPathComponent(path)
+    return URL(fileURLWithPath: directory).appendingPathComponent(path).standardized
 }
 
 struct ResourceValues {

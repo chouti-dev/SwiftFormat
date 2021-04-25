@@ -276,6 +276,18 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.void, options: options)
     }
 
+    func testNoConvertVoidSelfToTuple() {
+        let input = "Void.self"
+        let options = FormatOptions(useVoid: false)
+        testFormatting(for: input, rule: FormatRules.void, options: options)
+    }
+
+    func testNoConvertVoidTypeToTuple() {
+        let input = "Void.Type"
+        let options = FormatOptions(useVoid: false)
+        testFormatting(for: input, rule: FormatRules.void, options: options)
+    }
+
     // MARK: - trailingClosures
 
     func testAnonymousClosureArgumentMadeTrailing() {
@@ -567,6 +579,25 @@ extension RulesTests {
                        exclude: ["wrapSwitchCases", "sortedSwitchCases"])
     }
 
+    func testHoistNewlineSeparatedSwitchCaseLets() {
+        let input = """
+        switch foo {
+        case .foo(let bar),
+             .bar(let bar):
+        }
+        """
+
+        let output = """
+        switch foo {
+        case let .foo(bar),
+             let .bar(bar):
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.hoistPatternLet,
+                       exclude: ["wrapSwitchCases", "sortedSwitchCases"])
+    }
+
     func testHoistCatchLet() {
         let input = "do {} catch Foo.foo(bar: let bar) {}"
         let output = "do {} catch let Foo.foo(bar: bar) {}"
@@ -583,7 +614,7 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.hoistPatternLet, exclude: ["trailingClosures"])
     }
 
-    // TODO: this could actually hoist the let, but that's tricky to implement without
+    // TODO: this should actually hoist the let, but that's tricky to implement without
     // breaking the `testNoOverHoistSwitchCaseWithNestedParens` case
     func testHoistSwitchCaseWithNestedParens() {
         let input = "import Foo\nswitch (foo, bar) {\ncase (.baz(let quux), Foo.bar): break\n}"
@@ -784,6 +815,39 @@ extension RulesTests {
         let options = FormatOptions(hoistPatternLet: false)
         testFormatting(for: input, rule: FormatRules.hoistPatternLet, options: options,
                        exclude: ["redundantParens"])
+    }
+
+    func testNoDeleteCommentWhenUnhoistingWrappedLet() {
+        let input = """
+        switch foo {
+        case /* next */ let .bar(bar):
+        }
+        """
+
+        let output = """
+        switch foo {
+        case /* next */ .bar(let bar):
+        }
+        """
+
+        let options = FormatOptions(hoistPatternLet: false)
+        testFormatting(for: input, output, rule: FormatRules.hoistPatternLet,
+                       options: options, exclude: ["wrapSwitchCases", "sortedSwitchCases"])
+    }
+
+    func testMultilineGuardLet() {
+        let input = """
+        guard
+            let first = response?.first,
+            let last = response?.last,
+            case .foo(token: let foo, provider: let bar) = first,
+            case .foo(token: let baz, provider: let quux) = last
+        else {
+            return
+        }
+        """
+        let options = FormatOptions(hoistPatternLet: false)
+        testFormatting(for: input, rule: FormatRules.hoistPatternLet, options: options)
     }
 
     // MARK: - enumNamespaces
@@ -1828,5 +1892,18 @@ extension RulesTests {
         let input = "let foo = bar.map { $0?.foo }"
         let options = FormatOptions(swiftVersion: "5.2")
         testFormatting(for: input, rule: FormatRules.preferKeyPath, options: options)
+    }
+
+    func testNoMapPropertyToKeyPathForTrailingContains() {
+        let input = "let foo = bar.contains { $0.foo }"
+        let options = FormatOptions(swiftVersion: "5.2")
+        testFormatting(for: input, rule: FormatRules.preferKeyPath, options: options)
+    }
+
+    func testMapPropertyToKeyPathForContainsWhere() {
+        let input = "let foo = bar.contains(where: { $0.foo })"
+        let output = "let foo = bar.contains(where: \\.foo)"
+        let options = FormatOptions(swiftVersion: "5.2")
+        testFormatting(for: input, output, rule: FormatRules.preferKeyPath, options: options)
     }
 }

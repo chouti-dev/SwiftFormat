@@ -128,6 +128,18 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
     }
 
+    func testAddSpaceBetweenCaptureListAndArguments4() {
+        let input = "{ [weak self](foo: @escaping (Bar?) -> Void) -> Baz? in foo }"
+        let output = "{ [weak self] (foo: @escaping (Bar?) -> Void) -> Baz? in foo }"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
+    func testAddSpaceBetweenCaptureListAndArguments5() {
+        let input = "{ [weak self](foo: @autoclosure () -> String) -> Baz? in foo() }"
+        let output = "{ [weak self] (foo: @autoclosure () -> String) -> Baz? in foo() }"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
     func testSpaceBetweenClosingParenAndOpenBrace() {
         let input = "func foo(){ foo }"
         let output = "func foo() { foo }"
@@ -190,6 +202,25 @@ extension RulesTests {
         let input = "let foo = bar { [self](foo: Int) in foo }"
         let output = "let foo = bar { [self] (foo: Int) in foo }"
         testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
+    func testAddSpaceBetweenParenAndAwait() {
+        let input = "let foo = await(bar: 5)"
+        let output = "let foo = await (bar: 5)"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
+    func testAddSpaceBetweenParenAndAwaitForSwift6() {
+        let input = "let foo = await(bar: 5)"
+        let output = "let foo = await (bar: 5)"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens,
+                       options: FormatOptions(swiftVersion: "6.0.0"))
+    }
+
+    func testNoAddSpaceBetweenParenAndAwaitForSwiftLessThan6() {
+        let input = "let foo = await(bar: 5)"
+        testFormatting(for: input, rule: FormatRules.spaceAroundParens,
+                       options: FormatOptions(swiftVersion: "5.9.9"))
     }
 
     // MARK: - spaceInsideParens
@@ -306,6 +337,16 @@ extension RulesTests {
 
     func testNoExtraSpaceAroundBracesAtStartOrEndOfFile() {
         let input = "{ foo }"
+        testFormatting(for: input, rule: FormatRules.spaceAroundBraces)
+    }
+
+    func testNoSpaceAfterPrefixOperator() {
+        let input = "let foo = ..{ bar }"
+        testFormatting(for: input, rule: FormatRules.spaceAroundBraces)
+    }
+
+    func testNoSpaceBeforePostfixOperator() {
+        let input = "let foo = { bar }.."
         testFormatting(for: input, rule: FormatRules.spaceAroundBraces)
     }
 
@@ -775,6 +816,11 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators)
     }
 
+    func testSpaceNotAddedInKeyPath() {
+        let input = "let a = b.map(\\.?.something)"
+        testFormatting(for: input, rule: FormatRules.spaceAroundOperators)
+    }
+
     // noSpaceOperators
 
     func testNoAddSpaceAroundNoSpaceStar() {
@@ -874,6 +920,84 @@ extension RulesTests {
         let options = FormatOptions(noSpaceOperators: ["+"])
         testFormatting(for: input, rule: FormatRules.spaceAroundOperators, options: options,
                        exclude: ["indent"])
+    }
+
+    func testAddSpaceEvenAfterLHSClosure() {
+        let input = "let foo = { $0 }..bar"
+        let output = "let foo = { $0 } .. bar"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators)
+    }
+
+    func testAddSpaceEvenBeforeRHSClosure() {
+        let input = "let foo = bar..{ $0 }"
+        let output = "let foo = bar .. { $0 }"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators)
+    }
+
+    func testAddSpaceEvenAfterLHSArray() {
+        let input = "let foo = [42]..bar"
+        let output = "let foo = [42] .. bar"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators)
+    }
+
+    func testAddSpaceEvenBeforeRHSArray() {
+        let input = "let foo = bar..[42]"
+        let output = "let foo = bar .. [42]"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators)
+    }
+
+    func testAddSpaceEvenAfterLHSParens() {
+        let input = "let foo = (42, 1337)..bar"
+        let output = "let foo = (42, 1337) .. bar"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators)
+    }
+
+    func testAddSpaceEvenBeforeRHSParens() {
+        let input = "let foo = bar..(42, 1337)"
+        let output = "let foo = bar .. (42, 1337)"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators)
+    }
+
+    func testRemoveSpaceEvenAfterLHSClosure() {
+        let input = "let foo = { $0 } .. bar"
+        let output = "let foo = { $0 }..bar"
+        let options = FormatOptions(noSpaceOperators: [".."])
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators, options: options)
+    }
+
+    func testRemoveSpaceEvenBeforeRHSClosure() {
+        let input = "let foo = bar .. { $0 }"
+        let output = "let foo = bar..{ $0 }"
+        let options = FormatOptions(noSpaceOperators: [".."])
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators, options: options)
+    }
+
+    func testRemoveSpaceEvenAfterLHSArray() {
+        let input = "let foo = [42] .. bar"
+        let output = "let foo = [42]..bar"
+        let options = FormatOptions(noSpaceOperators: [".."])
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators, options: options)
+    }
+
+    func testRemoveSpaceEvenBeforeRHSArray() {
+        let input = "let foo = bar .. [42]"
+        let output = "let foo = bar..[42]"
+        let options = FormatOptions(noSpaceOperators: [".."])
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators, options: options)
+    }
+
+    func testRemoveSpaceEvenAfterLHSParens() {
+        let input = "let foo = (42, 1337) .. bar"
+        let output = "let foo = (42, 1337)..bar"
+        let options = FormatOptions(noSpaceOperators: [".."])
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators, options: options)
+    }
+
+    func testRemoveSpaceEvenBeforeRHSParens() {
+        let input = "let foo = bar .. (42, 1337)"
+        let output = "let foo = bar..(42, 1337)"
+        let options = FormatOptions(noSpaceOperators: [".."])
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators, options: options)
     }
 
     // spaceAroundRangeOperators = false
@@ -1145,14 +1269,12 @@ extension RulesTests {
     func testLinebreaksRemovedInsideBraces() {
         let input = "func foo() {\n  \n }"
         let output = "func foo() {}"
-        let options = FormatOptions(fragment: true)
-        testFormatting(for: input, output, rule: FormatRules.emptyBraces, options: options)
+        testFormatting(for: input, output, rule: FormatRules.emptyBraces)
     }
 
     func testCommentNotRemovedInsideBraces() {
         let input = "func foo() { // foo\n}"
-        let options = FormatOptions(fragment: true)
-        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+        testFormatting(for: input, rule: FormatRules.emptyBraces)
     }
 
     func testEmptyBracesNotRemovedInDoCatch() {
@@ -1161,23 +1283,85 @@ extension RulesTests {
         } catch is FooError {
         } catch {}
         """
-        let options = FormatOptions(fragment: true)
-        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+        testFormatting(for: input, rule: FormatRules.emptyBraces)
     }
 
     func testEmptyBracesNotRemovedInIfElse() {
         let input = """
-        if {
+        if bar {
         } else if foo {
         } else {}
         """
-        let options = FormatOptions(fragment: true)
-        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+        testFormatting(for: input, rule: FormatRules.emptyBraces)
     }
 
     func testSpaceRemovedInsideEmptybraces() {
         let input = "foo { }"
         let output = "foo {}"
         testFormatting(for: input, output, rule: FormatRules.emptyBraces)
+    }
+
+    func testSpaceAddedInsideEmptyBracesWithSpacedConfiguration() {
+        let input = "foo {}"
+        let output = "foo { }"
+        let options = FormatOptions(emptyBracesSpacing: .spaced)
+        testFormatting(for: input, output, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testLinebreaksRemovedInsideBracesWithSpacedConfiguration() {
+        let input = "func foo() {\n  \n }"
+        let output = "func foo() { }"
+        let options = FormatOptions(emptyBracesSpacing: .spaced)
+        testFormatting(for: input, output, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testCommentNotRemovedInsideBracesWithSpacedConfiguration() {
+        let input = "func foo() { // foo\n}"
+        let options = FormatOptions(emptyBracesSpacing: .spaced)
+        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testEmptyBracesSpaceNotRemovedInDoCatchWithSpacedConfiguration() {
+        let input = """
+        do {
+        } catch is FooError {
+        } catch { }
+        """
+        let options = FormatOptions(emptyBracesSpacing: .spaced)
+        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testEmptyBracesSpaceNotRemovedInIfElseWithSpacedConfiguration() {
+        let input = """
+        if bar {
+        } else if foo {
+        } else { }
+        """
+        let options = FormatOptions(emptyBracesSpacing: .spaced)
+        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testEmptyBracesLinebreakNotRemovedInIfElseWithLinebreakConfiguration() {
+        let input = """
+        if bar {
+        } else if foo {
+        } else {
+        }
+        """
+        let options = FormatOptions(emptyBracesSpacing: .linebreak)
+        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    func testEmptyBracesLinebreakIndentedCorrectly() {
+        let input = """
+        func foo() {
+            if bar {
+            } else if foo {
+            } else {
+            }
+        }
+        """
+        let options = FormatOptions(emptyBracesSpacing: .linebreak)
+        testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
     }
 }

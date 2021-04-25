@@ -253,7 +253,8 @@ extension RulesTests {
             }
         """
         let options = FormatOptions(allmanBraces: true)
-        testFormatting(for: input, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, rule: FormatRules.indent, options: options,
+                       exclude: ["redundantReturn"])
     }
 
     func testNoDoubleIndentClosureArguments() {
@@ -1022,6 +1023,25 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.indent)
     }
 
+    func testChainedClosureIndentsSeparatedByComments() {
+        let input = """
+        foo {
+            doFoo()
+        }
+        // bar
+        .bar {
+            doBar()
+        }
+        // baz
+        .baz {
+            doBaz($0)
+        }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options,
+                       exclude: ["blankLinesBetweenScopes"])
+    }
+
     func testWrappedClosureIndentAfterAssignment() {
         let input = """
         let bar =
@@ -1282,6 +1302,20 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.indent, options: options)
     }
 
+    func testChainedFunctionOnNewLineWithXcodeIndentation2() {
+        let input = """
+        let foo = bar
+            .baz { _ in
+                true
+            }
+            .quux { _ in
+                false
+            }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
     func testChainedFunctionsInPropertySetterOnNewLineWithXcodeIndentation() {
         let input = """
         private let foo =
@@ -1315,6 +1349,25 @@ extension RulesTests {
                 .baz()!
                 .quux
         }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testChainedFunctionInGuardWithXcodeIndentation() {
+        let input = """
+        guard
+            let foo = self.foo
+            .bar
+            .baz
+        else { return }
+        """
+        let output = """
+        guard
+            let foo = self.foo
+                .bar
+                .baz
+        else { return }
         """
         let options = FormatOptions(xcodeIndentation: true)
         testFormatting(for: input, output, rule: FormatRules.indent, options: options)
@@ -1868,6 +1921,50 @@ extension RulesTests {
         let output = "switch foo {\n    case .bar:\n        #if x\n        bar()\n        #endif\n        baz()\n    case .baz: break\n}"
         let options = FormatOptions(indentCase: true, ifdefIndent: .noIndent)
         testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testSwitchCaseInIfEndif() {
+        let input = """
+        func baz(value: Example) -> String {
+            #if DEBUG
+                switch value {
+                    case .foo: return "foo"
+                    case .bar: return "bar"
+                    @unknown default: return "unknown"
+                }
+            #else
+                switch value {
+                    case .foo: return "foo"
+                    case .bar: return "bar"
+                    @unknown default: return "unknown"
+                }
+            #endif
+        }
+        """
+        let options = FormatOptions(indentCase: true, ifdefIndent: .indent)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testSwitchCaseInIfEndifNoIndenting() {
+        let input = """
+        func baz(value: Example) -> String {
+            #if DEBUG
+            switch value {
+                case .foo: return "foo"
+                case .bar: return "bar"
+                @unknown default: return "unknown"
+            }
+            #else
+            switch value {
+                case .foo: return "foo"
+                case .bar: return "bar"
+                @unknown default: return "unknown"
+            }
+            #endif
+        }
+        """
+        let options = FormatOptions(indentCase: true, ifdefIndent: .noIndent)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 
     func testIfEndifInsideEnumNoIndenting() {

@@ -116,6 +116,13 @@ public enum RedundantType: String, CaseIterable {
     case inferred
 }
 
+/// Argument type for empty brace spacing behavior
+public enum EmptyBracesSpacing: String, CaseIterable {
+    case spaced
+    case noSpace = "no-space"
+    case linebreak
+}
+
 /// Version number wrapper
 public struct Version: RawRepresentable, Comparable, ExpressibleByStringLiteral, CustomStringConvertible {
     public let rawValue: String
@@ -254,9 +261,10 @@ public enum Grouping: Equatable, RawRepresentable, CustomStringConvertible {
 
 /// Grouping for sorting imports
 public enum ImportGrouping: String, CaseIterable {
-    case alphabetized
-    case testableTop = "testable-top"
-    case testableBottom = "testable-bottom"
+    case alpha
+    case length
+    case testableFirst = "testable-first"
+    case testableLast = "testable-last"
 }
 
 /// Self insertion mode
@@ -360,6 +368,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var yodaSwap: YodaMode
     public var extensionACLPlacement: ExtensionACLPlacement
     public var redundantType: RedundantType
+    public var emptyBracesSpacing: EmptyBracesSpacing
 
     // Deprecated
     public var indentComments: Bool
@@ -408,7 +417,7 @@ public struct FormatOptions: CustomStringConvertible {
                 explicitSelf: SelfMode = .remove,
                 selfRequired: Set<String> = [],
                 experimentalRules: Bool = false,
-                importGrouping: ImportGrouping = .alphabetized,
+                importGrouping: ImportGrouping = .alpha,
                 trailingClosures: Set<String> = [],
                 neverTrailing: Set<String> = [],
                 xcodeIndentation: Bool = false,
@@ -439,6 +448,7 @@ public struct FormatOptions: CustomStringConvertible {
                 yodaSwap: YodaMode = .always,
                 extensionACLPlacement: ExtensionACLPlacement = .onExtension,
                 redundantType: RedundantType = .inferred,
+                emptyBracesSpacing: EmptyBracesSpacing = .noSpace,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
@@ -512,6 +522,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.yodaSwap = yodaSwap
         self.extensionACLPlacement = extensionACLPlacement
         self.redundantType = redundantType
+        self.emptyBracesSpacing = emptyBracesSpacing
         // Doesn't really belong here, but hard to put elsewhere
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers
@@ -521,6 +532,11 @@ public struct FormatOptions: CustomStringConvertible {
 
     public var useTabs: Bool {
         return indent.first == "\t"
+    }
+
+    public var requiresFileInfo: Bool {
+        let string = fileHeader.rawValue
+        return string.contains("{created") || string.contains("{file")
     }
 
     public var allOptions: [String: Any] {
@@ -568,19 +584,23 @@ public struct Options {
     public var fileOptions: FileOptions?
     public var formatOptions: FormatOptions?
     public var rules: Set<String>?
+    public var lint: Bool
 
     public static let `default` = Options(
         fileOptions: .default,
         formatOptions: .default,
-        rules: Set(FormatRules.byName.keys).subtracting(FormatRules.disabledByDefault)
+        rules: Set(FormatRules.byName.keys).subtracting(FormatRules.disabledByDefault),
+        lint: false
     )
 
     public init(fileOptions: FileOptions? = nil,
                 formatOptions: FormatOptions? = nil,
-                rules: Set<String>? = nil)
+                rules: Set<String>? = nil,
+                lint: Bool = false)
     {
         self.fileOptions = fileOptions
         self.formatOptions = formatOptions
         self.rules = rules
+        self.lint = lint
     }
 }

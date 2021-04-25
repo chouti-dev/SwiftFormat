@@ -68,10 +68,12 @@ class RulesTests: XCTestCase {
         if input != output {
             XCTAssertEqual(try format(output, rules: rules, options: options),
                            output, file: file, line: line)
-            for rule in rules {
-                let disabled = "// swiftformat:disable \(rule.name)\n\(input)"
-                XCTAssertEqual(try format(disabled, rules: [rule], options: options),
-                               disabled, "Failed to disable \(rule.name) rule", file: file, line: line)
+            if !input.hasPrefix("#!") {
+                for rule in rules {
+                    let disabled = "// swiftformat:disable \(rule.name)\n\(input)"
+                    XCTAssertEqual(try format(disabled, rules: [rule], options: options),
+                                   disabled, "Failed to disable \(rule.name) rule", file: file, line: line)
+                }
             }
         }
         if input != output2, output != output2 {
@@ -273,12 +275,22 @@ class RulesTests: XCTestCase {
     }
 
     func testTrailingCommaNotAddedToTypeDeclaration() {
-        let input = "var: [\n    Int:\n        String\n]"
+        let input = """
+        var: [
+            Int:
+                String
+        ]
+        """
         testFormatting(for: input, rule: FormatRules.trailingCommas)
     }
 
     func testTrailingCommaNotAddedToTypeDeclaration2() {
-        let input = "func foo(bar: [\n    Int:\n        String\n])"
+        let input = """
+        func foo(bar: [
+            Int:
+                String
+        ])
+        """
         testFormatting(for: input, rule: FormatRules.trailingCommas)
     }
 
@@ -287,6 +299,46 @@ class RulesTests: XCTestCase {
         func foo() -> [
             String: String
         ]
+        """
+        testFormatting(for: input, rule: FormatRules.trailingCommas)
+    }
+
+    func testTrailingCommaNotAddedToTypeDeclaration4() {
+        let input = """
+        func foo() -> [String: [
+            String: Int
+        ]]
+        """
+        testFormatting(for: input, rule: FormatRules.trailingCommas)
+    }
+
+    func testTrailingCommaNotAddedToTypeDeclaration5() {
+        let input = """
+        let foo = [String: [
+            String: Int
+        ]]()
+        """
+        testFormatting(for: input, rule: FormatRules.trailingCommas)
+    }
+
+    func testTrailingCommaNotAddedToTypeDeclaration6() {
+        let input = """
+        let foo = [String: [
+            (Foo<[
+                String
+            ]>, [
+                Int
+            ])
+        ]]()
+        """
+        testFormatting(for: input, rule: FormatRules.trailingCommas)
+    }
+
+    func testTrailingCommaNotAddedToTypeDeclaration7() {
+        let input = """
+        func foo() -> Foo<[String: [
+            String: Int
+        ]]>
         """
         testFormatting(for: input, rule: FormatRules.trailingCommas)
     }
@@ -547,6 +599,89 @@ class RulesTests: XCTestCase {
         let output = "// Header line1\n// Header line2\n\nclass Foo {}"
         let options = FormatOptions(fileHeader: "// Header line1\n// Header line2")
         testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testFileHeaderRemovedAfterHashbang() {
+        let input = """
+        #!/usr/bin/swift
+
+        // Header line1
+        // Header line2
+
+        let foo = 5
+        """
+        let output = """
+        #!/usr/bin/swift
+
+        let foo = 5
+        """
+        let options = FormatOptions(fileHeader: "")
+        testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testFileHeaderPlacedAfterHashbang() {
+        let input = """
+        #!/usr/bin/swift
+
+        let foo = 5
+        """
+        let output = """
+        #!/usr/bin/swift
+
+        // Header line1
+        // Header line2
+
+        let foo = 5
+        """
+        let options = FormatOptions(fileHeader: "// Header line1\n// Header line2")
+        testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testBlankLineAfterHashbangNotRemovedByFileHeader() {
+        let input = """
+        #!/usr/bin/swift
+
+        let foo = 5
+        """
+        let options = FormatOptions(fileHeader: "")
+        testFormatting(for: input, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testLineAfterHashbangNotAffectedByFileHeaderRemoval() {
+        let input = """
+        #!/usr/bin/swift
+        let foo = 5
+        """
+        let options = FormatOptions(fileHeader: "")
+        testFormatting(for: input, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testDisableFileHeaderCommentRespectedAfterHashbang() {
+        let input = """
+        #!/usr/bin/swift
+        // swiftformat:disable fileHeader
+
+        // Header line1
+        // Header line2
+
+        let foo = 5
+        """
+        let options = FormatOptions(fileHeader: "")
+        testFormatting(for: input, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testDisableFileHeaderCommentRespectedAfterHashbang2() {
+        let input = """
+        #!/usr/bin/swift
+
+        // swiftformat:disable fileHeader
+        // Header line1
+        // Header line2
+
+        let foo = 5
+        """
+        let options = FormatOptions(fileHeader: "")
+        testFormatting(for: input, rule: FormatRules.fileHeader, options: options)
     }
 
     // MARK: - strongOutlets

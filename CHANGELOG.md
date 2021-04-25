@@ -1,5 +1,56 @@
 # Change Log
 
+## [0.48.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.0) (2020-04-20)
+
+- Add `--emptybraces` to control how empty braces are formatted
+- The `redundantReturn` rule now removes redundant `return` statements in Void functions
+- The `redundantParens` rule now removes redundant parens around closure arguments
+- Fixed parsing error with complex `guard` statements
+- Extended `prefersKeyPath` to support `contains`, `allSatisfy` and `filter` methods
+- Fixed matching of excluded paths containing ../
+- Added support for using globs/wildcards in input paths
+- Eliminated false positives in change list when using `--lint` mode
+- File header comments are now inserted after the shebang/hashbang in executable Swift scripts
+- Xcode Extension now silently ignores rules requiring file info that isn't available to extensions
+- Fixed bug where `wrapEnumCases` rule was incorrectly applied to `if case` or `guard case`
+- Added `--report` argument for exporting formatting changes or lint violations as a JSON file
+- Improved tab layout in SwiftFormat for Xcode companion app
+
+## [0.47.13](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.13) (2020-03-21)
+
+- Fixed bug where `--wrapreturntype if-multiline` would unexpectedly wrap a single-line method
+- Multiline chained functions are now indented correctly when using `--xcodeindentation`
+- Blank lines are no longer inserted between multiline chained functions separated by comments
+- Fixed bug in `hoistPatternLet` rule where `let` would be placed on the wrong line
+- Fixed bug where `Void.self` would incorrectly be converted to `().self`
+- Fixed incorrect spacing of closure arguments containing attributes
+- Trailing commas are no longer incorrectly inserted inside wrapped type signatures
+- Added `--lintonly` argument to specify rules that should only be applied in `--lint` mode
+
+## [0.47.12](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.12) (2020-02-23)
+
+- Fixed indenting of `switch` cases inside `#if`/`#endif` clauses 
+- Explicit `self` is no longer removed inside types using `@dynamicMemberLookup`
+- Fixed indenting of wrapped, chained methods when using `--xcodeindentation`
+- `await` is no longer treated as a keyword if `--swiftversion` is set to < 6
+- Fixed issue where single line method after array would wrap unexpectedly
+- Made repository checkoutable on Windows
+
+## [0.47.11](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.11) (2020-01-29)
+
+- Fixed bug with `redundandSelf` rule sometimes inserting `self` for a local variable
+- Fixed `wrapAttributes` rule not working for convenience `init`s, or vars with `private(set)`
+- Fixed bug with indenting of wrapped members when using `--xcodeindentation` mode
+- Fixed erroneous space being inserted into keyPaths by `spaceAroundOperators` rule
+- Fixed bug with `--nospaceoperators` affecting custom infix operators with closure operands
+- Added support for sorting imports by length instead of alphabetically
+
+## [0.47.10](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.10) (2020-12-28)
+
+- The `blankLinesBetweenScopes` no longer inserts a blank line before Sourcery comment directives
+- Fixed bug where `redundantFileprivate` rule could break code that uses property wrappers
+- Fixed crash in `parseDeclarations` helper
+
 ## [0.47.9](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.9) (2020-12-24)
 
 - Fixed bug with `redundantType` rule removing required type in `if let` expressions
@@ -8,6 +59,7 @@
 - Removed erroneous space inserted into array initializer by the `spaceAroundParens` rule
 - Comments followed by a continuation character in SwiftFormat config files now handled correctly 
 - Removed spurious blank lines in console output introduced in 0.47.8
+- Improved command-line typo suggestions
 
 ## [0.47.8](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.47.8) (2020-12-10)
 

@@ -735,6 +735,46 @@ extension RulesTests {
 
     // MARK: - wrapArguments
 
+    func testIndentFirstElementWhenApplyingWrap() {
+        let input = """
+        let foo = Set([
+        Thing(),
+        Thing(),
+        ])
+        """
+        let output = """
+        let foo = Set([
+            Thing(),
+            Thing(),
+        ])
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments)
+    }
+
+    func testWrapArgumentsDoesntIndentTrailingComment() {
+        let input = """
+        foo( // foo
+        bar: Int
+        )
+        """
+        let output = """
+        foo( // foo
+            bar: Int
+        )
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments)
+    }
+
+    func testWrapArgumentsDoesntIndentClosingBracket() {
+        let input = """
+        [
+            "foo": [
+            ],
+        ]
+        """
+        testFormatting(for: input, rule: FormatRules.wrapArguments)
+    }
+
     // MARK: wrapArguments
 
     func testWrapParametersDoesNotAffectFunctionDeclaration() {
@@ -831,44 +871,18 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
     }
 
-    func testIndentFirstElementWhenApplyingWrap() {
+    func testWrapParametersAfterMultilineComment() {
         let input = """
-        let foo = Set([
-        Thing(),
-        Thing(),
-        ])
-        """
-        let output = """
-        let foo = Set([
-            Thing(),
-            Thing(),
-        ])
-        """
-        testFormatting(for: input, output, rule: FormatRules.wrapArguments)
-    }
-
-    func testWrapArgumentsDoesntIndentTrailingComment() {
-        let input = """
-        foo( // foo
-        bar: Int
+        /**
+         Some function comment.
+         */
+        func barFunc(
+            _ firstParam: FirstParamType,
+            secondParam: SecondParamType
         )
         """
-        let output = """
-        foo( // foo
-            bar: Int
-        )
-        """
-        testFormatting(for: input, output, rule: FormatRules.wrapArguments)
-    }
-
-    func testWrapArgumentsDoesntIndentClosingBracket() {
-        let input = """
-        [
-            "foo": [
-            ],
-        ]
-        """
-        testFormatting(for: input, rule: FormatRules.wrapArguments)
+        let options = FormatOptions(wrapParameters: .preserve)
+        testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
     }
 
     // MARK: afterFirst
@@ -2004,9 +2018,94 @@ extension RulesTests {
         )
     }
 
+    func testWrapReturnOnMultilineThrowingFunctionDeclarationWithAfterFirst() {
+        let input = """
+        func multilineFunction(foo _: String,
+                               bar _: String) throws -> String {}
+        """
+
+        let output = """
+        func multilineFunction(foo _: String,
+                               bar _: String) throws
+                               -> String {}
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .afterFirst,
+            closingParenOnSameLine: true,
+            wrapReturnType: .ifMultiline
+        )
+
+        testFormatting(
+            for: input, output, rule: FormatRules.wrapArguments, options: options,
+            exclude: ["indent"]
+        )
+    }
+
+    func testDoesntWrapReturnOnMultilineThrowingFunction() {
+        let input = """
+        func multilineFunction(foo _: String,
+                               bar _: String)
+                               throws -> String {}
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .afterFirst,
+            closingParenOnSameLine: true,
+            wrapReturnType: .ifMultiline
+        )
+
+        testFormatting(
+            for: input, rule: FormatRules.wrapArguments, options: options,
+            exclude: ["indent"]
+        )
+    }
+
     func testDoesntWrapReturnOnSingleLineFunctionDeclaration() {
         let input = """
         func multilineFunction(foo _: String, bar _: String) -> String {}
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true,
+            wrapReturnType: .ifMultiline
+        )
+
+        testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testDoesntWrapReturnOnSingleLineFunctionDeclarationAfterMultilineArray() {
+        let input = """
+        final class Foo {
+            private static let array = [
+                "one",
+            ]
+
+            private func singleLine() -> String {}
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true,
+            wrapReturnType: .ifMultiline
+        )
+
+        testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testDoesntWrapReturnOnSingleLineFunctionDeclarationAfterMultilineMethodCall() {
+        let input = """
+        public final class Foo {
+            public var multiLineMethodCall = Foo.multiLineMethodCall(
+                bar: bar,
+                baaz: baaz)
+
+            func singleLine() -> String {
+                return "method body"
+            }
+        }
         """
 
         let options = FormatOptions(
@@ -2569,6 +2668,30 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.wrapAttributes, options: options)
     }
 
+    func testWrapPrivateSetVarAttributes() {
+        let input = """
+        @objc private(set) dynamic var foo = Foo()
+        """
+        let output = """
+        @objc
+        private(set) dynamic var foo = Foo()
+        """
+        let options = FormatOptions(varAttributes: .prevLine)
+        testFormatting(for: input, output, rule: FormatRules.wrapAttributes, options: options)
+    }
+
+    func testWrapConvenienceInitAttribute() {
+        let input = """
+        @objc public convenience init() {}
+        """
+        let output = """
+        @objc
+        public convenience init() {}
+        """
+        let options = FormatOptions(funcAttributes: .prevLine)
+        testFormatting(for: input, output, rule: FormatRules.wrapAttributes, options: options)
+    }
+
     // MARK: wrapEnumCases
 
     func testMultilineEnumCases() {
@@ -2652,6 +2775,26 @@ extension RulesTests {
     func testNoWrapEnumStatementAllOnOneLine() {
         let input = "enum Foo { bar, baz }"
         testFormatting(for: input, rule: FormatRules.wrapEnumCases)
+    }
+
+    func testNoConfuseIfCaseWithEnum() {
+        let input = """
+        enum Foo {
+            case foo
+            case bar(value: [Int])
+        }
+
+        func baz() {
+            if case .foo = foo,
+               case .bar(let value) = bar,
+               value.isEmpty
+            {
+                print("")
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.wrapEnumCases,
+                       exclude: ["hoistPatternLet"])
     }
 
     // MARK: wrapSwitchCases
