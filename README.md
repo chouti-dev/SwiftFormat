@@ -1,3 +1,14 @@
+# ChouTi Additions
+A temp solution for: https://github.com/nicklockwood/SwiftFormat/issues/776
+
+```
+--header "//\n//  {file}\n//\n//  {created_by}\n//  Copyright © {year} ChouTi. All rights reserved.\n//" 
+```
+Can preserve this header line:
+```
+Created by Alice on 07/08/2018.
+```
+
 ![](EditorExtension/Application/Assets.xcassets/AppIcon.appiconset/icon_256x256.png)
 
 [![PayPal](https://img.shields.io/badge/paypal-donate-blue.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=9ZGWNK5FEZFF6&source=url)
