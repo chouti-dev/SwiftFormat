@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.48.0
+//  Version 0.48.9
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -911,6 +911,31 @@ private extension UnicodeScalarView {
                 return .identifier("`" + identifier + "`")
             }
             self = start
+        } else if read("<") {
+            if read("#") {
+                // look for closing Xcode token
+                var previousWasHash = false
+                var index = startIndex
+                var found = false
+                while index < endIndex {
+                    let idx = index
+                    index = self.index(after: index)
+                    if self[idx] == ">" {
+                        if previousWasHash {
+                            found = true
+                            break
+                        }
+                    } else {
+                        previousWasHash = self[idx] == "#"
+                    }
+                }
+                if found {
+                    let string = String(prefix(upTo: index))
+                    self = suffix(from: index)
+                    return .identifier("<#\(string)")
+                }
+            }
+            self = start
         } else if read("#") {
             if let identifier = readIdentifier() {
                 if identifier == "if" {
@@ -1402,7 +1427,7 @@ public func tokenize(_ source: String) -> [Token] {
         case ":", "=", "->":
             type = .infix
         case ".":
-            type = prevNonSpaceToken.isLvalue ? .infix : .prefix
+            type = prevNonSpaceToken.isLvalue || prevNonSpaceToken.isAttribute ? .infix : .prefix
         case "?":
             if prevToken.isSpaceOrCommentOrLinebreak {
                 // ? is a ternary operator, treat it as the start of a scope
@@ -1486,8 +1511,19 @@ public func tokenize(_ source: String) -> [Token] {
                 processToken()
                 return
             }
-            fallthrough
+            if count > 1, case .number = tokens[count - 2] {
+                tokens[count - 1] = .error(token.string)
+            }
         case .identifier:
+            if let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: count - 1),
+               case .identifier("actor") = tokens[prevIndex],
+               case let prevPrevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: prevIndex),
+               prevPrevIndex.map({ tokens[$0].isOperator(ofType: .infix) }) != true
+            {
+                tokens[prevIndex] = .keyword("actor")
+                processToken()
+                return
+            }
             if count > 1, case .number = tokens[count - 2] {
                 tokens[count - 1] = .error(token.string)
             }
@@ -1542,7 +1578,14 @@ public func tokenize(_ source: String) -> [Token] {
                     else {
                         fallthrough
                     }
-                case .startOfScope where token.isStringDelimiter, .identifier, .number:
+                case .identifier:
+                    guard let scopeIndex = closedGenericScopeIndexes.first,
+                          let prevIndex = index(of: .nonSpaceOrComment, before: scopeIndex),
+                          tokens[prevIndex].isAttribute
+                    else {
+                        fallthrough
+                    }
+                case .startOfScope where token.isStringDelimiter, .number:
                     convertClosingChevronToOperator(at: prevIndex, andOpeningChevron: true)
                     processToken()
                     return

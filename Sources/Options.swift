@@ -440,7 +440,7 @@ public struct FormatOptions: CustomStringConvertible {
                 categoryMarkComment: String = "MARK: %c",
                 beforeMarks: Set<String> = [],
                 lifecycleMethods: Set<String> = [],
-                organizeTypes: Set<String> = ["class", "struct", "enum"],
+                organizeTypes: Set<String> = ["class", "actor", "struct", "enum"],
                 organizeClassThreshold: Int = 0,
                 organizeStructThreshold: Int = 0,
                 organizeEnumThreshold: Int = 0,
@@ -577,6 +577,20 @@ public struct FileOptions {
         self.unexcludedGlobs = unexcludedGlobs
         self.minVersion = minVersion
     }
+
+    public func shouldSkipFile(_ inputURL: URL) -> Bool {
+        let path = inputURL.standardizedFileURL.path
+        for excluded in excludedGlobs {
+            guard excluded.matches(path) else {
+                continue
+            }
+            if unexcludedGlobs.contains(where: { $0.matches(path) }) {
+                return false
+            }
+            return true
+        }
+        return false
+    }
 }
 
 /// All options
@@ -602,5 +616,9 @@ public struct Options {
         self.formatOptions = formatOptions
         self.rules = rules
         self.lint = lint
+    }
+
+    public func shouldSkipFile(_ inputURL: URL) -> Bool {
+        return fileOptions?.shouldSkipFile(inputURL) ?? false
     }
 }

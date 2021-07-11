@@ -42,6 +42,45 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.todos)
     }
 
+    func testTodoReplacedInMiddleOfCommentBlock() {
+        let input = """
+        // Some comment
+        // todo : foo
+        // Some more comment
+        """
+        let output = """
+        // Some comment
+        // TODO: foo
+        // Some more comment
+        """
+        testFormatting(for: input, output, rule: FormatRules.todos)
+    }
+
+    func testTodoNotReplacedInMiddleOfDocBlock() {
+        let input = """
+        /// Some docs
+        /// TODO: foo
+        /// Some more docs
+        """
+        testFormatting(for: input, rule: FormatRules.todos)
+    }
+
+    func testTodoNotReplacedAtStartOfDocBlock() {
+        let input = """
+        /// TODO: foo
+        /// Some docs
+        """
+        testFormatting(for: input, rule: FormatRules.todos)
+    }
+
+    func testTodoNotReplacedAtEndOfDocBlock() {
+        let input = """
+        /// Some docs
+        /// TODO: foo
+        """
+        testFormatting(for: input, rule: FormatRules.todos)
+    }
+
     func testMarkWithNoSpaceAfterColon() {
         // NOTE: this was an unintended side-effect, but I like it
         let input = "// MARK:foo"
@@ -850,6 +889,48 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.hoistPatternLet, options: options)
     }
 
+    func testUnhoistCaseWithNilValue() {
+        let input = """
+        switch (foo, bar) {
+        case let (.some(unwrappedFoo), nil):
+            print(unwrappedFoo)
+        default:
+            break
+        }
+        """
+        let output = """
+        switch (foo, bar) {
+        case (.some(let unwrappedFoo), nil):
+            print(unwrappedFoo)
+        default:
+            break
+        }
+        """
+        let options = FormatOptions(hoistPatternLet: false)
+        testFormatting(for: input, output, rule: FormatRules.hoistPatternLet, options: options)
+    }
+
+    func testUnhoistCaseWithBoolValue() {
+        let input = """
+        switch (foo, bar) {
+        case let (.some(unwrappedFoo), false):
+            print(unwrappedFoo)
+        default:
+            break
+        }
+        """
+        let output = """
+        switch (foo, bar) {
+        case (.some(let unwrappedFoo), false):
+            print(unwrappedFoo)
+        default:
+            break
+        }
+        """
+        let options = FormatOptions(hoistPatternLet: false)
+        testFormatting(for: input, output, rule: FormatRules.hoistPatternLet, options: options)
+    }
+
     // MARK: - enumNamespaces
 
     func testEnumNamespacesClassAsProtocolRestriction() {
@@ -1456,6 +1537,29 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.andOperator)
     }
 
+    func testReplaceAndInViewBuilderInSwift5_3() {
+        let input = """
+        SomeView {
+            if foo == 5 && bar {
+                Text("5")
+            } else {
+                Text("Not 5")
+            }
+        }
+        """
+        let output = """
+        SomeView {
+            if foo == 5, bar {
+                Text("5")
+            } else {
+                Text("Not 5")
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.3")
+        testFormatting(for: input, output, rule: FormatRules.andOperator, options: options)
+    }
+
     // MARK: - isEmpty
 
     // count == 0
@@ -1725,6 +1829,18 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.typeSugar)
     }
 
+    func testOptionalTupleWrappedInParensConvertedToSugar() {
+        let input = "let foo: Optional<(foo: Int, bar: String)>"
+        let output = "let foo: (foo: Int, bar: String)?"
+        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+    }
+
+    func testOptionalComposedProtocolWrappedInParensConvertedToSugar() {
+        let input = "let foo: Optional<UIView & Foo>"
+        let output = "let foo: (UIView & Foo)?"
+        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+    }
+
     func testSwiftOptionalClosureParenthesizedConvertedToSugar() {
         let input = "var foo: Swift.Optional<(Int) -> String>"
         let output = "var foo: ((Int) -> String)?"
@@ -1747,6 +1863,20 @@ extension RulesTests {
         let input = "if case .some(Optional<Any>.some(let foo)) = bar else {}"
         let output = "if case .some(Any?.some(let foo)) = bar else {}"
         testFormatting(for: input, output, rule: FormatRules.typeSugar, exclude: ["hoistPatternLet"])
+    }
+
+    func testSwitchCaseOptionalNotReplaced() {
+        let input = """
+        switch foo {
+        case Optional<Any>.none:
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.typeSugar)
+    }
+
+    func testCaseOptionalNotReplaced2() {
+        let input = "if case Optional<Any>.none = foo {}"
+        testFormatting(for: input, rule: FormatRules.typeSugar)
     }
 
     // shortOptionals = exceptProperties

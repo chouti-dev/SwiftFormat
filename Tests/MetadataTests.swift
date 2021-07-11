@@ -15,6 +15,9 @@ private let projectDirectory = URL(fileURLWithPath: #file)
 private let changeLogURL =
     projectDirectory.appendingPathComponent("CHANGELOG.md")
 
+private let podspecURL =
+    projectDirectory.appendingPathComponent("SwiftFormat.podspec.json")
+
 private let rulesURL =
     projectDirectory.appendingPathComponent("Rules.md")
 
@@ -24,6 +27,7 @@ private let rulesFile =
 class MetadataTests: XCTestCase {
     // MARK: generate Rules.md
 
+    // NOTE: if test fails, just run it again locally to update rules file
     func testGenerateRulesDocumentation() throws {
         var result = "# Rules\n"
         for rule in FormatRules.all {
@@ -57,6 +61,8 @@ class MetadataTests: XCTestCase {
             }
         }
         result += "\n"
+        let oldRules = try String(contentsOf: rulesURL)
+        XCTAssertEqual(result, oldRules)
         try result.write(to: rulesURL, atomically: true, encoding: .utf8)
     }
 
@@ -240,5 +246,11 @@ class MetadataTests: XCTestCase {
         XCTAssertTrue(changelog.contains("[\(SwiftFormat.version)]"), "CHANGELOG.md does not mention latest release")
         XCTAssertTrue(changelog.contains("(https://github.com/nicklockwood/SwiftFormat/releases/tag/\(SwiftFormat.version))"),
                       "CHANGELOG.md does not include correct link for latest release")
+    }
+
+    func testLatestVersionInPodspec() {
+        let podspec = try! String(contentsOf: podspecURL, encoding: .utf8)
+        XCTAssertTrue(podspec.contains("\"version\": \"\(SwiftFormat.version)\""), "Podspec version does not match latest release")
+        XCTAssertTrue(podspec.contains("\"tag\": \"\(SwiftFormat.version)\""), "Podspec tag does not match latest release")
     }
 }

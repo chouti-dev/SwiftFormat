@@ -110,9 +110,10 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertFalse(formatter.isStartOfClosure(at: 2))
     }
 
-    func testDoBracesNotTreatedAsClosure() {
-        let formatter = Formatter(tokenize("do {}"))
+    func testDoCatchBracesNotTreatedAsClosure() {
+        let formatter = Formatter(tokenize("do {} catch Foo.error {}"))
         XCTAssertFalse(formatter.isStartOfClosure(at: 2))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 11))
     }
 
     // functions
@@ -185,6 +186,16 @@ class ParsingHelpersTests: XCTestCase {
     func testInitBracesNotTreatedAsClosure() {
         let formatter = Formatter(tokenize("init() { foo = 5 }"))
         XCTAssertFalse(formatter.isStartOfClosure(at: 4))
+    }
+
+    func testGenericInitBracesNotTreatedAsClosure() {
+        let formatter = Formatter(tokenize("init<T>() { foo = 5 }"))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 7))
+    }
+
+    func testGenericOptionalInitBracesNotTreatedAsClosure() {
+        let formatter = Formatter(tokenize("init?<T>() { foo = 5 }"))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 8))
     }
 
     func testInitAllmanBracesNotTreatedAsClosure() {
@@ -443,6 +454,13 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssert(formatter.isStartOfClosure(at: 16))
     }
 
+    func testGenericInitializerTrailingClosure() {
+        let formatter = Formatter(tokenize("""
+        Foo<Bar>(0) { [weak self]() -> Void in }
+        """))
+        XCTAssert(formatter.isStartOfClosure(at: 8))
+    }
+
     func testParameterBodyAfterStringIsNotClosure() {
         let formatter = Formatter(tokenize("""
         var foo: String = "bar" {
@@ -631,6 +649,7 @@ class ParsingHelpersTests: XCTestCase {
             "convenience",
             "override",
             "indirect",
+            "isolated", "nonisolated",
             "lazy",
             "weak", "unowned",
             "static", "class",
@@ -649,7 +668,9 @@ class ParsingHelpersTests: XCTestCase {
             "override",
             "private", "fileprivate", "internal", "public", "open",
             "private(set)", "fileprivate(set)", "internal(set)", "public(set)", "open(set)",
-            "dynamic", "indirect",
+            "dynamic",
+            "indirect",
+            "isolated", "nonisolated",
             "static", "class",
             "mutating", "nonmutating",
             "lazy",
@@ -670,6 +691,13 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(formatter.startOfModifiers(at: 12, includingAttributes: false), 8)
     }
 
+    func testStartOfModifiersIncludingNonisolated() {
+        let formatter = Formatter(tokenize("""
+        actor Foo { nonisolated public func foo() {} }
+        """))
+        XCTAssertEqual(formatter.startOfModifiers(at: 10, includingAttributes: true), 6)
+    }
+
     func testStartOfModifiersIncludingAttributes() {
         let formatter = Formatter(tokenize("""
         class Foo { @objc public required init() {} }
@@ -682,6 +710,20 @@ class ParsingHelpersTests: XCTestCase {
         @objc public class override var foo: Int?
         """))
         XCTAssertEqual(formatter.startOfModifiers(at: 6, includingAttributes: true), 0)
+    }
+
+    func testStartOfPropertyModifiers2() {
+        let formatter = Formatter(tokenize("""
+        @objc(SFFoo) public var foo: Int?
+        """))
+        XCTAssertEqual(formatter.startOfModifiers(at: 7, includingAttributes: false), 5)
+    }
+
+    func testStartOfPropertyModifiers3() {
+        let formatter = Formatter(tokenize("""
+        @OuterType.Wrapper var foo: Int?
+        """))
+        XCTAssertEqual(formatter.startOfModifiers(at: 4, includingAttributes: true), 0)
     }
 
     // MARK: processDeclaredVariables
@@ -776,6 +818,28 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(names, ["bar", "baz", "x", "y"])
     }
 
+    func testProcessAwaitVariableInForLoop() {
+        let formatter = Formatter(tokenize("""
+        for await foo in DoubleGenerator() {
+            print(foo)
+        }
+        """))
+        var index = 0
+        var names = Set<String>()
+        formatter.processDeclaredVariables(at: &index, names: &names)
+        XCTAssertEqual(names, ["foo"])
+    }
+
+    func testProcessParametersInInit() {
+        let formatter = Formatter(tokenize("""
+        init(actor: Int, bar: String) {}
+        """))
+        var index = 0
+        var names = Set<String>()
+        formatter.processDeclaredVariables(at: &index, names: &names)
+        XCTAssertEqual(names, ["actor", "bar"])
+    }
+
     // MARK: parseDeclarations
 
     func testParseDeclarations() {
@@ -799,7 +863,7 @@ class ParsingHelpersTests: XCTestCase {
         }
 
         protocol SomeProtocol {
-            var getter: String { get }
+            var getter: String { get async throws }
             func protocolMethod() -> Bool
         }
 
@@ -898,7 +962,7 @@ class ParsingHelpersTests: XCTestCase {
             sourceCode(for: declarations[6].tokens),
             """
             protocol SomeProtocol {
-                var getter: String { get }
+                var getter: String { get async throws }
                 func protocolMethod() -> Bool
             }
 
@@ -909,7 +973,7 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(
             sourceCode(for: declarations[6].body?[0].tokens),
             """
-                var getter: String { get }
+                var getter: String { get async throws }
 
             """
         )
@@ -1059,7 +1123,7 @@ class ParsingHelpersTests: XCTestCase {
         struct Foo {
             var bar = "bar"
             /// Leading comment
-            public var baaz = "baaz" // Trailing comment
+            public var baz = "baz" // Trailing comment
             var quux = "quux"
         }
         """
@@ -1087,7 +1151,7 @@ class ParsingHelpersTests: XCTestCase {
             sourceCode(for: declarations[0].body?[1].tokens),
             """
                 /// Leading comment
-                public var baaz = "baaz" // Trailing comment
+                public var baz = "baz" // Trailing comment
 
             """
         )
@@ -1163,7 +1227,7 @@ class ParsingHelpersTests: XCTestCase {
 
     func testParseComplexConditionalCompilationBlockCorrectly() {
         let input = """
-        let beforeBlock = "baaz"
+        let beforeBlock = "baz"
 
         #if DEBUG
         struct DebugFoo {

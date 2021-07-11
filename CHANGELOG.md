@@ -1,8 +1,68 @@
 # Change Log
 
+## [0.48.9](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.9) (2020-07-09)
+
+- Fixed regression introduced in 0.48.7 where parens around prefix expressions were incorrectly removed
+
+## [0.48.8](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.8) (2020-07-08)
+
+- Fixed regression introduced in 0.48.7 where parens around operator literals were incorrectly removed
+
+## [0.48.7](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.7) (2020-07-07)
+
+- Fixed bug where `redundantParens` rule could introduce an ambiguity by removing parens around a range argument
+- Fixed bug where `unowned(unsafe)` capture argument would be mangled by `unusedArguments` rule
+- Fixed spurious double-indenting of trailing closures in some cases
+
+## [0.48.6](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.6) (2020-06-23)
+
+- Fixed bug where `actor` variables were incorrectly interpreted as a keyword in certain cases
+- The `redundantBackticks` rule no longer removes required backticks around `actor` properties
+- Doc comments containing TODO: are no longer converted to regular comments if it would mangle the docs
+
+## [0.48.5](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.5) (2020-06-15)
+
+- Fixed bug when parsing generic result builder attributes, leading to incorrect spacing
+- Fixed bug where wrapped function body was not double-indented as it should have been
+- Parser now correctly handles `isolated` and `nonisolated` modifiers on `actor` members
+- Fixed bug where space was incorrectly removed between closure capture list and arguments
+- Fixed bug with indenting of wrapped method chains
+
+## [0.48.4](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.4) (2020-05-30)
+
+- Added support for `actor` and other async/await syntax introduced in Swift 5.5
+- Functions with `@Sendable` closure parameters are now formatted correctly
+- The `redundantGet` rule no longer removes effectful get clauses (i.e. `get throws` or `get async`)
+- Fixed indenting of postfix expression members inside `#else` and `#elseif` clauses
+- The `--typeattributes` option now applies to extension attributes as well as type declarations
+- Improved indentation for accessors/method calls in multiline conditionals
+
+## [0.48.3](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.3) (2020-05-22)
+
+- Fixed bug where files would not be correctly excluded when using `--stdinpath`
+- Fixed bug with `typeSugar` rule affecting optional composed protocol types
+- Fixed bug where `hoistPatternLet` would incorrectly add let before `nil` or `true`/`false`
+
+## [0.48.2](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.2) (2020-05-16)
+
+- Fixed wrapping of generic property wrapper attributes
+- Fixed bug where trailing comma could be inserted inside a collection type signature
+
+## [0.48.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.1) (2020-05-08)
+
+- Fixed bug where `typeSugar` rule triggered a Swift bug inside case statements
+- Fixed double-indenting of trailing closure body on a wrapped line
+- Fixed compilation failure when installing SwiftFormat using Swift Package Manager
+- Fixed wrapping of name-spaced property wrapper attributes
+- Fixed bug where `redundantReturn` rule removed required return inside `catch` statement
+- Fixed issue where `redundantType` rule introduced compilation warnings by removing explicit Void type
+- Fixed bug where trailing comma could be inserted inside a subscript nested inside a collection
+- Fixed spurious space inserted in generic result builder attributes
+- Successive reads of the same configuration file while formatting are now cached to improve performance
+
 ## [0.48.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.0) (2020-04-20)
 
-- Add `--emptybraces` to control how empty braces are formatted
+- Added `--emptybraces` option to control how empty braces are formatted
 - The `redundantReturn` rule now removes redundant `return` statements in Void functions
 - The `redundantParens` rule now removes redundant parens around closure arguments
 - Fixed parsing error with complex `guard` statements

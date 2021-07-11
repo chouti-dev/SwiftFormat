@@ -65,6 +65,12 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
+    func testRequiredParensNotRemoved4() {
+        let input = "x+(-5)"
+        testFormatting(for: input, rule: FormatRules.redundantParens,
+                       exclude: ["spaceAroundOperators"])
+    }
+
     func testRequiredParensNotRemovedBeforeSubscript() {
         let input = "(foo + bar)[baz]"
         testFormatting(for: input, rule: FormatRules.redundantParens)
@@ -111,6 +117,39 @@ extension RulesTests {
     func testMeaningfulParensNotRemovedAroundFileLiteral() {
         let input = "func foo(_ file: String = (#file)) {}"
         testFormatting(for: input, rule: FormatRules.redundantParens, exclude: ["unusedArguments"])
+    }
+
+    func testMeaningfulParensNotRemovedAroundOperator() {
+        let input = "let foo: (Int, Int) -> Bool = (<)"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testMeaningfulParensNotRemovedAroundOperatorWithSpaces() {
+        let input = "let foo: (Int, Int) -> Bool = ( < )"
+        testFormatting(for: input, rule: FormatRules.redundantParens,
+                       exclude: ["spaceAroundOperators", "spaceInsideParens"])
+    }
+
+    func testMeaningfulParensNotRemovedAroundPrefixOperator() {
+        let input = "let foo: (Int) -> Int = ( -)"
+        testFormatting(for: input, rule: FormatRules.redundantParens,
+                       exclude: ["spaceAroundOperators", "spaceInsideParens"])
+    }
+
+    func testMeaningfulParensAroundPrefixExpressionFollowedByDotNotRemoved() {
+        let input = "let foo = (!bar).description"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testMeaningfulParensAroundPrefixExpressionWithSpacesFollowedByDotNotRemoved() {
+        let input = "let foo = ( !bar ).description"
+        testFormatting(for: input, rule: FormatRules.redundantParens,
+                       exclude: ["spaceAroundOperators", "spaceInsideParens"])
+    }
+
+    func testMeaningfulParensAroundPrefixExpressionFollowedByPostfixExpressionNotRemoved() {
+        let input = "let foo = (!bar)!"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
     // around conditions
@@ -210,21 +249,6 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantParens)
     }
 
-    func testsTupleNotUnwrapped() {
-        let input = "tuple = (1, 2)"
-        testFormatting(for: input, rule: FormatRules.redundantParens)
-    }
-
-    func testsTupleOfClosuresNotUnwrapped() {
-        let input = "tuple = ({}, {})"
-        testFormatting(for: input, rule: FormatRules.redundantParens)
-    }
-
-    func testSwitchTupleNotUnwrapped() {
-        let input = "switch (x, y) {}"
-        testFormatting(for: input, rule: FormatRules.redundantParens)
-    }
-
     func testGuardParensRemoved() {
         let input = "guard (x == y) else { return }"
         let output = "guard x == y else { return }"
@@ -237,13 +261,39 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantParens)
     }
 
-    func testNestedClosureParensNotRemoved() {
-        let input = "foo { _ in foo(y) {} }"
+    func testParensForLoopWhereClauseMethodNotRemoved() {
+        let input = "for foo in foos where foo.method() { print(foo) }"
         testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
-    func testParensInStringNotRemoved() {
-        let input = "\"hello \\(world)\""
+    func testSpaceInsertedWhenRemovingParens() {
+        let input = "if(x.y) {}"
+        let output = "if x.y {}"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testSpaceInsertedWhenRemovingParens2() {
+        let input = "while(!foo) {}"
+        let output = "while !foo {}"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testNoDoubleSpaceWhenRemovingParens() {
+        let input = "if ( x.y ) {}"
+        let output = "if x.y {}"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testNoDoubleSpaceWhenRemovingParens2() {
+        let input = "if (x.y) {}"
+        let output = "if x.y {}"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    // around function and closure arguments
+
+    func testNestedClosureParensNotRemoved() {
+        let input = "foo { _ in foo(y) {} }"
         testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
@@ -281,40 +331,6 @@ extension RulesTests {
         let input = "{ (foo) + bar }"
         let output = "{ foo + bar }"
         testFormatting(for: input, output, rule: FormatRules.redundantParens)
-    }
-
-    func testSpaceInsertedWhenRemovingParens() {
-        let input = "if(x.y) {}"
-        let output = "if x.y {}"
-        testFormatting(for: input, output, rule: FormatRules.redundantParens)
-    }
-
-    func testSpaceInsertedWhenRemovingParens2() {
-        let input = "while(!foo) {}"
-        let output = "while !foo {}"
-        testFormatting(for: input, output, rule: FormatRules.redundantParens)
-    }
-
-    func testNoDoubleSpaceWhenRemovingParens() {
-        let input = "if ( x.y ) {}"
-        let output = "if x.y {}"
-        testFormatting(for: input, output, rule: FormatRules.redundantParens)
-    }
-
-    func testNoDoubleSpaceWhenRemovingParens2() {
-        let input = "if (x.y) {}"
-        let output = "if x.y {}"
-        testFormatting(for: input, output, rule: FormatRules.redundantParens)
-    }
-
-    func testParensAroundRangeNotRemoved() {
-        let input = "(1 ..< 10).reduce(0, combine: +)"
-        testFormatting(for: input, rule: FormatRules.redundantParens)
-    }
-
-    func testParensForLoopWhereClauseMethodNotRemoved() {
-        let input = "for foo in foos where foo.method() { print(foo) }"
-        testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
     func testParensRemovedAroundFunctionArgument() {
@@ -606,6 +622,21 @@ extension RulesTests {
 
     // around tuples
 
+    func testsTupleNotUnwrapped() {
+        let input = "tuple = (1, 2)"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testsTupleOfClosuresNotUnwrapped() {
+        let input = "tuple = ({}, {})"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testSwitchTupleNotUnwrapped() {
+        let input = "switch (x, y) {}"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
     func testParensRemovedAroundTuple() {
         let input = "let foo = ((bar: Int, baz: String))"
         let output = "let foo = (bar: Int, baz: String)"
@@ -712,6 +743,51 @@ extension RulesTests {
     func testNestedParensRemovedAfterTupleIndex3() {
         let input = "foo.1(((bar: Int, baz: String)))"
         let output = "foo.1((bar: Int, baz: String))"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    // inside string interpolation
+
+    func testParensInStringNotRemoved() {
+        let input = "\"hello \\(world)\""
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    // around ranges
+
+    func testParensAroundRangeNotRemoved() {
+        let input = "(1 ..< 10).reduce(0, combine: +)"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testParensRemovedAroundRangeArguments() {
+        let input = "(a)...(b)"
+        let output = "a...b"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens,
+                       exclude: ["spaceAroundOperators"])
+    }
+
+    func testParensNotRemovedAroundRangeArgumentBeginningWithDot() {
+        let input = "a...(.b)"
+        testFormatting(for: input, rule: FormatRules.redundantParens,
+                       exclude: ["spaceAroundOperators"])
+    }
+
+    func testParensNotRemovedAroundRangeArgumentBeginningWithPrefixOperator() {
+        let input = "a...(-b)"
+        testFormatting(for: input, rule: FormatRules.redundantParens,
+                       exclude: ["spaceAroundOperators"])
+    }
+
+    func testParensRemovedAroundRangeArgumentBeginningWithDot() {
+        let input = "a ... (.b)"
+        let output = "a ... .b"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testParensRemovedAroundRangeArgumentBeginningWithPrefixOperator() {
+        let input = "a ... (-b)"
+        let output = "a ... -b"
         testFormatting(for: input, output, rule: FormatRules.redundantParens)
     }
 }

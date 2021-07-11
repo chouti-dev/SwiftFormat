@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.48.0"
+let swiftFormatVersion = "0.48.9"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -116,7 +116,7 @@ public func enumerateFiles(withInputURL inputURL: URL,
     let queue = concurrent ? DispatchQueue.global(qos: .userInitiated) : completionQueue
 
     func wasSkipped(_ inputURL: URL, with options: Options) -> Bool {
-        guard shouldSkipFile(inputURL, with: options) else {
+        guard options.shouldSkipFile(inputURL) else {
             return false
         }
         if let handler = skipped {
@@ -275,56 +275,46 @@ func gatherOptions(_ options: inout Options, for inputURL: URL, with logger: Log
     var directory = URL(fileURLWithPath: inputURL.pathComponents[0]).standardized
     for part in inputURL.pathComponents.dropFirst().dropLast() {
         directory.appendPathComponent(part)
-        if shouldSkipFile(directory, with: options) {
+        if options.shouldSkipFile(directory) {
             return
         }
         try processDirectory(directory, with: &options, logger: logger)
     }
 }
 
-// Determine if file should be skipped
-private func shouldSkipFile(_ inputURL: URL, with options: Options) -> Bool {
-    guard let excludedGlobs = options.fileOptions?.excludedGlobs else {
-        return false
-    }
-    let path = inputURL.standardizedFileURL.path
-    for excluded in excludedGlobs {
-        guard excluded.matches(path) else {
-            continue
-        }
-        if let unexcluded = options.fileOptions?.unexcludedGlobs,
-           unexcluded.contains(where: { $0.matches(path) })
-        {
-            return false
-        }
-        return true
-    }
-    return false
-}
-
 // Process configuration files in specified directory.
+private var configCache = [URL: [String: String]]()
+private let configQueue = DispatchQueue(label: "swiftformat.config", qos: .userInteractive)
 private func processDirectory(_ inputURL: URL, with options: inout Options, logger: Logger?) throws {
+    if let args = configQueue.sync(execute: { configCache[inputURL] }) {
+        try options.addArguments(args, in: inputURL.path)
+        return
+    }
+    var args = [String: String]()
     let manager = FileManager.default
     let configFile = inputURL.appendingPathComponent(swiftFormatConfigurationFile)
     if manager.fileExists(atPath: configFile.path) {
-        let data = try Data(contentsOf: configFile)
-        let args = try parseConfigFile(data)
-        try options.addArguments(args, in: inputURL.path)
         logger?("Reading config file at \(configFile.path)")
+        let data = try Data(contentsOf: configFile)
+        args = try parseConfigFile(data)
     }
     let versionFile = inputURL.appendingPathComponent(swiftVersionFile)
     if manager.fileExists(atPath: versionFile.path) {
         let versionString = try String(contentsOf: versionFile, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let version = Version(rawValue: versionString) {
-            assert(options.formatOptions != nil)
-            options.formatOptions?.swiftVersion = version
+        if Version(rawValue: versionString) != nil {
+            args["swiftversion"] = versionString
         } else {
             // Don't treat as error, per: https://github.com/nicklockwood/SwiftFormat/issues/639
             // TODO: find a better solution for logging warnings here
             logger?("Unrecognized swift version string '\(versionString)' in \(versionFile.path)")
         }
     }
+    configQueue.async {
+        configCache[inputURL] = args
+    }
+    assert(options.formatOptions != nil)
+    try options.addArguments(args, in: inputURL.path)
 }
 
 /// Line and column offset in source

@@ -140,6 +140,18 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
     }
 
+    func testAddSpaceBetweenCaptureListAndArguments6() {
+        let input = "{ [weak self](foo: @Sendable () -> String) -> Baz? in foo() }"
+        let output = "{ [weak self] (foo: @Sendable () -> String) -> Baz? in foo() }"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
+    func testAddSpaceBetweenCaptureListAndArguments7() {
+        let input = "Foo<Bar>(0) { [weak self]() -> Void in }"
+        let output = "Foo<Bar>(0) { [weak self] () -> Void in }"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
     func testSpaceBetweenClosingParenAndOpenBrace() {
         let input = "func foo(){ foo }"
         let output = "func foo() { foo }"
@@ -180,6 +192,11 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.spaceAroundParens)
     }
 
+    func testSpaceAfterSendableAttribute() {
+        let input = "func foo(bar: @Sendable () -> Void)"
+        testFormatting(for: input, rule: FormatRules.spaceAroundParens)
+    }
+
     func testSpaceBeforeTupleIndexArgument() {
         let input = "foo.1 (true)"
         let output = "foo.1(true)"
@@ -210,17 +227,17 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
     }
 
-    func testAddSpaceBetweenParenAndAwaitForSwift6() {
+    func testAddSpaceBetweenParenAndAwaitForSwift5_5() {
         let input = "let foo = await(bar: 5)"
         let output = "let foo = await (bar: 5)"
         testFormatting(for: input, output, rule: FormatRules.spaceAroundParens,
-                       options: FormatOptions(swiftVersion: "6.0.0"))
+                       options: FormatOptions(swiftVersion: "5.5"))
     }
 
-    func testNoAddSpaceBetweenParenAndAwaitForSwiftLessThan6() {
+    func testNoAddSpaceBetweenParenAndAwaitForSwiftLessThan5_5() {
         let input = "let foo = await(bar: 5)"
         testFormatting(for: input, rule: FormatRules.spaceAroundParens,
-                       options: FormatOptions(swiftVersion: "5.9.9"))
+                       options: FormatOptions(swiftVersion: "5.4.9"))
     }
 
     // MARK: - spaceInsideParens
@@ -408,6 +425,11 @@ extension RulesTests {
     func testSpaceAroundGenericsFollowedByAndOperator() {
         let input = "if foo is Foo<Bar> && baz {}"
         testFormatting(for: input, rule: FormatRules.spaceAroundGenerics, exclude: ["andOperator"])
+    }
+
+    func testSpaceAroundGenericResultBuilder() {
+        let input = "func foo(@SomeResultBuilder<Self> builder: () -> Void) {}"
+        testFormatting(for: input, rule: FormatRules.spaceAroundGenerics)
     }
 
     // MARK: - spaceInsideGenerics

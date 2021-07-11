@@ -667,6 +667,17 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantGet)
     }
 
+    func testEffectfulGetNotRemoved() {
+        let input = """
+        var foo: Int {
+            get async throws {
+                try await getFoo()
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantGet)
+    }
+
     // MARK: - redundantInit
 
     func testRemoveRedundantInit() {
@@ -960,6 +971,42 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantType)
     }
 
+    func testNoRemoveRedundantTypeIfVoid() {
+        let input = "let foo: Void = Void()"
+        testFormatting(for: input, rule: FormatRules.redundantType,
+                       exclude: ["void"])
+    }
+
+    func testNoRemoveRedundantTypeIfVoid2() {
+        let input = "let foo: () = ()"
+        testFormatting(for: input, rule: FormatRules.redundantType,
+                       exclude: ["void"])
+    }
+
+    func testNoRemoveRedundantTypeIfVoid3() {
+        let input = "let foo: [Void] = [Void]()"
+        testFormatting(for: input, rule: FormatRules.redundantType)
+    }
+
+    func testNoRemoveRedundantTypeIfVoid4() {
+        let input = "let foo: Array<Void> = Array<Void>()"
+        testFormatting(for: input, rule: FormatRules.redundantType,
+                       exclude: ["typeSugar"])
+    }
+
+    func testNoRemoveRedundantTypeIfVoid5() {
+        let input = "let foo: Void? = Void?.none"
+        testFormatting(for: input, rule: FormatRules.redundantType)
+    }
+
+    func testNoRemoveRedundantTypeIfVoid6() {
+        let input = "let foo: Optional<Void> = Optional<Void>.none"
+        testFormatting(for: input, rule: FormatRules.redundantType,
+                       exclude: ["typeSugar"])
+    }
+
+    // --redundanttype explicit
+
     func testVarRedundantTypeRemovalExplicitType() {
         let input = "var view: UIView = UIView()"
         let output = "var view: UIView = .init()"
@@ -1102,6 +1149,13 @@ extension RulesTests {
         if foo {}
         let foo: Foo = .init()
         """
+        let options = FormatOptions(redundantType: .explicit)
+        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options)
+    }
+
+    func testRedundantTypeIfVoid() {
+        let input = "let foo: [Void] = [Void]()"
+        let output = "let foo: [Void] = .init()"
         let options = FormatOptions(redundantType: .explicit)
         testFormatting(for: input, output, rule: FormatRules.redundantType, options: options)
     }
@@ -1701,6 +1755,21 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantReturn)
     }
 
+    func testNoRemoveVoidReturnInCatch() {
+        let input = """
+        func foo() {
+            do {
+                try Foo()
+            } catch Feature.error {
+                print("feature error")
+                return
+            }
+            print("foo")
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantReturn)
+    }
+
     // MARK: - redundantBackticks
 
     func testRemoveRedundantBackticksInLet() {
@@ -1856,6 +1925,29 @@ extension RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.redundantBackticks)
+    }
+
+    func testNoRemoveBackticksAroundActorProperty() {
+        let input = "let `actor`: Foo"
+        testFormatting(for: input, rule: FormatRules.redundantBackticks)
+    }
+
+    func testRemoveBackticksAroundActorRvalue() {
+        let input = "let foo = `actor`"
+        let output = "let foo = actor"
+        testFormatting(for: input, output, rule: FormatRules.redundantBackticks)
+    }
+
+    func testRemoveBackticksAroundActorLabel() {
+        let input = "init(`actor`: Foo)"
+        let output = "init(actor: Foo)"
+        testFormatting(for: input, output, rule: FormatRules.redundantBackticks)
+    }
+
+    func testRemoveBackticksAroundActorLabel2() {
+        let input = "init(`actor` foo: Foo)"
+        let output = "init(actor foo: Foo)"
+        testFormatting(for: input, output, rule: FormatRules.redundantBackticks)
     }
 
     // MARK: - redundantSelf
@@ -2782,11 +2874,83 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantSelf)
     }
 
+    func testRedundantSelfWithStaticMethodAfterForLoop() {
+        let input = """
+        struct Foo {
+            init() {
+                for foo in self.bar {}
+            }
+
+            static func foo() {}
+        }
+
+        """
+        let output = """
+        struct Foo {
+            init() {
+                for foo in bar {}
+            }
+
+            static func foo() {}
+        }
+
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf)
+    }
+
+    func testRedundantSelfWithStaticMethodAfterForWhereLoop() {
+        let input = """
+        struct Foo {
+            init() {
+                for foo in self.bar where !bar.isEmpty {}
+            }
+
+            static func foo() {}
+        }
+
+        """
+        let output = """
+        struct Foo {
+            init() {
+                for foo in bar where !bar.isEmpty {}
+            }
+
+            static func foo() {}
+        }
+
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf)
+    }
+
+    func testRedundantSelfRuleDoesntErrorInForInTryLoop() {
+        let input = "for foo in try bar() {}"
+        testFormatting(for: input, rule: FormatRules.redundantSelf)
+    }
+
+    func testRedundantSelfInInitWithActorLabel() {
+        let input = """
+        class Foo {
+            init(actor: Actor, bar: Bar) {
+                self.actor = actor
+                self.bar = bar
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantSelf)
+    }
+
     // explicitSelf = .insert
 
     func testInsertSelf() {
         let input = "class Foo {\n    let foo: Int\n    init() { foo = 5 }\n}"
         let output = "class Foo {\n    let foo: Int\n    init() { self.foo = 5 }\n}"
+        let options = FormatOptions(explicitSelf: .insert)
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testInsertSelfInActor() {
+        let input = "actor Foo {\n    let foo: Int\n    init() { foo = 5 }\n}"
+        let output = "actor Foo {\n    let foo: Int\n    init() { self.foo = 5 }\n}"
         let options = FormatOptions(explicitSelf: .insert)
         testFormatting(for: input, output, rule: FormatRules.redundantSelf, options: options)
     }
@@ -3479,59 +3643,6 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantSelf, options: options)
     }
 
-    func testRedundantSelfWithStaticMethodAfterForLoop() {
-        let input = """
-        struct Foo {
-            init() {
-                for foo in self.bar {}
-            }
-
-            static func foo() {}
-        }
-
-        """
-        let output = """
-        struct Foo {
-            init() {
-                for foo in bar {}
-            }
-
-            static func foo() {}
-        }
-
-        """
-        testFormatting(for: input, output, rule: FormatRules.redundantSelf)
-    }
-
-    func testRedundantSelfWithStaticMethodAfterForWhereLoop() {
-        let input = """
-        struct Foo {
-            init() {
-                for foo in self.bar where !bar.isEmpty {}
-            }
-
-            static func foo() {}
-        }
-
-        """
-        let output = """
-        struct Foo {
-            init() {
-                for foo in bar where !bar.isEmpty {}
-            }
-
-            static func foo() {}
-        }
-
-        """
-        testFormatting(for: input, output, rule: FormatRules.redundantSelf)
-    }
-
-    func testRedundantSelfRuleDoesntErrorInForInTryLoop() {
-        let input = "for foo in try bar() {}"
-        testFormatting(for: input, rule: FormatRules.redundantSelf)
-    }
-
     func testRedundantSelfRuleDoesntErrorForStaticFuncInProtocolWithWhere() {
         let input = """
         protocol Foo where Self: Bar {
@@ -3838,6 +3949,19 @@ extension RulesTests {
 
     func testMalformedFunctionNotMisidentifiedAsClosure() {
         let input = "func foo() { bar(5) {} in }"
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnownedUnsafeNotStripped() {
+        let input = """
+        func foo() {
+            var num = 0
+            Just(1)
+                .sink { [unowned(unsafe) self] in
+                    num += $0
+                }
+        }
+        """
         testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 

@@ -443,7 +443,8 @@ Option | Description
 
 ## enumNamespaces
 
-Converts types used for hosting only static members into enums.
+Converts types used for hosting only static members into enums (an empty enum is
+the canonical way to create a namespace in Swift as it can't be instantiated).
 
 ## extensionAccessControl
 
@@ -461,12 +462,12 @@ Option | Description
 ```diff
 - extension Foo {
 -     public func bar() {}
--     public func baaz() {}
+-     public func baz() {}
   }
 
 + public extension Foo {
 +     func bar() {}
-+     func baaz() {}
++     func baz() {}
   }
 ```
 
@@ -475,13 +476,13 @@ Option | Description
 ```diff
 - public extension Foo {
 -     func bar() {}
--     func baaz() {}
+-     func baz() {}
 -     internal func quux() {}
   }
 
 + extension Foo {
 +     public func bar() {}
-+     public func baaz() {}
++     public func baz() {}
 +     func quux() {}
   }
 ```
@@ -763,7 +764,7 @@ Option | Description
 `--categorymark` | Template for category mark comments. Defaults to "MARK: %c"
 `--beforemarks` | Declarations placed before first mark (e.g. `typealias,struct`)
 `--lifecycle` | Names of additional Lifecycle methods (e.g. `viewDidLoad`)
-`--organizetypes` | Declarations to organize (defaults to `struct,class,enum`)
+`--organizetypes` | Declarations to organize (default: `class,actor,struct,enum`)
 `--structthreshold` | Minimum line count to organize struct body. Defaults to 0
 `--classthreshold` | Minimum line count to organize class body. Defaults to 0
 `--enumthreshold` | Minimum line count to organize enum body. Defaults to 0

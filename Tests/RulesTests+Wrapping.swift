@@ -827,6 +827,20 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
     }
 
+    func testHandleXcodeTokenApplyingWrap() {
+        let input = """
+        test(image: <#T##UIImage#>, name: "Name")
+        """
+        let output = """
+        test(
+            image: <#T##UIImage#>,
+            name: "Name"
+        )
+        """
+        let options = FormatOptions(wrapArguments: .beforeFirst, maxWidth: 20)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
     // MARK: wrapParameters
 
     // MARK: preserve
@@ -2100,7 +2114,7 @@ extension RulesTests {
         public final class Foo {
             public var multiLineMethodCall = Foo.multiLineMethodCall(
                 bar: bar,
-                baaz: baaz)
+                baz: baz)
 
             func singleLine() -> String {
                 return "method body"
@@ -2359,6 +2373,37 @@ extension RulesTests {
 
     // MARK: wrapConditions before-first
 
+    func testWrapConditionsBeforeFirstPreservesMultilineStatements() {
+        let input = """
+        if
+            let unwrappedFoo = Foo(
+                bar: bar,
+                baz: baz),
+            unwrappedFoo.elements
+                .compactMap({ $0 })
+                .filter({
+                    if $0.matchesCondition {
+                        return true
+                    } else {
+                        return false
+                    }
+                }).isEmpty,
+            let bar = unwrappedFoo.bar,
+            let baz = unwrappedFoo.bar?
+                .first(where: { $0.isBaz }),
+            let unwrappedFoo2 = Foo(
+                bar: bar2,
+                baz: baz2),
+            let quux = baz.quux
+        {}
+        """
+
+        testFormatting(
+            for: input, rules: [FormatRules.wrapArguments, FormatRules.indent],
+            options: FormatOptions(closingParenOnSameLine: true, wrapConditions: .beforeFirst)
+        )
+    }
+
     func testWrapConditionsBeforeFirst() {
         let input = """
         if let foo = foo,
@@ -2368,9 +2413,9 @@ extension RulesTests {
         else if foo != bar,
                 let quux = quux {}
 
-        if let baaz = baaz {}
+        if let baz = baz {}
 
-        guard baaz.filter({ $0 == foo }),
+        guard baz.filter({ $0 == foo }),
               let bar = bar else {}
 
         while let foo = foo,
@@ -2387,10 +2432,10 @@ extension RulesTests {
           foo != bar,
           let quux = quux {}
 
-        if let baaz = baaz {}
+        if let baz = baz {}
 
         guard
-          baaz.filter({ $0 == foo }),
+          baz.filter({ $0 == foo }),
           let bar = bar else {}
 
         while
@@ -2441,10 +2486,10 @@ extension RulesTests {
 
         else {}
 
-        if let baaz = baaz {}
+        if let baz = baz {}
 
         guard
-          baaz.filter({ $0 == foo }),
+          baz.filter({ $0 == foo }),
           let bar = bar else {}
 
         while
@@ -2462,9 +2507,9 @@ extension RulesTests {
 
         else {}
 
-        if let baaz = baaz {}
+        if let baz = baz {}
 
-        guard baaz.filter({ $0 == foo }),
+        guard baz.filter({ $0 == foo }),
               let bar = bar else {}
 
         while let foo = foo,
@@ -2588,6 +2633,23 @@ extension RulesTests {
         )
     }
 
+    func testWrapExtensionAttribute() {
+        let input = """
+        @available(iOS 14.0, *) extension Foo {}
+        """
+        let output = """
+        @available(iOS 14.0, *)
+        extension Foo {}
+        """
+        let options = FormatOptions(typeAttributes: .prevLine)
+        testFormatting(
+            for: input,
+            output,
+            rule: FormatRules.wrapAttributes,
+            options: options
+        )
+    }
+
     func testTypeAttributeStaysWrapped() {
         let input = """
         @available(iOS 14.0, *)
@@ -2689,6 +2751,42 @@ extension RulesTests {
         public convenience init() {}
         """
         let options = FormatOptions(funcAttributes: .prevLine)
+        testFormatting(for: input, output, rule: FormatRules.wrapAttributes, options: options)
+    }
+
+    func testWrapPropertyWrapperAttribute() {
+        let input = """
+        @OuterType.Wrapper var foo: Int
+        """
+        let output = """
+        @OuterType.Wrapper
+        var foo: Int
+        """
+        let options = FormatOptions(varAttributes: .prevLine)
+        testFormatting(for: input, output, rule: FormatRules.wrapAttributes, options: options)
+    }
+
+    func testWrapGenericPropertyWrapperAttribute() {
+        let input = """
+        @OuterType.Generic<WrappedType> var foo: WrappedType
+        """
+        let output = """
+        @OuterType.Generic<WrappedType>
+        var foo: WrappedType
+        """
+        let options = FormatOptions(varAttributes: .prevLine)
+        testFormatting(for: input, output, rule: FormatRules.wrapAttributes, options: options)
+    }
+
+    func testWrapGenericPropertyWrapperAttribute2() {
+        let input = """
+        @OuterType.Generic<WrappedType>.Foo var foo: WrappedType
+        """
+        let output = """
+        @OuterType.Generic<WrappedType>.Foo
+        var foo: WrappedType
+        """
+        let options = FormatOptions(varAttributes: .prevLine)
         testFormatting(for: input, output, rule: FormatRules.wrapAttributes, options: options)
     }
 

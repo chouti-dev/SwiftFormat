@@ -1212,29 +1212,72 @@ extension RulesTests {
 
     func testSingleIndentTrailingClosureBody() {
         let input = """
-        method(
-            withParameter: 1,
-            otherParameter: 2
-        ) { [weak self] in
-            guard let error = error else { return }
-            print("and a trailing closure")
+        func foo() {
+            method(
+                withParameter: 1,
+                otherParameter: 2
+            ) { [weak self] in
+                guard let error = error else { return }
+                print("and a trailing closure")
+            }
         }
         """
-
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: false)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testSingleIndentTrailingClosureBody2() {
+        let input = """
+        func foo() {
+            method(withParameter: 1,
+                   otherParameter: 2) { [weak self] in
+                guard let error = error else { return }
+                print("and a trailing closure")
+            }
+        }
+        """
+        let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
         testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 
     func testDoubleIndentTrailingClosureBody() {
         let input = """
-        method(
-            withParameter: 1,
-            otherParameter: 2) { [weak self] in
-                guard let error = error else { return }
-                print("and a trailing closure")
+        func foo() {
+            method(
+                withParameter: 1,
+                otherParameter: 2) { [weak self] in
+                    guard let error = error else { return }
+                    print("and a trailing closure")
+            }
         }
         """
+        let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
 
+    func testDoubleIndentTrailingClosureBody2() {
+        let input = """
+        extension Foo {
+            func bar() -> Bar? {
+                return Bar(with: Baz(
+                    baz: baz)) { _ in
+                        print("hello")
+                }
+            }
+        }
+        """
+        let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testNoDoubleIndentTrailingClosureBodyIfLineStartsWithClosingBrace() {
+        let input = """
+        let alert = Foo.alert(buttonCallback: {
+            okBlock()
+        }, cancelButtonTitle: cancelTitle) {
+            cancelBlock()
+        }
+        """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
         testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
@@ -1274,6 +1317,17 @@ extension RulesTests {
         })
         """
         testFormatting(for: input, rule: FormatRules.indent, exclude: ["trailingClosures"])
+    }
+
+    func testNoDoubleIndentInInsideClosure2() {
+        let input = """
+        foo(where: { _ in
+            bar()
+        }) { _ in
+            print("and a trailing closure")
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
     }
 
     func testIndentChainedPropertiesAfterFunctionCall() {
@@ -1354,6 +1408,17 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.indent, options: options)
     }
 
+    func testChainedFunctionInGuardIndentation() {
+        let input = """
+        guard
+            let foo = self.foo
+            .bar
+            .baz
+        else { return }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
     func testChainedFunctionInGuardWithXcodeIndentation() {
         let input = """
         guard
@@ -1371,6 +1436,62 @@ extension RulesTests {
         """
         let options = FormatOptions(xcodeIndentation: true)
         testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testChainedFunctionInGuardIndentation2() {
+        let input = """
+        guard aBool,
+              anotherBool,
+              aTestArray
+              .map { $0 * 2 }
+              .filter { $0 == 4 }
+              .isEmpty,
+              yetAnotherBool
+        else { return }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testChainedFunctionInGuardWithXcodeIndentation2() {
+        let input = """
+        guard aBool,
+              anotherBool,
+              aTestArray
+              .map { $0 * 2 }
+            .filter { $0 == 4 }
+            .isEmpty,
+            yetAnotherBool
+        else { return }
+        """
+        let output = """
+        guard aBool,
+              anotherBool,
+              aTestArray
+                  .map { $0 * 2 }
+                  .filter { $0 == 4 }
+                  .isEmpty,
+                  yetAnotherBool
+        else { return }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testWrappedChainedFunctionsWithNestedScopeIndent() {
+        let input = """
+        var body: some View {
+            VStack {
+                ZStack {
+                    Text()
+                }
+                .gesture(DragGesture()
+                    .onChanged { value in
+                        print(value)
+                    })
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
     }
 
     func testChainedOrOperatorsInFunctionWithReturnOnNewLine() {
@@ -1849,6 +1970,24 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.indent)
     }
 
+    func testIndentIfDefPostfixMemberSyntax() {
+        let input = """
+        class Bar {
+            func foo() {
+                Text("Hello")
+                #if os(iOS)
+                    .font(.largeTitle)
+                #elseif os(macOS)
+                    .font(.headline)
+                #else
+                    .font(.headline)
+                #endif
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
     // indent #if/#else/#elseif/#endif (mode: noindent)
 
     func testIfEndifNoIndenting() {
@@ -1993,6 +2132,25 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 
+    func testIfDefPostfixMemberSyntaxNoIndenting() {
+        let input = """
+        class Bar {
+            func foo() {
+                Text("Hello")
+                #if os(iOS)
+                    .font(.largeTitle)
+                #elseif os(macOS)
+                    .font(.headline)
+                #else
+                    .font(.headline)
+                #endif
+            }
+        }
+        """
+        let options = FormatOptions(ifdefIndent: .noIndent)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
     // indent #if/#else/#elseif/#endif (mode: outdent)
 
     func testIfEndifOutdenting() {
@@ -2074,6 +2232,25 @@ extension RulesTests {
         #if x
             case baz
         #endif // ends
+        }
+        """
+        let options = FormatOptions(ifdefIndent: .outdent)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testIfDefPostfixMemberSyntaxOutdenting() {
+        let input = """
+        class Bar {
+            func foo() {
+                Text("Hello")
+        #if os(iOS)
+                    .font(.largeTitle)
+        #elseif os(macOS)
+                    .font(.headline)
+        #else
+                    .font(.headline)
+        #endif
+            }
         }
         """
         let options = FormatOptions(ifdefIndent: .outdent)
