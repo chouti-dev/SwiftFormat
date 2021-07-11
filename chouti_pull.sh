@@ -6,8 +6,17 @@ cd $(dirname $0) # cd to the command dir.
 # --- Start ---
 
 # 0) prepare
+echo "➡️  verify upstream origin is set"
+# check git remote
+# https://stackoverflow.com/a/9622518/3164091
+git ls-remote "git@github.com:nicklockwood/SwiftFormat.git" > /dev/null 2>&1
+if [ "$?" -ne 0 ]; then
+  echo "🛑 no upstream origin"
+  exit 1;
+fi
+
 echo "➡️  git pull"
-git fetch --tags
+git fetch git@github.com:nicklockwood/SwiftFormat.git --tags
 git pull
 
 # 1) get the tag to merge
