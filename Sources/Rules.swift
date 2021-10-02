@@ -2794,7 +2794,10 @@ public struct _FormatRules {
                                 formatter.processDeclaredVariables(at: &i, names: &members)
                             }
                         } else {
-                            formatter.processDeclaredVariables(at: &i, names: &localNames)
+                            let removeSelf = explicitSelf != .insert &&
+                                formatter.isConditionalStatement(at: i)
+                            formatter.processDeclaredVariables(at: &i, names: &localNames,
+                                                               removeSelf: removeSelf)
                         }
                     case .keyword("func"):
                         guard let nameToken = formatter.next(.nonSpaceOrCommentOrLinebreak, after: i) else {
