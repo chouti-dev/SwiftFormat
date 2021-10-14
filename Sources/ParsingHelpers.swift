@@ -237,7 +237,7 @@ enum ScopeType {
 
 extension Formatter {
     func scopeType(at index: Int) -> ScopeType? {
-        guard let token = self.token(at: index) else {
+        guard let token = token(at: index) else {
             return nil
         }
         guard case .startOfScope = token else {
@@ -379,7 +379,8 @@ extension Formatter {
 
     // gather declared variable names, starting at index after let/var keyword
     func processDeclaredVariables(at index: inout Int, names: inout Set<String>) {
-        processDeclaredVariables(at: &index, names: &names, removeSelf: false)
+        processDeclaredVariables(at: &index, names: &names, removeSelf: false,
+                                 onlyLocal: false)
     }
 
     /// Returns true if token is inside the return type of a function or subscript
@@ -531,7 +532,7 @@ extension Formatter {
 
     func isInClosureArguments(at i: Int) -> Bool {
         var i = i
-        while let token = self.token(at: i) {
+        while let token = token(at: i) {
             switch token {
             case .keyword("in"), .keyword("throws"), .keyword("rethrows"), .keyword("async"):
                 guard let scopeIndex = index(of: .startOfScope, before: i, if: {
@@ -716,7 +717,7 @@ extension Formatter {
 
     // Determine if next line after this token should be indented
     func isEndOfStatement(at i: Int, in scope: Token? = nil) -> Bool {
-        guard let token = self.token(at: i) else { return true }
+        guard let token = token(at: i) else { return true }
         switch token {
         case .endOfScope("case"), .endOfScope("default"):
             return false
@@ -778,9 +779,9 @@ extension Formatter {
 
     // Determine if line starting with this token should be indented
     func isStartOfStatement(at i: Int, in scope: Token? = nil) -> Bool {
-        guard let token = self.token(at: i) else { return true }
+        guard let token = token(at: i) else { return true }
         switch token {
-        case let .keyword(string) where [ // TODO: handle "in"
+        case let .keyword(string) where [
             "where", "dynamicType", "rethrows", "throws", "async",
         ].contains(string):
             return false
@@ -796,15 +797,8 @@ extension Formatter {
                 return false
             }
             return [.endOfScope("case"), .keyword("case"), .delimiter(",")].contains(lastToken)
-        case .delimiter(","):
-            guard let scope = scope ?? currentScope(at: i) else {
-                return false
-            }
-            // For arrays, dictionaries, cases, or argument lists, we already indent
-            return ["<", "[", "(", "case"].contains(scope.string)
-        case .delimiter, .operator(_, .infix), .operator(_, .postfix):
-            return false
-        case .endOfScope("}"), .endOfScope("]"), .endOfScope(")"), .endOfScope(">"):
+        case .space, .delimiter, .operator(_, .infix), .operator(_, .postfix),
+             .endOfScope("}"), .endOfScope("]"), .endOfScope(")"), .endOfScope(">"):
             return false
         case .startOfScope("{") where isStartOfClosure(at: i):
             guard last(.nonSpaceOrComment, before: i)?.isLinebreak == true,
@@ -824,9 +818,38 @@ extension Formatter {
                 return false
             }
             return true
+        case .identifier:
+            if isTrailingClosureLabel(at: i) {
+                return false
+            }
+            fallthrough
+        case .keyword("try"), .keyword("await"):
+            guard let prevToken = last(.nonSpaceOrComment, before: i) else {
+                return true
+            }
+            guard prevToken.isLinebreak else {
+                return false
+            }
+            if let prevToken = last(.nonSpaceOrCommentOrLinebreak, before: i) {
+                switch prevToken {
+                case .number, .operator(_, .postfix), .endOfScope, .identifier,
+                     .startOfScope("{"), .delimiter(";"),
+                     .keyword("in") where lastSignificantKeyword(at: i) != "for":
+                    return true
+                default:
+                    return false
+                }
+            }
+            return true
         case .keyword:
             return true
         default:
+            guard let prevToken = last(.nonSpaceOrComment, before: i) else {
+                return true
+            }
+            guard prevToken.isLinebreak else {
+                return false
+            }
             if let prevToken = last(.nonSpaceOrCommentOrLinebreak, before: i),
                prevToken == .keyword("return") || prevToken.isOperator(ofType: .infix)
             {
@@ -834,6 +857,18 @@ extension Formatter {
             }
             return true
         }
+    }
+
+    func isTrailingClosureLabel(at i: Int) -> Bool {
+        if case .identifier? = token(at: i),
+           last(.nonSpaceOrCommentOrLinebreak, before: i) == .endOfScope("}"),
+           let nextIndex = index(of: .nonSpaceOrComment, after: i, if: { $0 == .delimiter(":") }),
+           let nextNextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: nextIndex),
+           isStartOfClosure(at: nextNextIndex, in: nil)
+        {
+            return true
+        }
+        return false
     }
 
     func isSubscriptOrFunctionCall(at i: Int) -> Bool {
@@ -893,6 +928,8 @@ extension Formatter {
         let unescaped = token.unescaped()
         if !unescaped.isSwiftKeyword {
             switch unescaped {
+            case "_":
+                return true
             case "super", "self", "nil", "true", "false":
                 if options.swiftVersion < "4" {
                     return true
@@ -1223,7 +1260,7 @@ extension Formatter {
 
     // get type of declaration starting at index of declaration keyword
     func declarationType(at index: Int) -> String? {
-        guard let token = self.token(at: index), token.isDeclarationTypeKeyword,
+        guard let token = token(at: index), token.isDeclarationTypeKeyword,
               case let .keyword(keyword) = token
         else {
             return nil
@@ -1254,7 +1291,7 @@ extension Formatter {
         case "let", "var":
             var index = index + 1
             var names = Set<String>()
-            processDeclaredVariables(at: &index, names: &names, removeSelf: false)
+            processDeclaredVariables(at: &index, names: &names)
             return names
         case "func", "class", "actor", "struct", "enum":
             guard let name = next(.identifier, after: index) else {
@@ -1551,12 +1588,17 @@ extension Formatter {
             })
         else {
             if next(.nonSpaceOrCommentOrLinebreak, after: index) == .operator(".", .infix),
-               let prevIndex = self.index(of: .nonSpaceOrLinebreak, before: index),
-               case let lineStart = startOfLine(at: prevIndex, excludingIndent: true),
-               tokens[lineStart] == .operator(".", .infix),
-               self.index(of: .startOfScope, before: index) ?? -1 < lineStart
+               var prevIndex = self.index(of: .nonSpaceOrLinebreak, before: index)
             {
-                return indentForLine(at: lineStart)
+                if case .endOfScope = tokens[prevIndex] {
+                    prevIndex = self.index(of: .startOfScope, before: index) ?? prevIndex
+                }
+                if case let lineStart = startOfLine(at: prevIndex, excludingIndent: true),
+                   tokens[lineStart] == .operator(".", .infix),
+                   self.index(of: .startOfScope, before: index) ?? -1 < lineStart
+                {
+                    return indentForLine(at: lineStart)
+                }
             }
             return options.indent
         }
@@ -1639,6 +1681,11 @@ extension _FormatRules {
         ["static", "class"],
         ["mutating", "nonmutating"],
         ["prefix", "infix", "postfix"],
+    ]
+
+    // Global swift functions
+    static let globalSwiftFunctions = [
+        "min", "max", "abs", "print", "stride", "zip",
     ]
 }
 

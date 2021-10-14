@@ -2,7 +2,7 @@
 //  Formatter.swift
 //  SwiftFormat
 //
-//  Version 0.48.9
+//  Version 0.48.16
 //
 //  Created by Nick Lockwood on 12/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -72,20 +72,21 @@ public class Formatter: NSObject {
     // Process a comment token (which may contain directives)
     func processCommentBody(_ comment: String, at index: Int) {
         var prefix = "swiftformat:"
-        guard comment.hasPrefix(prefix) else {
+        guard let range = comment.range(of: prefix) else {
             return
         }
+        let comment = String(comment[range.upperBound...])
         guard let directive = ["disable", "enable", "options"].first(where: {
-            comment.hasPrefix("\(prefix)\($0)")
+            comment.hasPrefix($0)
         }) else {
             let parts = comment.components(separatedBy: ":")
-            var directive = parts[1]
+            var directive = parts[0]
             if let range = directive.rangeOfCharacter(from: .whitespacesAndNewlines) {
                 directive = String(directive[..<range.lowerBound])
             }
             return fatalError("Unknown directive swiftformat:\(directive)", at: index)
         }
-        prefix += directive
+        prefix = directive
         wasNextDirective = comment.hasPrefix("\(prefix):next")
         let offset = (wasNextDirective ? "\(prefix):next" : prefix).endIndex
         let argumentsString = String(comment[offset...])
@@ -95,8 +96,9 @@ public class Formatter: NSObject {
             }
             // TODO: handle typos, error for invalid rule names
             // TODO: warn when trying to enable a rule that isn't enabled at file level
-            return argumentsString.range(of: "\\b(\(rule.name)|all)\\b",
-                                         options: .regularExpression) != nil
+            return argumentsString.range(of: "\\b(\(rule.name)|all)\\b", options: [
+                .regularExpression, .caseInsensitive,
+            ]) != nil
         }
         switch directive {
         case "options":

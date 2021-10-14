@@ -12,7 +12,7 @@ Created by Alice on 07/08/2018.
 ![](EditorExtension/Application/Assets.xcassets/AppIcon.appiconset/icon_256x256.png)
 
 [![PayPal](https://img.shields.io/badge/paypal-donate-blue.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=9ZGWNK5FEZFF6&source=url)
-[![Travis](https://api.travis-ci.com/nicklockwood/SwiftFormat.svg?branch=master)](https://travis-ci.com/github/nicklockwood/SwiftFormat)
+[![Build](https://github.com/nicklockwood/SwiftFormat/actions/workflows/build.yml/badge.svg)](https://github.com/nicklockwood/SwiftFormat/actions/workflows/build.yml)
 [![Codecov](https://codecov.io/gh/nicklockwood/SwiftFormat/graphs/badge.svg)](https://codecov.io/gh/nicklockwood/SwiftFormat)
 [![Swift 4.2](https://img.shields.io/badge/swift-4.2-red.svg?style=flat)](https://developer.apple.com/swift)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](https://opensource.org/licenses/MIT)
@@ -254,7 +254,7 @@ let package = Package(
     name: "BuildTools",
     platforms: [.macOS(.v10_11)],
     dependencies: [
-        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.41.2"),
+        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.48.10"),
     ],
     targets: [.target(name: "BuildTools", path: "")]
 )
@@ -269,7 +269,7 @@ let package = Package(
 
     ```bash
     cd BuildTools
-    SDKROOT=macosx
+    SDKROOT=(xcrun --sdk macosx --show-sdk-path)
     #swift package update #Uncomment this line temporarily to update the version used to the latest matching your BuildTools/Package.swift file
     swift run -c release swiftformat "$SRCROOT"
     ```
@@ -772,6 +772,8 @@ Q. I don't want to be surprised by new rules added when I upgrade SwiftFormat. H
 
 Known issues
 ---------------
+
+* The `redundantType` rule can introduce ambiguous code in certain cases when using the default mode of `--redundanttype inferred`. This can be worked around by by using `--redundanttype explicit`, or by manually removing the redundant type reference on the affected line, or by using the `// swiftformat:disable:next redundantType` comment directive to disable the rule at the call site (or just disable the `redundantType` rule completely).
 
 * If a type initializer or factory method returns an implicitly unwrapped optional value then the `redundantType` rule may remove the explicit type in a situation where it's actually required. To work around this you can either use `--redundanttype explicit`, or use the `// swiftformat:disable:next redundantType` comment directive to disable the rule at the call site (or just disable the `redundantType` rule completely).
 

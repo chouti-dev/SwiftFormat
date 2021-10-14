@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-extension RulesTests {
+class IndentTests: RulesTests {
     // MARK: - indent
 
     func testReduceIndentAtStartOfFile() {
@@ -88,6 +88,38 @@ extension RulesTests {
             ))
         """
         testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentChainedCallAfterClosingParen() {
+        let input = """
+        foo(
+            bar: { baz in
+                baz()
+            })
+            .quux {
+                View()
+            }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentChainedCallAfterClosingParen2() {
+        let input = """
+        func makeEpoxyModel() -> EpoxyModeling {
+            LegacyEpoxyModelBuilder<BasicRow>(
+                dataID: DataID.dismissModalBody.rawValue,
+                content: .init(titleText: content.title, subtitleText: content.bodyHtml),
+                style: Style.standard
+                    .with(property: newValue)
+                    .with(anotherProperty: newValue))
+                .with(configurer: { view, content, _, _ in
+                    view.setHTMLText(content.subtitleText?.unstyledText)
+                })
+                .build()
+        }
+        """
+        let options = FormatOptions(closingParenOnSameLine: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 
     // indent modifiers
@@ -207,6 +239,22 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.indent)
     }
 
+    func testIndentTrailingClosureArgumentsAfterFunction() {
+        let input = """
+        var epoxyViewportLogger: EpoxyViewportLogger = {
+            EpoxyViewportLogger(
+                debounceInterval: 0.5,
+                viewportStartImpressionHandler: { [weak self] _, viewportLoggingContext in
+                    self?.viewportLoggingRegistry.logViewportSessionStart(with: viewportLoggingContext)
+                }) { [weak self] _, viewportLoggingContext in
+                    self?.viewportLoggingRegistry.logViewportSessionEnd(with: viewportLoggingContext)
+                }
+        }()
+        """
+        let options = FormatOptions(closingParenOnSameLine: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
     func testIndentAllmanTrailingClosureArguments() {
         let input = """
         let foo = Foo
@@ -263,6 +311,45 @@ extension RulesTests {
             { baz },
             { quux }
         ))
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentLineAfterIndentedWrappedClosure() {
+        let input = """
+        func foo(for bar: String) -> UIViewController {
+            let viewController = Builder().build(
+                bar: bar) { viewController in
+                    viewController.dismiss(animated, true)
+                }
+
+            return viewController
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentLineAfterIndentedInlineClosure() {
+        let input = """
+        func foo(for bar: String) -> UIViewController {
+            let viewController = foo(Builder().build(
+                bar: bar)) { _ in ViewController() }
+
+            return viewController
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentLineAfterNonIndentedClosure() {
+        let input = """
+        func foo(for bar: String) -> UIViewController {
+            let viewController = Builder().build(bar: bar) { viewController in
+                viewController.dismiss(animated, true)
+            }
+
+            return viewController
+        }
         """
         testFormatting(for: input, rule: FormatRules.indent)
     }
@@ -1042,6 +1129,33 @@ extension RulesTests {
                        exclude: ["blankLinesBetweenScopes"])
     }
 
+    func testChainedFunctionIndents() {
+        let input = """
+        Button(action: {
+            print("foo")
+        })
+        .buttonStyle(bar())
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testChainedFunctionIndentWithXcodeIndentation() {
+        let input = """
+        Button(action: {
+            print("foo")
+        })
+        .buttonStyle(bar())
+        """
+        let output = """
+        Button(action: {
+            print("foo")
+        })
+            .buttonStyle(bar())
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
     func testWrappedClosureIndentAfterAssignment() {
         let input = """
         let bar =
@@ -1248,7 +1362,7 @@ extension RulesTests {
                 otherParameter: 2) { [weak self] in
                     guard let error = error else { return }
                     print("and a trailing closure")
-            }
+                }
         }
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
@@ -1262,7 +1376,7 @@ extension RulesTests {
                 return Bar(with: Baz(
                     baz: baz)) { _ in
                         print("hello")
-                }
+                    }
             }
         }
         """
@@ -1411,7 +1525,7 @@ extension RulesTests {
     func testChainedFunctionInGuardIndentation() {
         let input = """
         guard
-            let foo = self.foo
+            let baz = foo
             .bar
             .baz
         else { return }
@@ -1422,14 +1536,14 @@ extension RulesTests {
     func testChainedFunctionInGuardWithXcodeIndentation() {
         let input = """
         guard
-            let foo = self.foo
+            let baz = foo
             .bar
             .baz
         else { return }
         """
         let output = """
         guard
-            let foo = self.foo
+            let baz = foo
                 .bar
                 .baz
         else { return }
@@ -1552,14 +1666,65 @@ extension RulesTests {
 
     func testIndentChainedPropertiesAfterMultilineStringXcode() {
         let input = """
-        let foo = \"""
+        let foo = \"\""
         bar
-        \"""
+        \"\""
             .bar
             .baz
         """
         let options = FormatOptions(xcodeIndentation: true)
         testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testWrappedExpressionIndentAfterTryInClosure() {
+        let input = """
+        getter = { in
+            try foo ??
+                bar
+        }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testNoIndentTryAfterCommaInCollection() {
+        let input = """
+        let expectedTabs: [Pet] = [
+            viewModel.bird,
+            try XCTUnwrap(viewModel.cat),
+            try XCTUnwrap(viewModel.dog),
+            viewModel.snake,
+        ]
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentChainedFunctionAfterTryInParens() {
+        let input = """
+        func fooify(_ array: [FooBar]) -> [Foo] {
+            return (
+                try? array
+                    .filter { !$0.isBar }
+                    .compactMap { $0.foo }
+            ) ?? []
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentLabelledTrailingClosure() {
+        let input = """
+        var buttonLabel: some View {
+            self.label()
+                .if(self.isInline) {
+                    $0.font(.hsBody)
+                }
+                else: {
+                    $0.font(.hsControl)
+                }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
     }
 
     // indent comments
@@ -1666,27 +1831,27 @@ extension RulesTests {
     func testIndentMultilineStringWrappedAfter() {
         let input = """
         foo(baz:
-            \"""
+            \"\""
             baz
-            \""")
+            \"\"")
         """
         testFormatting(for: input, rule: FormatRules.indent)
     }
 
     func testIndentMultilineStringInNestedCalls() {
         let input = """
-        foo(bar(\"""
+        foo(bar(\"\""
         baz
-        \"""))
+        \"\""))
         """
         testFormatting(for: input, rule: FormatRules.indent)
     }
 
     func testIndentMultilineStringInFunctionWithfollowingArgument() {
         let input = """
-        foo(bar(\"""
+        foo(bar(\"\""
         baz
-        \""", quux: 5))
+        \"\"", quux: 5))
         """
         testFormatting(for: input, rule: FormatRules.indent)
     }
@@ -1695,17 +1860,17 @@ extension RulesTests {
         let input = """
         switch foo {
             case bar:
-                return \"""
+                return \"\""
                 baz
-                \"""
+                \"\""
         }
         """
         let output = """
         switch foo {
         case bar:
-            return \"""
+            return \"\""
             baz
-            \"""
+            \"\""
         }
         """
         testFormatting(for: input, output, rule: FormatRules.indent)
@@ -1713,14 +1878,14 @@ extension RulesTests {
 
     func testReduceIndentForMultilineString2() {
         let input = """
-            foo(\"""
+            foo(\"\""
             bar
-            \""")
+            \"\"")
         """
         let output = """
-        foo(\"""
+        foo(\"\""
         bar
-        \""")
+        \"\"")
         """
         testFormatting(for: input, output, rule: FormatRules.indent)
     }
@@ -1728,13 +1893,13 @@ extension RulesTests {
     func testIndentMultilineStringWithMultilineInterpolation() {
         let input = """
         func foo() {
-            \"""
+            \"\""
                 bar
                     \\(bar.map {
                         baz
                     })
                 quux
-            \"""
+            \"\""
         }
         """
         testFormatting(for: input, rule: FormatRules.indent)
@@ -1743,15 +1908,15 @@ extension RulesTests {
     func testIndentMultilineStringWithMultilineNestedInterpolation() {
         let input = """
         func foo() {
-            \"""
+            \"\""
                 bar
                     \\(bar.map {
-                        \"""
+                        \"\""
                             quux
-                        \"""
+                        \"\""
                     })
                 quux
-            \"""
+            \"\""
         }
         """
         testFormatting(for: input, rule: FormatRules.indent)
@@ -1760,16 +1925,16 @@ extension RulesTests {
     func testIndentMultilineStringWithMultilineNestedInterpolation2() {
         let input = """
         func foo() {
-            \"""
+            \"\""
                 bar
                     \\(bar.map {
-                        \"""
+                        \"\""
                             quux
-                        \"""
+                        \"\""
                     }
                     )
                 quux
-            \"""
+            \"\""
         }
         """
         testFormatting(for: input, rule: FormatRules.indent)

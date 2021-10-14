@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-extension RulesTests {
+class WrappingTests: RulesTests {
     // MARK: - elseOnSameLine
 
     func testElseOnSameLine() {
@@ -816,12 +816,12 @@ extension RulesTests {
 
     func testIndentMultilineStringWhenWrappingArguments() {
         let input = """
-        foobar(foo: \"""
+        foobar(foo: \"\""
                    baz
-               \""",
-               bar: \"""
+               \"\"",
+               bar: \"\""
                    baz
-               \""")
+               \"\"")
         """
         let options = FormatOptions(wrapArguments: .afterFirst)
         testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
@@ -829,11 +829,12 @@ extension RulesTests {
 
     func testHandleXcodeTokenApplyingWrap() {
         let input = """
-        test(image: <#T##UIImage#>, name: "Name")
+        test(image: \u{003c}#T##UIImage#>, name: "Name")
         """
+
         let output = """
         test(
-            image: <#T##UIImage#>,
+            image: \u{003c}#T##UIImage#>,
             name: "Name"
         )
         """
@@ -2865,6 +2866,24 @@ extension RulesTests {
             case bar
             case baz
             case quux
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapEnumCases)
+    }
+
+    func testEnumCasesWithCommentsAlreadyWrappedOntoMultipleLines() {
+        let input = """
+        enum Foo {
+            case bar, // bar
+                 baz, // baz
+                 quux // quux
+        }
+        """
+        let output = """
+        enum Foo {
+            case bar // bar
+            case baz // baz
+            case quux // quux
         }
         """
         testFormatting(for: input, output, rule: FormatRules.wrapEnumCases)

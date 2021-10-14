@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-extension RulesTests {
+class RedundancyTests: RulesTests {
     // MARK: - redundantBreak
 
     func testRedundantBreaksRemoved() {
@@ -725,6 +725,40 @@ extension RulesTests {
 
     func testDontRemoveInitWithExplicitSignature() {
         let input = "[String.self].map(Foo.init(bar:))"
+        testFormatting(for: input, rule: FormatRules.redundantInit)
+    }
+
+    func testRemoveInitWithOpenParenOnFollowingLine() {
+        let input = """
+        var foo: Foo {
+            Foo.init
+            (
+                bar: bar,
+                baaz: baaz
+            )
+        }
+        """
+        let output = """
+        var foo: Foo {
+            Foo(
+                bar: bar,
+                baaz: baaz
+            )
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantInit)
+    }
+
+    func testNoRemoveInitWithOpenParenOnFollowingLineAfterComment() {
+        let input = """
+        var foo: Foo {
+            Foo.init // foo
+            (
+                bar: bar,
+                baaz: baaz
+            )
+        }
+        """
         testFormatting(for: input, rule: FormatRules.redundantInit)
     }
 
@@ -1950,6 +1984,11 @@ extension RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantBackticks)
     }
 
+    func testNoRemoveBackticksAroundUnderscore() {
+        let input = "func `_`<T>(_ foo: T) -> T { foo }"
+        testFormatting(for: input, rule: FormatRules.redundantBackticks)
+    }
+
     // MARK: - redundantSelf
 
     // explicitSelf = .remove
@@ -1976,9 +2015,25 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantSelf)
     }
 
+    func testRemoveSelfForLocalVariableOn5_4() {
+        let input = "func foo() { var bar = self.bar }"
+        let output = "func foo() { var bar = bar }"
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf,
+                       options: options)
+    }
+
     func testNoRemoveSelfForCommaDelimitedLocalVariables() {
         let input = "func foo() { let foo = self.foo, bar = self.bar }"
         testFormatting(for: input, rule: FormatRules.redundantSelf)
+    }
+
+    func testRemoveSelfForCommaDelimitedLocalVariablesOn5_4() {
+        let input = "func foo() { let foo = self.foo, bar = self.bar }"
+        let output = "func foo() { let foo = self.foo, bar = bar }"
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf,
+                       options: options)
     }
 
     func testNoRemoveSelfForCommaDelimitedLocalVariables2() {
@@ -1987,9 +2042,18 @@ extension RulesTests {
     }
 
     func testNoRemoveSelfForTupleAssignedVariables() {
-        let input = "func foo() { let (foo, bar) = (self.foo, self.bar) }"
+        let input = "func foo() { let (bar, baz) = (self.bar, self.baz) }"
         testFormatting(for: input, rule: FormatRules.redundantSelf)
     }
+
+    // TODO: make this work
+//    func testRemoveSelfForTupleAssignedVariablesOn5_4() {
+//        let input = "func foo() { let (bar, baz) = (self.bar, self.baz) }"
+//        let output = "func foo() { let (bar, baz) = (bar, baz) }"
+//        let options = FormatOptions(swiftVersion: "5.4")
+//        testFormatting(for: input, output, rule: FormatRules.redundantSelf,
+//                       options: options)
+//    }
 
     func testNoRemoveSelfForTupleAssignedVariablesFollowedByRegularVariable() {
         let input = "func foo() {\n    let (foo, bar) = (self.foo, self.bar), baz = self.baz\n}"
@@ -2347,7 +2411,8 @@ extension RulesTests {
             }
         }
         """
-        testFormatting(for: input, rule: FormatRules.redundantSelf)
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
     }
 
     func testNoRemoveSelfInExcludedFunction() {
@@ -2356,6 +2421,19 @@ extension RulesTests {
             let foo = 1
             func testFoo() {
                 log(self.foo)
+            }
+        }
+        """
+        let options = FormatOptions(selfRequired: ["log"])
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testNoRemoveSelfForExcludedFunction() {
+        let input = """
+        class Foo {
+            let foo = 1
+            func testFoo() {
+                self.log(foo)
             }
         }
         """
@@ -2790,7 +2868,7 @@ extension RulesTests {
         @dynamicMemberLookup
         struct Foo {
             subscript(dynamicMember foo: String) -> String {
-                return foo + "bar"
+                foo + "bar"
             }
 
             func bar() {
@@ -2800,7 +2878,81 @@ extension RulesTests {
             }
         }
         """
-        testFormatting(for: input, rule: FormatRules.redundantSelf)
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testSelfNotRemovedInDeclarationWithDynamicMemberLookup() {
+        let input = """
+        @dynamicMemberLookup
+        struct Foo {
+            subscript(dynamicMember foo: String) -> String {
+                foo + "bar"
+            }
+
+            func bar() {
+                let foo = self.foo
+                print(foo)
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testSelfNotRemovedInExtensionOfTypeWithDynamicMemberLookup() {
+        let input = """
+        @dynamicMemberLookup
+        struct Foo {}
+
+        extension Foo {
+            subscript(dynamicMember foo: String) -> String {
+                foo + "bar"
+            }
+
+            func bar() {
+                if self.foo == "foobar" {
+                    return
+                }
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testSelfRemovedInNestedExtensionOfTypeWithDynamicMemberLookup() {
+        let input = """
+        @dynamicMemberLookup
+        struct Foo {
+            var foo: Int
+            struct Foo {}
+            extension Foo {
+                func bar() {
+                    if self.foo == "foobar" {
+                        return
+                    }
+                }
+            }
+        }
+        """
+        let output = """
+        @dynamicMemberLookup
+        struct Foo {
+            var foo: Int
+            struct Foo {}
+            extension Foo {
+                func bar() {
+                    if foo == "foobar" {
+                        return
+                    }
+                }
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf,
+                       options: options)
     }
 
     func testNoRemoveSelfAfterGuardCaseLetWithExplicitNamespace() {
@@ -2937,6 +3089,180 @@ extension RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.redundantSelf)
+    }
+
+    func testRedundantSelfRuleFailsInGuardWithParenthesizedClosureAfterComma() {
+        let input = """
+        guard let foo = bar, foo.bar(baz: { $0 }) else {
+            return nil
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantSelf)
+    }
+
+    func testMinSelfNotRemoved() {
+        let input = """
+        extension Array where Element: Comparable {
+            func foo() -> Int {
+                self.min()
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantSelf)
+    }
+
+    func testMinSelfNotRemovedOnSwift5_4() {
+        let input = """
+        extension Array where Element == Foo {
+            func smallest() -> Foo? {
+                let bar = self.min(by: { rect1, rect2 -> Bool in
+                    rect1.perimeter < rect2.perimeter
+                })
+                return bar
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testDisableRedundantSelfDirective() {
+        let input = """
+        func smallest() -> Foo? {
+            // swiftformat:disable:next redundantSelf
+            let bar = self.foo { rect1, rect2 -> Bool in
+                rect1.perimeter < rect2.perimeter
+            }
+            return bar
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testDisableRedundantSelfDirective2() {
+        let input = """
+        func smallest() -> Foo? {
+            let bar =
+                // swiftformat:disable:next redundantSelf
+                self.foo { rect1, rect2 -> Bool in
+                    rect1.perimeter < rect2.perimeter
+                }
+            return bar
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testNoRemoveVariableShadowedLaterInScopeInOlderSwiftVersions() {
+        let input = """
+        func foo() -> Bar? {
+            guard let baz = self.bar else {
+                return nil
+            }
+
+            let bar = Foo()
+            return Bar(baz)
+        }
+        """
+        let options = FormatOptions(swiftVersion: "4.2")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testStillRemoveVariableShadowedInSameDecalarationInOlderSwiftVersions() {
+        let input = """
+        func foo() -> Bar? {
+            guard let bar = self.bar else {
+                return nil
+            }
+            return bar
+        }
+        """
+        let output = """
+        func foo() -> Bar? {
+            guard let bar = bar else {
+                return nil
+            }
+            return bar
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.0")
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testShadowedSelfRemovedInGuardLet() {
+        let input = """
+        func foo() {
+            guard let optional = self.optional else {
+                return
+            }
+            print(optional)
+        }
+        """
+        let output = """
+        func foo() {
+            guard let optional = optional else {
+                return
+            }
+            print(optional)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf)
+    }
+
+    func testShadowedStringValueNotRemovedInInit() {
+        let input = """
+        init() {
+            let value = "something"
+            self.value = value
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testShadowedIntValueNotRemovedInInit() {
+        let input = """
+        init() {
+            let value = 5
+            self.value = value
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testShadowedPropertyValueNotRemovedInInit() {
+        let input = """
+        init() {
+            let value = foo
+            self.value = value
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testShadowedFuncCallValueNotRemovedInInit() {
+        let input = """
+        init() {
+            let value = foo()
+            self.value = value
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testShadowedFuncParamNotRemovedInInit() {
+        let input = """
+        init() {
+            let value = foo(self.value)
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
     }
 
     // explicitSelf = .insert
@@ -3673,6 +3999,46 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
     }
 
+    func testRedundantSelfRuleFailsInInitOnlyMode() {
+        let input = """
+        class Foo {
+            func foo() -> Foo? {
+                guard let bar = { nil }() else {
+                    return nil
+                }
+            }
+
+            static func baz() -> String? {}
+        }
+        """
+        let options = FormatOptions(explicitSelf: .initOnly)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testRedundantSelfRuleFailsInInitOnlyMode2() {
+        let input = """
+        struct Mesh {
+            var storage: Storage
+            init(vertices: [Vertex]) {
+                let isConvex = pointsAreConvex(vertices)
+                storage = Storage(vertices: vertices)
+            }
+        }
+        """
+        let output = """
+        struct Mesh {
+            var storage: Storage
+            init(vertices: [Vertex]) {
+                let isConvex = pointsAreConvex(vertices)
+                self.storage = Storage(vertices: vertices)
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .initOnly)
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf,
+                       options: options)
+    }
+
     // enable/disable
 
     func testDisableRemoveSelf() {
@@ -3694,6 +4060,32 @@ extension RulesTests {
                 // swiftformat:disable redundantSelf
                 self.bar = 1
                 // swiftformat:enable redundantSelf
+                bar = 2
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf)
+    }
+
+    func testDisableRemoveSelfCaseInsensitive() {
+        let input = """
+        class Foo {
+            var bar: Int
+            func baz() {
+                // swiftformat:disable redundantself
+                self.bar = 1
+                // swiftformat:enable RedundantSelf
+                self.bar = 2
+            }
+        }
+        """
+        let output = """
+        class Foo {
+            var bar: Int
+            func baz() {
+                // swiftformat:disable redundantself
+                self.bar = 1
+                // swiftformat:enable RedundantSelf
                 bar = 2
             }
         }
@@ -3952,14 +4344,157 @@ extension RulesTests {
         testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 
-    func testUnownedUnsafeNotStripped() {
+    func testShadowedUsedArguments() {
         let input = """
-        func foo() {
-            var num = 0
-            Just(1)
-                .sink { [unowned(unsafe) self] in
-                    num += $0
-                }
+        forEach { foo, bar in
+            guard let foo = foo, let bar = bar else {
+                return
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedPartUsedArguments() {
+        let input = """
+        forEach { foo, bar in
+            guard let foo = baz, bar == baz else {
+                return
+            }
+        }
+        """
+        let output = """
+        forEach { _, bar in
+            guard let foo = baz, bar == baz else {
+                return
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedParameterUsedInSameGuard() {
+        let input = """
+        forEach { foo in
+            guard let foo = bar, baz = foo else {
+                return
+            }
+        }
+        """
+        let output = """
+        forEach { _ in
+            guard let foo = bar, baz = foo else {
+                return
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testParameterUsedInForIn() {
+        let input = """
+        forEach { foos in
+            for foo in foos {
+                print(foo)
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testParameterUsedInWhereClause() {
+        let input = """
+        forEach { foo in
+            if bar where foo {
+                print(bar)
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testParameterUsedInSwitchCase() {
+        let input = """
+        forEach { foo in
+            switch bar {
+            case let baz:
+                foo = baz
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testParameterUsedInStringInterpolation() {
+        let input = """
+        forEach { foo in
+            print("\\(foo)")
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedClosureArgument() {
+        let input = """
+        _ = Parser<String, String> { input in
+            let parser = Parser<String, String>.with(input)
+            return parser
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedClosureArgument2() {
+        let input = """
+        _ = foo { input in
+            let input = ["foo": "Foo", "bar": "Bar"][input]
+            return input
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    // init
+
+    func testParameterUsedInInit() {
+        let input = """
+        init(m: Rotation) {
+            let x = sqrt(max(0, m)) / 2
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedParametersShadowedInTupleAssignment() {
+        let input = """
+        init(x: Int, y: Int, v: Vector) {
+            let (x, y) = v
+        }
+        """
+        let output = """
+        init(x _: Int, y _: Int, v: Vector) {
+            let (x, y) = v
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testUsedParametersShadowedInAssignmentFromFunctionCall() {
+        let input = """
+        init(r: Double) {
+            let r = max(abs(r), epsilon)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedUsedArgumentInSwitch() {
+        let input = """
+        init(_ action: Action, hub: Hub) {
+            switch action {
+            case let .get(hub, key):
+                self = .get(key, hub)
+            }
         }
         """
         testFormatting(for: input, rule: FormatRules.unusedArguments)
@@ -4063,6 +4598,83 @@ extension RulesTests {
         let input = "func foo(bar _: Bar, baz: Baz) {}"
         let output = "func foo(bar _: Bar, baz _: Baz) {}"
         testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnownedUnsafeNotStripped() {
+        let input = """
+        func foo() {
+            var num = 0
+            Just(1)
+                .sink { [unowned(unsafe) self] in
+                    num += $0
+                }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedUnusedArguments() {
+        let input = """
+        func foo(bar: String, baz: Int) {
+            let bar = "bar", baz = 5
+            print(bar, baz)
+        }
+        """
+        let output = """
+        func foo(bar _: String, baz _: Int) {
+            let bar = "bar", baz = 5
+            print(bar, baz)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedUsedArguments2() {
+        let input = """
+        func foo(things: [String], form: Form) {
+            let form = FormRequest(
+                things: things,
+                form: form
+            )
+            print(form)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedUsedArguments3() {
+        let input = """
+        func zoomTo(locations: [Foo], count: Int) {
+            let num = count
+            guard num > 0, locations.count >= count else {
+                return
+            }
+            print(locations)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testTryArgumentNotMarkedUnused() {
+        let input = """
+        func foo(bar: String) throws -> String? {
+            let bar =
+                try parse(bar)
+            return bar
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testTryAwaitArgumentNotMarkedUnused() {
+        let input = """
+        func foo(bar: String) async throws -> String? {
+            let bar = try
+                await parse(bar)
+            return bar
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 
     // functions (closure-only)

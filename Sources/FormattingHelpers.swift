@@ -12,13 +12,26 @@ import Foundation
 
 extension Formatter {
     // remove self if possible
-    func removeSelf(at i: Int, localNames: Set<String>) -> Bool {
+    func removeSelf(at i: Int, exclude: Set<String>, include: Set<String>? = nil) -> Bool {
         assert(tokens[i] == .identifier("self"))
         guard let dotIndex = index(of: .nonSpaceOrLinebreak, after: i, if: {
             $0 == .operator(".", .infix)
-        }), let nextIndex = index(of: .nonSpaceOrLinebreak, after: dotIndex, if: {
-            $0.isIdentifier && !localNames.contains($0.unescaped())
-        }), !backticksRequired(at: nextIndex, ignoreLeadingDot: true) else {
+        }), !exclude.contains("self"),
+        let nextIndex = index(of: .nonSpaceOrLinebreak, after: dotIndex),
+        let token = token(at: nextIndex), token.isIdentifier,
+        case let name = token.unescaped(), (include.map { $0.contains(name) } ?? true),
+        !exclude.contains(name), !options.selfRequired.contains(name),
+        !_FormatRules.globalSwiftFunctions.contains(name),
+        !backticksRequired(at: nextIndex, ignoreLeadingDot: true)
+        else {
+            return false
+        }
+        if let scopeStart = index(of: .startOfScope, before: i),
+           tokens[scopeStart] == .startOfScope("("),
+           case let .identifier(fn)? = last(.nonSpaceOrCommentOrLinebreak, before: scopeStart),
+           options.selfRequired.contains(fn) ||
+           fn == "expect" // Special case to support autoclosure arguments in the Nimble framework
+        {
             return false
         }
         removeTokens(in: i ..< nextIndex)
@@ -26,36 +39,52 @@ extension Formatter {
     }
 
     // gather declared variable names, starting at index after let/var keyword
-    func processDeclaredVariables(at index: inout Int, names: inout Set<String>, removeSelf: Bool) {
+    func processDeclaredVariables(at index: inout Int, names: inout Set<String>,
+                                  removeSelf: Bool, onlyLocal: Bool)
+    {
         let isConditional = isConditionalStatement(at: index)
         var declarationIndex: Int? = -1
         var scopeIndexStack = [Int]()
-        while let token = self.token(at: index) {
-            switch token {
-            case .identifier where
-                last(.nonSpaceOrCommentOrLinebreak, before: index)?.isOperator(".") == false &&
-                next(.nonSpaceOrCommentOrLinebreak, after: index)?.isOperator(".") == false:
+        var locals = Set<String>()
+        while let token = token(at: index) {
+            outer: switch token {
+            case .identifier where last(.nonSpace, before: index)?.isOperator == false:
+                switch next(.nonSpaceOrCommentOrLinebreak, after: index) {
+                case .delimiter(":")? where !scopeIndexStack.isEmpty, .operator(".", _)?:
+                    break outer
+                default:
+                    break
+                }
                 let name = token.unescaped()
                 if name != "_", declarationIndex != nil || !isConditional {
-                    names.insert(name)
+                    locals.insert(name)
                 }
-                inner: while let nextIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index) {
-                    switch tokens[nextIndex] {
+                inner: while let nextIndex = self.index(of: .nonSpace, after: index) {
+                    let token = tokens[nextIndex]
+                    if isStartOfStatement(at: nextIndex) {
+                        names.formUnion(locals)
+                    }
+                    let removeSelf = removeSelf && isEnabled &&
+                        (options.swiftVersion >= "5.4" || isConditionalStatement(at: nextIndex))
+                    let include = onlyLocal ? locals : nil
+                    switch token {
                     case .keyword("is"), .keyword("as"), .keyword("try"), .keyword("await"):
                         break
+                    case .identifier("self") where removeSelf:
+                        _ = self.removeSelf(at: nextIndex, exclude: names, include: include)
                     case .startOfScope("<"), .startOfScope("["), .startOfScope("("),
                          .startOfScope where token.isStringDelimiter:
                         guard let endIndex = endOfScope(at: nextIndex) else {
                             return fatalError("Expected end of scope", at: nextIndex)
                         }
-                        if removeSelf, isEnabled {
+                        if removeSelf {
                             var i = endIndex - 1
                             while i > nextIndex {
                                 switch tokens[i] {
                                 case .endOfScope("}"):
                                     i = self.index(of: .startOfScope("{"), before: i) ?? i
                                 case .identifier("self"):
-                                    _ = self.removeSelf(at: i, localNames: names)
+                                    _ = self.removeSelf(at: i, exclude: names, include: include)
                                 default:
                                     break
                                 }
@@ -65,12 +94,23 @@ extension Formatter {
                         } else {
                             index = endIndex
                         }
+                        fallthrough
+                    case .number, .identifier:
+                        index = max(index, nextIndex)
+                        if nextToken(after: index, where: {
+                            $0 == .delimiter(",") || $0.isOperator(ofType: .infix)
+                        }) == nil {
+                            names.formUnion(locals)
+                            return
+                        }
                         continue
                     case .keyword("let"), .keyword("var"):
+                        names.formUnion(locals)
                         declarationIndex = nextIndex
                         index = nextIndex
                         break inner
                     case .keyword, .startOfScope("{"), .endOfScope("}"), .startOfScope(":"):
+                        names.formUnion(locals)
                         return
                     case .endOfScope(")"):
                         let scopeIndex = scopeIndexStack.popLast() ?? -1
@@ -78,13 +118,23 @@ extension Formatter {
                             declarationIndex = nil
                         }
                     case .delimiter(","):
-                        if let d = declarationIndex, d > scopeIndexStack.last ?? -1 {
+                        if let d = declarationIndex, d >= scopeIndexStack.last ?? -1 {
                             declarationIndex = nil
                         }
                         index = nextIndex
+                        names.formUnion(locals)
                         break inner
-                    case .identifier("self") where removeSelf && isEnabled:
-                        _ = self.removeSelf(at: nextIndex, localNames: names)
+                    case .startOfScope("//"), .startOfScope("/*"):
+                        if case let .commentBody(comment)? = next(.nonSpace, after: nextIndex) {
+                            processCommentBody(comment, at: nextIndex)
+                            if token == .startOfScope("//") {
+                                processLinebreak()
+                            }
+                        }
+                        index = endOfScope(at: nextIndex) ?? (tokens.count - 1)
+                        continue inner
+                    case .linebreak:
+                        processLinebreak()
                     default:
                         break
                     }
@@ -93,13 +143,37 @@ extension Formatter {
             case .keyword("let"), .keyword("var"):
                 declarationIndex = index
             case .startOfScope("("):
+                guard declarationIndex == nil else {
+                    scopeIndexStack.append(index)
+                    break
+                }
+                guard let endIndex = self.index(of: .endOfScope(")"), after: index) else {
+                    return fatalError("Expected )", at: index)
+                }
+                guard tokens[index ..< endIndex].contains(where: {
+                    [.keyword("let"), .keyword("var")].contains($0)
+                }) else {
+                    index = endIndex
+                    break
+                }
                 scopeIndexStack.append(index)
             case .startOfScope("{"):
                 guard isStartOfClosure(at: index), let nextIndex = endOfScope(at: index) else {
                     index -= 1
+                    names.formUnion(locals)
                     return
                 }
                 index = nextIndex
+            case .startOfScope("//"), .startOfScope("/*"):
+                if case let .commentBody(comment)? = next(.nonSpace, after: index) {
+                    processCommentBody(comment, at: index)
+                    if token == .startOfScope("//") {
+                        processLinebreak()
+                    }
+                }
+                index = endOfScope(at: index) ?? (tokens.count - 1)
+            case .linebreak:
+                processLinebreak()
             default:
                 break
             }
@@ -262,7 +336,7 @@ extension Formatter {
             )
         }
         func wrapArgumentsAfterFirst(startOfScope i: Int, endOfScope: Int, allowGrouping: Bool) {
-            guard var firstArgumentIndex = self.index(of: .nonSpaceOrLinebreak, in: i + 1 ..< endOfScope) else {
+            guard var firstArgumentIndex = index(of: .nonSpaceOrLinebreak, in: i + 1 ..< endOfScope) else {
                 return
             }
 
@@ -535,7 +609,7 @@ extension Formatter {
 
     func removeParen(at index: Int) {
         func tokenOutsideParenRequiresSpacing(at index: Int) -> Bool {
-            guard let token = self.token(at: index) else { return false }
+            guard let token = token(at: index) else { return false }
             switch token {
             case .identifier, .keyword, .number, .startOfScope("#if"):
                 return true
@@ -545,7 +619,7 @@ extension Formatter {
         }
 
         func tokenInsideParenRequiresSpacing(at index: Int) -> Bool {
-            guard let token = self.token(at: index) else { return false }
+            guard let token = token(at: index) else { return false }
             switch token {
             case .operator, .startOfScope("{"), .endOfScope("}"):
                 return true
@@ -1058,7 +1132,7 @@ extension Formatter {
                     let existingComment = sourceCode(for: Array(parser.tokens[potentialSeparatorRange]))
                     let minimumEditDistance = Int(0.2 * Float(existingComment.count))
 
-                    guard editDistance(existingComment.lowercased(), potentialSeparatorComment.lowercased())
+                    guard existingComment.lowercased().editDistance(from: potentialSeparatorComment.lowercased())
                         <= minimumEditDistance
                     else { continue }
 

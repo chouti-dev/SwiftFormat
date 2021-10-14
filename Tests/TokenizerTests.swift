@@ -353,11 +353,11 @@ class TokenizerTests: XCTestCase {
 
     func testMultilineStringWithMultilineInterpolation() {
         let input = """
-        \"""
+        \"\""
         \\(
             6
         )
-        \"""
+        \"\""
         """
         let output: [Token] = [
             .startOfScope("\"\"\""),
@@ -377,15 +377,15 @@ class TokenizerTests: XCTestCase {
 
     func testIndentMultilineStringWithMultilineNestedInterpolation() {
         let input = """
-        \"""
+        \"\""
             foo
                 \\(bar {
-                    \"""
+                    \"\""
                         baz
-                    \"""
+                    \"\""
                 })
             quux
-        \"""
+        \"\""
         """
         let output: [Token] = [
             .startOfScope("\"\"\""),
@@ -420,16 +420,16 @@ class TokenizerTests: XCTestCase {
 
     func testIndentMultilineStringWithMultilineNestedInterpolation2() {
         let input = """
-        \"""
+        \"\""
             foo
                 \\(bar {
-                    \"""
+                    \"\""
                         baz
-                    \"""
+                    \"\""
                     }
                 )
             quux
-        \"""
+        \"\""
         """
         let output: [Token] = [
             .startOfScope("\"\"\""),
@@ -1349,6 +1349,34 @@ class TokenizerTests: XCTestCase {
             .space(" "),
             .identifier("bar"),
             .endOfScope("]"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testKeywordAsClosureLabel() {
+        let input = "foo.if(bar) { bar } else: { baz }"
+        let output: [Token] = [
+            .identifier("foo"),
+            .operator(".", .infix),
+            .identifier("if"),
+            .startOfScope("("),
+            .identifier("bar"),
+            .endOfScope(")"),
+            .space(" "),
+            .startOfScope("{"),
+            .space(" "),
+            .identifier("bar"),
+            .space(" "),
+            .endOfScope("}"),
+            .space(" "),
+            .identifier("else"),
+            .delimiter(":"),
+            .space(" "),
+            .startOfScope("{"),
+            .space(" "),
+            .identifier("baz"),
+            .space(" "),
+            .endOfScope("}"),
         ]
         XCTAssertEqual(tokenize(input), output)
     }

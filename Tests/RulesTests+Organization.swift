@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-extension RulesTests {
+class OrganizationTests: RulesTests {
     // MARK: organizeDeclarations
 
     func testOrganizeClassDeclarationsIntoCategories() {
@@ -2708,7 +2708,8 @@ extension RulesTests {
     func testVarModifiersCorrected() {
         let input = "unowned private static var foo"
         let output = "private unowned static var foo"
-        testFormatting(for: input, output, rule: FormatRules.modifierOrder)
+        let options = FormatOptions(fragment: true)
+        testFormatting(for: input, output, rule: FormatRules.modifierOrder, options: options)
     }
 
     func testPrivateSetModifierNotMangled() {

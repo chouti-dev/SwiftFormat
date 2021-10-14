@@ -218,7 +218,7 @@ private struct Inference {
 
     let trailingCommas = OptionInferrer { formatter, options in
         var trailing = 0, noTrailing = 0
-        formatter.forEach(.endOfScope("]")) { i, token in
+        formatter.forEach(.endOfScope("]")) { i, _ in
             guard let linebreakIndex = formatter.index(of: .nonSpaceOrComment, before: i),
                   case .linebreak = formatter.tokens[linebreakIndex],
                   let prevTokenIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: linebreakIndex + 1),
@@ -639,9 +639,7 @@ private struct Inference {
                          isTypeRoot: Bool,
                          isInit: Bool)
         {
-            let selfRequired = formatter.options.selfRequired + [
-                "expect", // Special case to support autoclosure arguments in the Nimble framework
-            ]
+            let selfRequired = formatter.options.selfRequired
             let currentScope = formatter.currentScope(at: index)
             let isWhereClause = index > 0 && formatter.tokens[index - 1] == .keyword("where")
             assert(isWhereClause || currentScope.map { token -> Bool in
@@ -781,6 +779,7 @@ private struct Inference {
                     else {
                         return // error
                     }
+                    // TODO: Add usingDynamicLookup logic from the main rule
                     index = scopeStart + 1
                     typeStack.append(name)
                     processBody(at: &index, localNames: ["init"], members: [], typeStack: &typeStack,
@@ -860,7 +859,7 @@ private struct Inference {
                     index = formatter.endOfScope(at: index) ?? (formatter.tokens.count - 1)
                 case .startOfScope("("):
                     if case let .identifier(fn)? = formatter.last(.nonSpaceOrCommentOrLinebreak, before: index),
-                       selfRequired.contains(fn)
+                       selfRequired.contains(fn) || fn == "expect"
                     {
                         index = formatter.index(of: .endOfScope(")"), after: index) ?? index
                         break
@@ -982,14 +981,12 @@ private struct Inference {
                     guard !isTypeRoot, !localNames.contains("self"),
                           let dotIndex = formatter.index(of: .nonSpaceOrLinebreak, after: index, if: {
                               $0 == .operator(".", .infix)
-                          }), let nextIndex = formatter.index(of: .nonSpaceOrLinebreak, after: dotIndex, if: {
-                              $0.isIdentifier && !localNames.contains($0.unescaped())
-                          })
+                          }),
+                          let nextIndex = formatter.index(of: .nonSpaceOrLinebreak, after: dotIndex),
+                          let name = formatter.token(at: nextIndex)?.unescaped(),
+                          !localNames.contains(name), !selfRequired.contains(name),
+                          !_FormatRules.globalSwiftFunctions.contains(name)
                     else {
-                        break
-                    }
-                    let name = formatter.tokens[nextIndex].unescaped()
-                    guard !localNames.contains(name) else {
                         break
                     }
                     if isInit {
