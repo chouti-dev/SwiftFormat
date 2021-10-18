@@ -1336,12 +1336,15 @@ public struct _FormatRules {
                 let stringIndent = stringBodyIndentStack.last!
                 i += formatter.insertSpaceIfEnabled(stringIndent + indent, at: start)
             case .keyword("in") where scopeStack.last == .startOfScope("{"):
-                guard let lastIndex = formatter.index(of: .nonSpaceOrComment, before: i, if: {
-                    $0 == .endOfScope(")")
-                }), let startIndex = formatter.index(of: .startOfScope("("), before: lastIndex),
-                formatter.tokens[startIndex ..< lastIndex].contains(where: {
-                    if case .linebreak = $0 { return true } else { return false }
-                }) else {
+                guard let startIndex = formatter.index(of: .startOfScope, before: i),
+                      !formatter.tokens[startIndex ..< i].contains(.keyword("for")),
+                      let scopeEnd = formatter.lastIndex(in: startIndex ..< i, where: {
+                          [.endOfScope(")"), .endOfScope("]")].contains($0)
+                      }),
+                      formatter.tokens[startIndex ..< scopeEnd].contains(where: {
+                          if case .linebreak = $0 { return true } else { return false }
+                      })
+                else {
                     break
                 }
                 indentStack[indentStack.count - 1] += formatter.options.indent
@@ -3375,6 +3378,10 @@ public struct _FormatRules {
                 switch token {
                 case .keyword("let"), .keyword("var"), .keyword("func"), .keyword("for"):
                     isDeclaration = true
+                    var i = i
+                    while let scopeStart = formatter.index(of: .startOfScope("("), before: i) {
+                        i = scopeStart
+                    }
                     isConditional = formatter.isConditionalStatement(at: i)
                 case .identifier:
                     let name = token.unescaped()
@@ -3403,10 +3410,6 @@ public struct _FormatRules {
                     }
                     removeUsed(from: &argNames, with: &associatedData, in: i + 1 ..< endIndex)
                     i = endIndex
-                case .startOfScope("("):
-                    if !isDeclaration {
-                        wasDeclaration = false
-                    }
                 case .operator("=", .infix), .delimiter(":"), .startOfScope(":"),
                      .keyword("in"), .keyword("where"):
                     wasDeclaration = isDeclaration

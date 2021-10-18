@@ -4677,6 +4677,116 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 
+    func testConditionAfterIfCaseHoistedLetNotMarkedUnused() {
+        let input = """
+        func isLoadingFirst(for tabID: String) -> Bool {
+            if case let .loading(.first(loadingTabID, _)) = requestState.status, loadingTabID == tabID {
+                return true
+            } else {
+                return false
+            }
+
+            print(tabID)
+        }
+        """
+        let options = FormatOptions(hoistPatternLet: true)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, options: options)
+    }
+
+    func testConditionAfterIfCaseInlineLetNotMarkedUnused2() {
+        let input = """
+        func isLoadingFirst(for tabID: String) -> Bool {
+            if case .loading(.first(let loadingTabID, _)) = requestState.status, loadingTabID == tabID {
+                return true
+            } else {
+                return false
+            }
+
+            print(tabID)
+        }
+        """
+        let options = FormatOptions(hoistPatternLet: false)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, options: options)
+    }
+
+    func testConditionAfterIfCaseInlineLetNotMarkedUnused3() {
+        let input = """
+        private func isFocusedView(formDataID: FormDataID) -> Bool {
+            guard
+                case .selected(let selectedFormDataID) = currentState.selectedFormItemAction,
+                selectedFormDataID == formDataID
+            else {
+                return false
+            }
+
+            return true
+        }
+        """
+        let options = FormatOptions(hoistPatternLet: false)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, options: options)
+    }
+
+    func testConditionAfterIfCaseInlineLetNotMarkedUnused4() {
+        let input = """
+        private func totalRowContent(priceItemsCount: Int, priceBreakdownStyle: PriceBreakdownStyle) {
+            if
+                case .all(let shouldCollapseByDefault, _) = priceBreakdownStyle,
+                priceItemsCount > 0
+            {
+                // ..
+            }
+        }
+        """
+        let options = FormatOptions(hoistPatternLet: false)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, options: options)
+    }
+
+    func testConditionAfterIfCaseInlineLetNotMarkedUnused5() {
+        let input = """
+        private mutating func clearPendingRemovals(itemIDs: Set<String>) {
+            for change in changes {
+                if case .removal(itemID: let itemID) = change, !itemIDs.contains(itemID) {
+                    // ..
+                }
+            }
+        }
+        """
+        let options = FormatOptions(hoistPatternLet: false)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, options: options)
+    }
+
+    func testSecondConditionAfterTupleMarkedUnused() {
+        let input = """
+        func foobar(bar: Int) {
+            let (foo, baz) = (1, 2), bar = 3
+            print(foo, bar, baz)
+        }
+        """
+        let output = """
+        func foobar(bar _: Int) {
+            let (foo, baz) = (1, 2), bar = 3
+            print(foo, bar, baz)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedParamsInTupleAssignment() {
+        let input = """
+        func foobar(_ foo: Int, _ bar: Int, _ baz: Int, _ quux: Int) {
+            let ((foo, bar), baz) = ((foo, quux), bar)
+            print(foo, bar, baz, quux)
+        }
+        """
+        let output = """
+        func foobar(_ foo: Int, _ bar: Int, _: Int, _ quux: Int) {
+            let ((foo, bar), baz) = ((foo, quux), bar)
+            print(foo, bar, baz, quux)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
     // functions (closure-only)
 
     func testNoMarkFunctionArgument() {
