@@ -15,42 +15,49 @@ class WrappingTests: RulesTests {
     func testElseOnSameLine() {
         let input = "if true {\n    1\n}\nelse { 2 }"
         let output = "if true {\n    1\n} else { 2 }"
-        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine)
+        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testElseOnSameLineOnlyAppliedToDanglingBrace() {
         let input = "if true { 1 }\nelse { 2 }"
-        testFormatting(for: input, rule: FormatRules.elseOnSameLine)
+        testFormatting(for: input, rule: FormatRules.elseOnSameLine,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testGuardNotAffectedByElseOnSameLine() {
         let input = "guard true\nelse { return }"
-        testFormatting(for: input, rule: FormatRules.elseOnSameLine)
+        testFormatting(for: input, rule: FormatRules.elseOnSameLine,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testElseOnSameLineDoesntEatPreviousStatement() {
         let input = "if true {}\nguard true else { return }"
-        testFormatting(for: input, rule: FormatRules.elseOnSameLine)
+        testFormatting(for: input, rule: FormatRules.elseOnSameLine,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testElseNotOnSameLineForAllman() {
         let input = "if true\n{\n    1\n} else { 2 }"
         let output = "if true\n{\n    1\n}\nelse { 2 }"
         let options = FormatOptions(allmanBraces: true)
-        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine, options: options)
+        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine,
+                       options: options, exclude: ["wrapConditionalBodies"])
     }
 
     func testElseOnNextLineOption() {
         let input = "if true {\n    1\n} else { 2 }"
         let output = "if true {\n    1\n}\nelse { 2 }"
         let options = FormatOptions(elseOnNextLine: true)
-        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine, options: options)
+        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine,
+                       options: options, exclude: ["wrapConditionalBodies"])
     }
 
     func testGuardNotAffectedByElseOnSameLineForAllman() {
         let input = "guard true else { return }"
         let options = FormatOptions(allmanBraces: true)
-        testFormatting(for: input, rule: FormatRules.elseOnSameLine, options: options)
+        testFormatting(for: input, rule: FormatRules.elseOnSameLine,
+                       options: options, exclude: ["wrapConditionalBodies"])
     }
 
     func testRepeatWhileNotOnSameLineForAllman() {
@@ -113,18 +120,21 @@ class WrappingTests: RulesTests {
 
     func testSingleLineGuardElseNotWrappedByDefault() {
         let input = "guard foo = bar else {}"
-        testFormatting(for: input, rule: FormatRules.elseOnSameLine)
+        testFormatting(for: input, rule: FormatRules.elseOnSameLine,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testSingleLineGuardElseNotUnwrappedByDefault() {
         let input = "guard foo = bar\nelse {}"
-        testFormatting(for: input, rule: FormatRules.elseOnSameLine)
+        testFormatting(for: input, rule: FormatRules.elseOnSameLine,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testSingleLineGuardElseWrappedByDefaultIfBracesOnNextLine() {
         let input = "guard foo = bar else\n{}"
         let output = "guard foo = bar\nelse {}"
-        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine)
+        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testMultilineGuardElseNotWrappedByDefault() {
@@ -183,20 +193,23 @@ class WrappingTests: RulesTests {
     func testSingleLineGuardElseNotWrapped() {
         let input = "guard foo = bar else {}"
         let options = FormatOptions(guardElsePosition: .nextLine)
-        testFormatting(for: input, rule: FormatRules.elseOnSameLine, options: options)
+        testFormatting(for: input, rule: FormatRules.elseOnSameLine,
+                       options: options, exclude: ["wrapConditionalBodies"])
     }
 
     func testSingleLineGuardElseNotUnwrapped() {
         let input = "guard foo = bar\nelse {}"
         let options = FormatOptions(guardElsePosition: .nextLine)
-        testFormatting(for: input, rule: FormatRules.elseOnSameLine, options: options)
+        testFormatting(for: input, rule: FormatRules.elseOnSameLine,
+                       options: options, exclude: ["wrapConditionalBodies"])
     }
 
     func testSingleLineGuardElseWrappedIfBracesOnNextLine() {
         let input = "guard foo = bar else\n{}"
         let output = "guard foo = bar\nelse {}"
         let options = FormatOptions(guardElsePosition: .nextLine)
-        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine, options: options)
+        testFormatting(for: input, output, rule: FormatRules.elseOnSameLine,
+                       options: options, exclude: ["wrapConditionalBodies"])
     }
 
     func testMultilineGuardElseWrapped() {
@@ -265,6 +278,255 @@ class WrappingTests: RulesTests {
         let options = FormatOptions(guardElsePosition: .sameLine)
         testFormatting(for: input, output, rule: FormatRules.elseOnSameLine,
                        options: options)
+    }
+
+    // MARK: - wrapConditionalBodies
+
+    func testGuardReturnWraps() {
+        let input = "guard let foo = bar else { return }"
+        let output = """
+        guard let foo = bar else {
+            return
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testEmptyGuardReturnWithSpaceDoesNothing() {
+        let input = "guard let foo = bar else { }"
+        testFormatting(for: input, rule: FormatRules.wrapConditionalBodies,
+                       exclude: ["emptyBraces"])
+    }
+
+    func testEmptyGuardReturnWithoutSpaceDoesNothing() {
+        let input = "guard let foo = bar else {}"
+        testFormatting(for: input, rule: FormatRules.wrapConditionalBodies,
+                       exclude: ["emptyBraces"])
+    }
+
+    func testGuardReturnWithValueWraps() {
+        let input = "guard let foo = bar else { return baz }"
+        let output = """
+        guard let foo = bar else {
+            return baz
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testGuardBodyWithClosingBraceAlreadyOnNewlineWraps() {
+        let input = """
+        guard foo else { return
+        }
+        """
+        let output = """
+        guard foo else {
+            return
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testGuardContinueWithNoSpacesToCleanupWraps() {
+        let input = "guard let foo = bar else {continue}"
+        let output = """
+        guard let foo = bar else {
+            continue
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testGuardReturnWrapsSemicolonDelimitedStatements() {
+        let input = "guard let foo = bar else { var baz = 0; let boo = 1; fatalError() }"
+        let output = """
+        guard let foo = bar else {
+            var baz = 0; let boo = 1; fatalError()
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testGuardReturnWrapsSemicolonDelimitedStatementsWithNoSpaces() {
+        let input = "guard let foo = bar else {var baz=0;let boo=1;fatalError()}"
+        let output = """
+        guard let foo = bar else {
+            var baz=0;let boo=1;fatalError()
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies,
+                       exclude: ["spaceAroundOperators"])
+    }
+
+    func testGuardReturnOnNewlineUnchanged() {
+        let input = """
+        guard let foo = bar else {
+            return
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testGuardCommentSameLineUnchanged() {
+        let input = """
+        guard let foo = bar else { // Test comment
+            return
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testGuardMultilineCommentSameLineUnchanged() {
+        let input = "guard let foo = bar else { /* Test comment */ return }"
+        let output = """
+        guard let foo = bar else { /* Test comment */
+            return
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testGuardTwoMultilineCommentsSameLine() {
+        let input = "guard let foo = bar else { /* Test comment 1 */ return /* Test comment 2 */ }"
+        let output = """
+        guard let foo = bar else { /* Test comment 1 */
+            return /* Test comment 2 */
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testNestedGuardElseIfStatementsPutOnNewline() {
+        let input = "guard let foo = bar else { if qux { return quux } else { return quuz } }"
+        let output = """
+        guard let foo = bar else {
+            if qux {
+                return quux
+            } else {
+                return quuz
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testNestedGuardElseGuardStatementPutOnNewline() {
+        let input = "guard let foo = bar else { guard qux else { return quux } }"
+        let output = """
+        guard let foo = bar else {
+            guard qux else {
+                return quux
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testGuardWithClosureOnlyWrapsElseBody() {
+        let input = "guard foo { $0.bar } else { return true }"
+        let output = """
+        guard foo { $0.bar } else {
+            return true
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testIfElseReturnsWrap() {
+        let input = "if foo { return bar } else if baz { return qux } else { return quux }"
+        let output = """
+        if foo {
+            return bar
+        } else if baz {
+            return qux
+        } else {
+            return quux
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testIfElseBodiesWrap() {
+        let input = "if foo { bar } else if baz { qux } else { quux }"
+        let output = """
+        if foo {
+            bar
+        } else if baz {
+            qux
+        } else {
+            quux
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testIfElsesWithClosuresDontWrapClosures() {
+        let input = "if foo { $0.bar } { baz } else if qux { $0.quux } { quuz } else { corge }"
+        let output = """
+        if foo { $0.bar } {
+            baz
+        } else if qux { $0.quux } {
+            quuz
+        } else {
+            corge
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies)
+    }
+
+    func testEmptyIfElseBodiesWithSpaceDoNothing() {
+        let input = "if foo { } else if baz { } else { }"
+        testFormatting(for: input, rule: FormatRules.wrapConditionalBodies,
+                       exclude: ["emptyBraces"])
+    }
+
+    func testEmptyIfElseBodiesWithoutSpaceDoNothing() {
+        let input = "if foo {} else if baz {} else {}"
+        testFormatting(for: input, rule: FormatRules.wrapConditionalBodies,
+                       exclude: ["emptyBraces"])
+    }
+
+    func testGuardElseBraceStartingOnDifferentLine() {
+        let input = """
+        guard foo else
+            { return bar }
+        """
+        let output = """
+        guard foo else
+            {
+            return bar
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies,
+                       exclude: ["braces", "indent", "elseOnSameLine"])
+    }
+
+    func testIfElseBracesStartingOnDifferentLines() {
+        let input = """
+        if foo
+            { return bar }
+        else if baz
+            { return qux }
+        else
+            { return quux }
+        """
+        let output = """
+        if foo
+            {
+            return bar
+        }
+        else if baz
+            {
+            return qux
+        }
+        else
+            {
+            return quux
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapConditionalBodies,
+                       exclude: ["braces", "indent", "elseOnSameLine"])
     }
 
     // MARK: - wrap
@@ -730,6 +992,169 @@ class WrappingTests: RulesTests {
     func testWrapImageLiteral() {
         let input = "if let image = #imageLiteral(resourceName: \"abc.png\") {}"
         let options = FormatOptions(maxWidth: 40, assetLiteralWidth: .visualWidth)
+        testFormatting(for: input, rule: FormatRules.wrap, options: options)
+    }
+
+    func testWrapSimpleTernaryOperator() {
+        let input = """
+        let foo = fooCondition ? longValueThatContainsFoo : longValueThatContainsBar
+        """
+
+        let output = """
+        let foo = fooCondition
+            ? longValueThatContainsFoo
+            : longValueThatContainsBar
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 60)
+        testFormatting(for: input, output, rule: FormatRules.wrap, options: options)
+    }
+
+    func testRewrapsSimpleTernaryOperator() {
+        let input = """
+        let foo = fooCondition ? longValueThatContainsFoo :
+            longValueThatContainsBar
+        """
+
+        let output = """
+        let foo = fooCondition
+            ? longValueThatContainsFoo
+            : longValueThatContainsBar
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 60)
+        testFormatting(for: input, output, rule: FormatRules.wrap, options: options)
+    }
+
+    func testWrapComplexTernaryOperator() {
+        let input = """
+        let foo = fooCondition ? Foo(property: value) : barContainer.getBar(using: barProvider)
+        """
+
+        let output = """
+        let foo = fooCondition
+            ? Foo(property: value)
+            : barContainer.getBar(using: barProvider)
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 60)
+        testFormatting(for: input, output, rule: FormatRules.wrap, options: options)
+    }
+
+    func testRewrapsComplexTernaryOperator() {
+        let input = """
+        let foo = fooCondition ? Foo(property: value) :
+            barContainer.getBar(using: barProvider)
+        """
+
+        let output = """
+        let foo = fooCondition
+            ? Foo(property: value)
+            : barContainer.getBar(using: barProvider)
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 60)
+        testFormatting(for: input, output, rule: FormatRules.wrap, options: options)
+    }
+
+    func testWrappedTernaryOperatorIndentsChainedCalls() {
+        let input = """
+        let ternary = condition
+            ? values
+                .map { $0.bar }
+                .filter { $0.hasFoo }
+                .last
+            : other.values
+                .compactMap { $0 }
+                .first?
+                .with(property: updatedValue)
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 60)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testWrapsSimpleNestedTernaryOperator() {
+        let input = """
+        let foo = fooCondition ? (barCondition ? a : b) : (baazCondition ? c : d)
+        """
+
+        let output = """
+        let foo = fooCondition
+            ? (barCondition ? a : b)
+            : (baazCondition ? c : d)
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 60)
+        testFormatting(for: input, output, rule: FormatRules.wrap, options: options)
+    }
+
+    func testWrapsDoubleNestedTernaryOperation() {
+        let input = """
+        let foo = fooCondition ? barCondition ? longTrueBarResult : longFalseBarResult : baazCondition ? longTrueBaazResult : longFalseBaazResult
+        """
+
+        let output = """
+        let foo = fooCondition
+            ? barCondition
+                ? longTrueBarResult
+                : longFalseBarResult
+            : baazCondition
+                ? longTrueBaazResult
+                : longFalseBaazResult
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 60)
+        testFormatting(for: input, output, rule: FormatRules.wrap, options: options)
+    }
+
+    func testWrapsTripleNestedTernaryOperation() {
+        let input = """
+        let foo = fooCondition ? barCondition ? quuxCondition ? longTrueQuuxResult : longFalseQuuxResult : barCondition2 ? longTrueBarResult : longFalseBarResult : baazCondition ? longTrueBaazResult : longFalseBaazResult
+        """
+
+        let output = """
+        let foo = fooCondition
+            ? barCondition
+                ? quuxCondition
+                    ? longTrueQuuxResult
+                    : longFalseQuuxResult
+                : barCondition2
+                    ? longTrueBarResult
+                    : longFalseBarResult
+            : baazCondition
+                ? longTrueBaazResult
+                : longFalseBaazResult
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 60)
+        testFormatting(for: input, output, rule: FormatRules.wrap, options: options)
+    }
+
+    func testNoWrapTernaryWrappedWithinChildExpression() {
+        let input = """
+        func foo() {
+            return _skipString(string) ? .token(
+                string, Location(source: input, range: startIndex ..< index)
+            ) : nil
+        }
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 0)
+        testFormatting(for: input, rule: FormatRules.wrap, options: options)
+    }
+
+    func testNoWrapTernaryWrappedWithinChildExpression2() {
+        let input = """
+        let types: [PolygonType] = plane.isEqual(to: plane) ? [] : vertices.map {
+            let t = plane.normal.dot($0.position) - plane.w
+            let type: PolygonType = (t < -epsilon) ? .back : (t > epsilon) ? .front : .coplanar
+            polygonType = PolygonType(rawValue: polygonType.rawValue | type.rawValue)!
+            return type
+        }
+        """
+
+        let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 0)
         testFormatting(for: input, rule: FormatRules.wrap, options: options)
     }
 
@@ -1652,7 +2077,8 @@ class WrappingTests: RulesTests {
         }
         """
         let options = FormatOptions(wrapArguments: .preserve)
-        testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
+        testFormatting(for: input, rule: FormatRules.wrapArguments,
+                       options: options, exclude: ["wrapConditionalBodies"])
     }
 
     // MARK: - --wrapArguments, --wrapParameter
@@ -1982,6 +2408,225 @@ class WrappingTests: RulesTests {
         let options = FormatOptions(wrapArguments: .beforeFirst, maxWidth: 40)
         testFormatting(for: input, [output],
                        rules: [FormatRules.wrapArguments, FormatRules.wrap], options: options)
+    }
+
+    func testWrapArguments_typealias_beforeFirst() {
+        let input = """
+        typealias Dependencies = FooProviding & BarProviding & BaazProviding & QuuxProviding
+        """
+
+        let output = """
+        typealias Dependencies
+            = FooProviding
+            & BarProviding
+            & BaazProviding
+            & QuuxProviding
+        """
+
+        let options = FormatOptions(wrapTypealiases: .beforeFirst, maxWidth: 40)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_multipleTypealiases_beforeFirst() {
+        let input = """
+        enum Namespace {
+            typealias DependenciesA = FooProviding & BarProviding
+            typealias DependenciesB = BaazProviding & QuuxProviding
+        }
+        """
+
+        let output = """
+        enum Namespace {
+            typealias DependenciesA
+                = FooProviding
+                & BarProviding
+            typealias DependenciesB
+                = BaazProviding
+                & QuuxProviding
+        }
+        """
+
+        let options = FormatOptions(wrapTypealiases: .beforeFirst, maxWidth: 45)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_typealias_afterFirst() {
+        let input = """
+        typealias Dependencies = FooProviding & BarProviding & BaazProviding & QuuxProviding
+        """
+
+        let output = """
+        typealias Dependencies = FooProviding
+            & BarProviding
+            & BaazProviding
+            & QuuxProviding
+        """
+
+        let options = FormatOptions(wrapTypealiases: .afterFirst, maxWidth: 40)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_multipleTypealiases_afterFirst() {
+        let input = """
+        enum Namespace {
+            typealias DependenciesA = FooProviding & BarProviding
+            typealias DependenciesB = BaazProviding & QuuxProviding
+        }
+        """
+
+        let output = """
+        enum Namespace {
+            typealias DependenciesA = FooProviding
+                & BarProviding
+            typealias DependenciesB = BaazProviding
+                & QuuxProviding
+        }
+        """
+
+        let options = FormatOptions(wrapTypealiases: .afterFirst, maxWidth: 45)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_typealias_shorterThanMaxWidth() {
+        let input = """
+        typealias Dependencies = FooProviding & BarProviding & BaazProviding
+        """
+
+        let options = FormatOptions(wrapTypealiases: .afterFirst, maxWidth: 100)
+        testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_typealias_shorterThanMaxWidth_butWrappedInconsistently() {
+        let input = """
+        typealias Dependencies = FooProviding & BarProviding &
+            BaazProviding & QuuxProviding
+        """
+
+        let output = """
+        typealias Dependencies = FooProviding
+            & BarProviding
+            & BaazProviding
+            & QuuxProviding
+        """
+
+        let options = FormatOptions(wrapTypealiases: .afterFirst, maxWidth: 200)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_typealias_shorterThanMaxWidth_butWrappedInconsistently2() {
+        let input = """
+        enum Namespace {
+            typealias Dependencies = FooProviding & BarProviding
+                & BaazProviding & QuuxProviding
+        }
+        """
+
+        let output = """
+        enum Namespace {
+            typealias Dependencies
+                = FooProviding
+                & BarProviding
+                & BaazProviding
+                & QuuxProviding
+        }
+        """
+
+        let options = FormatOptions(wrapTypealiases: .beforeFirst, maxWidth: 200)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_typealias_shorterThanMaxWidth_butWrappedInconsistently3() {
+        let input = """
+        typealias Dependencies
+            = FooProviding & BarProviding &
+            BaazProviding & QuuxProviding
+        """
+
+        let output = """
+        typealias Dependencies = FooProviding
+            & BarProviding
+            & BaazProviding
+            & QuuxProviding
+        """
+
+        let options = FormatOptions(wrapTypealiases: .afterFirst, maxWidth: 200)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_typealias_shorterThanMaxWidth_butWrappedInconsistently4() {
+        let input = """
+        typealias Dependencies
+            = FooProviding
+            & BarProviding
+            & BaazProviding
+            & QuuxProviding
+        """
+
+        let output = """
+        typealias Dependencies = FooProviding
+            & BarProviding
+            & BaazProviding
+            & QuuxProviding
+        """
+
+        let options = FormatOptions(wrapTypealiases: .afterFirst, maxWidth: 200)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_typealias_shorterThanMaxWidth_butWrappedInconsistentlyWithComment() {
+        let input = """
+        typealias Dependencies = FooProviding & BarProviding // trailing comment 1
+            // Inline Comment 1
+            & BaazProviding & QuuxProviding // trailing comment 2
+        """
+
+        let output = """
+        typealias Dependencies
+            = FooProviding
+            & BarProviding // trailing comment 1
+            // Inline Comment 1
+            & BaazProviding
+            & QuuxProviding // trailing comment 2
+        """
+
+        let options = FormatOptions(wrapTypealiases: .beforeFirst, maxWidth: 200)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_typealias_singleTypePreserved() {
+        let input = """
+        typealias Dependencies = FooProviding
+        """
+
+        let options = FormatOptions(wrapTypealiases: .beforeFirst, maxWidth: 10)
+        testFormatting(for: input, rule: FormatRules.wrapArguments, options: options, exclude: ["wrap"])
+    }
+
+    func testWrapArguments_typealias_preservesCommentsBetweenTypes() {
+        let input = """
+        typealias Dependencies
+            // We use `FooProviding` because `FooFeature` depends on `Foo`
+            = FooProviding
+            // We use `BarProviding` because `BarFeature` depends on `Bar`
+            & BarProviding
+            // We use `BaazProviding` because `BaazFeature` depends on `Baaz`
+            & BaazProviding
+        """
+
+        let options = FormatOptions(wrapTypealiases: .beforeFirst, maxWidth: 100)
+        testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    func testWrapArguments_typealias_preservesCommentsAfterTypes() {
+        let input = """
+        typealias Dependencies
+            = FooProviding // We use `FooProviding` because `FooFeature` depends on `Foo`
+            & BarProviding // We use `BarProviding` because `BarFeature` depends on `Bar`
+            & BaazProviding // We use `BaazProviding` because `BaazFeature` depends on `Baaz`
+        """
+
+        let options = FormatOptions(wrapTypealiases: .beforeFirst, maxWidth: 100)
+        testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
     }
 
     // MARK: - -return wrap-if-multiline
@@ -2336,7 +2981,8 @@ class WrappingTests: RulesTests {
         guard let foo = bar,
               let baz = quux else { return }
         """
-        testFormatting(for: input, rule: FormatRules.wrapMultilineStatementBraces)
+        testFormatting(for: input, rule: FormatRules.wrapMultilineStatementBraces,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testMultilineGuardBraceOnSameLineAsElse() {
@@ -2370,6 +3016,203 @@ class WrappingTests: RulesTests {
         """
         let options = FormatOptions(xcodeIndentation: true)
         testFormatting(for: input, rule: FormatRules.wrapMultilineStatementBraces, options: options)
+    }
+
+    func testMultilineBraceAppliedToTrailingClosure_wrapBeforeFirst() {
+        let input = """
+        UIView.animate(
+            duration: 10,
+            options: []) {
+            print()
+        }
+        """
+
+        let output = """
+        UIView.animate(
+            duration: 10,
+            options: [])
+        {
+            print()
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true
+        )
+        testFormatting(for: input, output, rule: FormatRules.wrapMultilineStatementBraces,
+                       options: options, exclude: ["indent"])
+    }
+
+    func testMultilineBraceAppliedToGetterBody_wrapBeforeFirst() {
+        let input = """
+        var items: Adaptive<CGFloat> = .adaptive(
+            compact: Sizes.horizontalPaddingTiny_8,
+            regular: Sizes.horizontalPaddingLarge_64) {
+                didSet { updateAccessoryViewSpacing() }
+        }
+        """
+
+        let output = """
+        var items: Adaptive<CGFloat> = .adaptive(
+            compact: Sizes.horizontalPaddingTiny_8,
+            regular: Sizes.horizontalPaddingLarge_64)
+        {
+            didSet { updateAccessoryViewSpacing() }
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true
+        )
+        testFormatting(for: input, [output], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.indent,
+        ], options: options)
+    }
+
+    func testMultilineBraceNotAppliedToTrailingClosure_wrapAfterFirst() {
+        let input = """
+        UIView.animate(duration: 10,
+                       options: []) {
+            print()
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .afterFirst,
+            closingParenOnSameLine: true
+        )
+        testFormatting(for: input, rule: FormatRules.wrapMultilineStatementBraces,
+                       options: options, exclude: ["indent"])
+    }
+
+    func testMultilineBraceNotAppliedToGetterBody_wrapAfterFirst() {
+        let input = """
+        var items: Adaptive<CGFloat> = .adaptive(compact: Sizes.horizontalPaddingTiny_8,
+                                                 regular: Sizes.horizontalPaddingLarge_64) {
+            didSet { updateAccessoryViewSpacing() }
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .afterFirst,
+            closingParenOnSameLine: true
+        )
+        testFormatting(for: input, [], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.wrapArguments,
+        ], options: options)
+    }
+
+    func testWrapsMultilineStatementConsistently() {
+        let input = """
+        func aFunc(
+            one _: Int,
+            two _: Int) -> String {
+            "one"
+        }
+        """
+
+        let output = """
+        func aFunc(
+            one _: Int,
+            two _: Int)
+            -> String
+        {
+            "one"
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true,
+            wrapReturnType: .ifMultiline
+        )
+        testFormatting(for: input, [output], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.wrapArguments,
+        ], options: options)
+    }
+
+    func testWrapsMultilineStatementConsistently2() {
+        let input = """
+        func aFunc(
+            one _: Int,
+            two _: Int) -> String {
+            "one"
+        }
+        """
+
+        let output = """
+        func aFunc(
+            one _: Int,
+            two _: Int
+        ) -> String {
+            "one"
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: false
+        )
+        testFormatting(for: input, [output], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.wrapArguments,
+        ], options: options)
+    }
+
+    func testWrapsMultilineStatementConsistently3() {
+        let input = """
+        func aFunc(
+            one _: Int,
+            two _: Int
+        ) -> String {
+            "one"
+        }
+        """
+
+        let options = FormatOptions(
+            //            wrapMultilineStatementBraces: true,
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: false
+        )
+
+        testFormatting(for: input, [], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.wrapArguments,
+        ], options: options)
+    }
+
+    func testWrapsMultilineStatementConsistently4() {
+        let input = """
+        func aFunc(
+            one _: Int,
+            two _: Int
+        ) -> String {
+            "one"
+        }
+        """
+
+        let output = """
+        func aFunc(
+            one _: Int,
+            two _: Int) -> String
+        {
+            "one"
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true
+        )
+        testFormatting(for: input, [output], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.wrapArguments,
+        ], options: options)
     }
 
     // MARK: wrapConditions before-first
@@ -2446,7 +3289,8 @@ class WrappingTests: RulesTests {
 
         testFormatting(
             for: input, [output], rules: [FormatRules.wrapArguments, FormatRules.indent],
-            options: FormatOptions(indent: "  ", wrapConditions: .beforeFirst)
+            options: FormatOptions(indent: "  ", wrapConditions: .beforeFirst),
+            exclude: ["wrapConditionalBodies"]
         )
     }
 
@@ -2470,7 +3314,7 @@ class WrappingTests: RulesTests {
         testFormatting(
             for: input, rules: [FormatRules.wrapArguments, FormatRules.indent],
             options: FormatOptions(indent: "  ", wrapConditions: .beforeFirst),
-            exclude: ["elseOnSameLine"]
+            exclude: ["elseOnSameLine", "wrapConditionalBodies"]
         )
     }
 
@@ -2519,7 +3363,8 @@ class WrappingTests: RulesTests {
 
         testFormatting(
             for: input, [output], rules: [FormatRules.wrapArguments, FormatRules.indent],
-            options: FormatOptions(indent: "  ", wrapConditions: .afterFirst)
+            options: FormatOptions(indent: "  ", wrapConditions: .afterFirst),
+            exclude: ["wrapConditionalBodies"]
         )
     }
 
@@ -2824,7 +3669,7 @@ class WrappingTests: RulesTests {
             enum CodingKeys: String, CodingKey {
                 case name
                 case type
-                case categoryId = "category_id"
+                case categoryID = "category_id"
                 case attributes
             }
         }

@@ -35,6 +35,43 @@ import XCTest
 private let projectDirectory = URL(fileURLWithPath: #file)
     .deletingLastPathComponent().deletingLastPathComponent()
 
+private func createTmpFile(_ path: String? = nil, contents: String) throws -> URL {
+    let path = path ?? (UUID().uuidString + ".swift")
+    let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(path)
+    let directory = url.deletingLastPathComponent()
+    if !FileManager.default.fileExists(atPath: directory.path) {
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+    }
+    try contents.write(to: url, atomically: true, encoding: .utf8)
+    return url
+}
+
+private func withTmpFile(_ path: String? = nil, contents: String, fn: (URL) -> Void) throws {
+    let path = path ?? (UUID().uuidString + ".swift")
+    let prefix = UUID().uuidString
+    let url = try createTmpFile("\(prefix)/\(path)", contents: contents)
+    fn(url)
+    try FileManager.default.removeItem(at: url)
+}
+
+private func withTmpFiles(_ files: [String: String], fn: (URL) throws -> Void) throws {
+    var urls = [URL]()
+    let prefix = UUID().uuidString
+    for (path, contents) in files {
+        try urls.append(createTmpFile("\(prefix)/\(path)", contents: contents))
+    }
+    for url in urls where url.pathExtension == "swift" {
+        try fn(url)
+    }
+    for url in urls {
+        try FileManager.default.removeItem(at: url)
+    }
+}
+
 class CommandLineTests: XCTestCase {
     // MARK: stdin
 
@@ -68,6 +105,147 @@ class CommandLineTests: XCTestCase {
         _ = processArguments([""], in: "")
         readCount = 0
         _ = processArguments(["", "stdin"], in: "")
+    }
+
+    func testExcludeStdinPath() throws {
+        CLI.print = { message, type in
+            switch type {
+            case .raw, .content:
+                XCTAssertEqual(message, "func foo() {\n}\n")
+            case .error, .warning:
+                XCTFail()
+            case .info, .success:
+                break
+            }
+        }
+        var readCount = 0
+        CLI.readLine = {
+            readCount += 1
+            switch readCount {
+            case 1:
+                return "func foo() {\n"
+            case 2:
+                return "}\n"
+            default:
+                return nil
+            }
+        }
+        try withTmpFile(contents: "") { url in
+            _ = processArguments([
+                "",
+                "stdin",
+                "--stdinpath", url.path,
+                "--exclude", url.path,
+            ], in: "")
+        }
+    }
+
+    func testExcludeStdinPath2() throws {
+        CLI.print = { message, type in
+            switch type {
+            case .raw, .content:
+                XCTAssertEqual(message, "func foo() {\n}\n")
+            case .error, .warning:
+                XCTFail()
+            case .info, .success:
+                break
+            }
+        }
+        var readCount = 0
+        CLI.readLine = {
+            readCount += 1
+            switch readCount {
+            case 1:
+                return "func foo() {\n"
+            case 2:
+                return "}\n"
+            default:
+                return nil
+            }
+        }
+        try withTmpFiles([
+            ".swiftformat": "--exclude *",
+            "foo.swift": "",
+        ]) { url in
+            _ = processArguments([
+                "",
+                "stdin",
+                "--stdinpath", url.path,
+            ], in: "")
+        }
+    }
+
+    func testExcludeStdinPath3() throws {
+        CLI.print = { message, type in
+            switch type {
+            case .raw, .content:
+                XCTAssertEqual(message, "func foo() {\n}\n")
+            case .error, .warning:
+                XCTFail()
+            case .info, .success:
+                break
+            }
+        }
+        var readCount = 0
+        CLI.readLine = {
+            readCount += 1
+            switch readCount {
+            case 1:
+                return "func foo() {\n"
+            case 2:
+                return "}\n"
+            default:
+                return nil
+            }
+        }
+        try withTmpFiles([
+            ".swiftformat": "--exclude foo",
+            "foo/bar/baz.swift": "",
+        ]) { url in
+            _ = processArguments([
+                "",
+                "stdin",
+                "--stdinpath", url.path,
+            ], in: "")
+        }
+    }
+
+    func testUnexcludeStdinPath() throws {
+        CLI.print = { message, type in
+            switch type {
+            case .raw, .content:
+                XCTAssertEqual(message, "func foo() {}\n")
+            case .error, .warning:
+                XCTFail()
+            case .info, .success:
+                break
+            }
+        }
+        var readCount = 0
+        CLI.readLine = {
+            readCount += 1
+            switch readCount {
+            case 1:
+                return "func foo() {\n"
+            case 2:
+                return "}\n"
+            default:
+                return nil
+            }
+        }
+        try withTmpFiles([
+            ".swiftformat": """
+            --exclude foo
+            --unexclude **/baz.*
+            """,
+            "foo/bar/baz.swift": "",
+        ]) { url in
+            _ = processArguments([
+                "",
+                "stdin",
+                "--stdinpath", url.path,
+            ], in: "")
+        }
     }
 
     // MARK: help
@@ -174,6 +352,14 @@ class CommandLineTests: XCTestCase {
         XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--rules"), .ok)
     }
 
+    func testEnableOverridesDisableAll() {
+        CLI.print = { message, _ in
+            XCTAssertFalse(message.contains("wrap (disabled)"))
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path,
+                               with: "--disable all --enable wrap --rules"), .ok)
+    }
+
     // MARK: quiet mode
 
     func testQuietModeNoOutput() {
@@ -249,14 +435,15 @@ class CommandLineTests: XCTestCase {
     }
 
     func testWarnIfOptionsSpecifiedForDisabledRule() {
-        var warning = ""
         CLI.print = { message, type in
             if type == .warning {
-                warning += message + "\n"
+                XCTAssertEqual(
+                    message,
+                    "warning: --header option has no effect when fileHeader rule is disabled"
+                )
             }
         }
-        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: ". --lint --rules indent --header foo"), .ok)
-        XCTAssert(warning.contains("--header option has no effect when fileHeader rule is disabled"), warning)
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "stdin --lint --rules indent --header foo"), .ok)
     }
 
     // MARK: snapshot/regression tests

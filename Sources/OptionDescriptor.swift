@@ -309,9 +309,7 @@ private var _allDescriptors: [OptionDescriptor] = {
     return descriptors
 }()
 
-private var _descriptorsByName: [String: OptionDescriptor] = {
-    Dictionary(uniqueKeysWithValues: _allDescriptors.map { ($0.argumentName, $0) })
-}()
+private var _descriptorsByName: [String: OptionDescriptor] = Dictionary(uniqueKeysWithValues: _allDescriptors.map { ($0.argumentName, $0) })
 
 private let _formattingDescriptors: [OptionDescriptor] = {
     let internalDescriptors = Descriptors.internal.map { $0.argumentName }
@@ -342,6 +340,14 @@ extension _Descriptors {
 }
 
 struct _Descriptors {
+    let lineAfterMarks = OptionDescriptor(
+        argumentName: "lineaftermarks",
+        displayName: "Blank line after \"MARK\"",
+        help: "Insert blank line after \"MARK:\": \"true\" (default) or \"false\"",
+        keyPath: \.lineAfterMarks,
+        trueValues: ["true"],
+        falseValues: ["false"]
+    )
     let indent = OptionDescriptor(
         argumentName: "indent",
         displayName: "Indent",
@@ -451,6 +457,12 @@ struct _Descriptors {
         help: "Wrap array/dict: \"before-first\", \"after-first\", \"preserve\"",
         keyPath: \.wrapCollections
     )
+    let wrapTypealiases = OptionDescriptor(
+        argumentName: "wraptypealiases",
+        displayName: "Wrap Typealiases",
+        help: "Wrap typealiases: \"before-first\", \"after-first\", \"preserve\"",
+        keyPath: \.wrapTypealiases
+    )
     let wrapReturnType = OptionDescriptor(
         argumentName: "wrapreturntype",
         displayName: "Wrap Return Type",
@@ -462,6 +474,12 @@ struct _Descriptors {
         displayName: "Wrap Conditions",
         help: "Wrap conditions: \"before-first\", \"after-first\", \"preserve\"",
         keyPath: \.wrapConditions
+    )
+    let wrapTernaryOperators = OptionDescriptor(
+        argumentName: "wrapternary",
+        displayName: "Wrap Ternary Operators",
+        help: "Wrap ternary operators: \"default\", \"before-operators\"",
+        keyPath: \.wrapTernaryOperators
     )
     let closingParenOnSameLine = OptionDescriptor(
         argumentName: "closingparen",
@@ -678,7 +696,13 @@ struct _Descriptors {
         keyPath: \FormatOptions.modifierOrder,
         validate: {
             guard _FormatRules.mapModifiers($0) != nil else {
-                throw FormatError.options("'\($0)' is not a valid modifier")
+                let names = _FormatRules.allModifiers
+                    + _FormatRules.semanticModifierGroups
+                let error = "'\($0)' is not a valid modifier"
+                guard let match = $0.bestMatches(in: names).first else {
+                    throw FormatError.options(error)
+                }
+                throw FormatError.options("\(error) (did you mean '\(match)'?)")
             }
         }
     )
@@ -723,6 +747,14 @@ struct _Descriptors {
         keyPath: \.groupedExtensionMarkComment,
         fromArgument: { $0 },
         toArgument: { $0 }
+    )
+    let markCategories = OptionDescriptor(
+        argumentName: "markcategories",
+        displayName: "Mark Categories",
+        help: "Insert MARK comments between categories (true by default)",
+        keyPath: \.markCategories,
+        trueValues: ["true"],
+        falseValues: ["false"]
     )
     let categoryMarkComment = OptionDescriptor(
         argumentName: "categorymark",
@@ -807,7 +839,7 @@ struct _Descriptors {
     let redundantType = OptionDescriptor(
         argumentName: "redundanttype",
         displayName: "Redundant Type",
-        help: "Keep \"inferred\" (default) or \"explicit\" type annotation",
+        help: "\"inferred\", \"explicit\", or \"infer-locals-only\" (default)",
         keyPath: \.redundantType
     )
     let emptyBracesSpacing = OptionDescriptor(
@@ -815,6 +847,26 @@ struct _Descriptors {
         displayName: "Empty Braces",
         help: "Empty braces: \"no-space\" (default), \"spaced\" or \"linebreak\"",
         keyPath: \.emptyBracesSpacing
+    )
+    let acronyms = OptionDescriptor(
+        argumentName: "acronyms",
+        displayName: "Acronyms",
+        help: "Acronyms to auto-capitalize. Defaults to \"ID,URL,UUID\".",
+        keyPath: \.acronyms
+    )
+    let indentStrings = OptionDescriptor(
+        argumentName: "indentstrings",
+        displayName: "Indent Strings",
+        help: "Indent Multiline Strings: \"false\" (default) or \"true\"",
+        keyPath: \.indentStrings,
+        trueValues: ["true", "enabled"],
+        falseValues: ["false", "disabled"]
+    )
+    let closureVoidReturn = OptionDescriptor(
+        argumentName: "closurevoid",
+        displayName: "Closure Void Return",
+        help: "Closure void returns: \"remove\" (default) or \"preserve\"",
+        keyPath: \.closureVoidReturn
     )
 
     // MARK: - Internal

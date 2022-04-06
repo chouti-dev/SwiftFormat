@@ -121,6 +121,19 @@ private struct Examples {
     ```
     """
 
+    let blankLinesBetweenImports = """
+    ```diff
+      import A
+    -
+      import B
+      import C
+    -
+    -
+      @testable import D
+      import E
+    ```
+    """
+
     let blankLinesBetweenScopes = """
     ```diff
       func foo() {
@@ -281,6 +294,22 @@ private struct Examples {
     - }
 
     + func foo() {}
+    ```
+    """
+
+    let wrapConditionalBodies = """
+    ```diff
+    - guard let foo = bar else { return baz }
+    + guard let foo = bar else {
+    +     return baz
+    + }
+    ```
+
+    ```diff
+    - if foo { return bar }
+    + if foo {
+    +    return bar
+    + }
     ```
     """
 
@@ -777,8 +806,24 @@ private struct Examples {
 
     let redundantType = """
     ```diff
+    // inferred
     - let view: UIView = UIView()
     + let view = UIView()
+
+    // explicit
+    - let view: UIView = UIView()
+    + let view: UIView = .init()
+
+    // infer-locals-only
+      class Foo {
+    -     let view: UIView = UIView()
+    +     let view: UIView = .init()
+
+          func method() {
+    -         let view: UIView = UIView()
+    +         let view = UIView()
+          }
+      }
     ```
     """
 
@@ -1225,6 +1270,116 @@ private struct Examples {
     + // MARK: - String + FooProtocol
     +
      extension String: FooProtocol { }
+    ```
+    """
+
+    let assertionFailures = """
+    ```diff
+    - assert(false)
+    + assertionFailure()
+    ```
+
+    ```diff
+    - assert(false, "message", 2, 1)
+    + assertionFailure("message", 2, 1)
+    ```
+
+    ```diff
+    - precondition(false, "message", 2, 1)
+    + preconditionFailure("message", 2, 1)
+    ```
+    """
+
+    let acronyms = """
+    ```diff
+    - let destinationUrl: URL
+    - let urlRouter: UrlRouter
+    - let screenId: String
+    - let entityUuid: UUID
+
+    + let destinationURL: URL
+    + let urlRouter: URLRouter
+    + let screenID: String
+    + let entityUUID: UUID
+    ```
+    """
+
+    let blockComments = """
+    ```diff
+    - /*
+    -  * foo
+    -  * bar
+    -  */
+
+    + // foo
+    + // bar
+    ```
+
+    ```diff
+    - /**
+    -  * foo
+    -  * bar
+    -  */
+
+    + /// foo
+    + /// bar
+    ```
+    """
+
+    let redundantClosure = """
+    ```diff
+    - let foo = { Foo() }()
+    + let foo = Foo()
+    ```
+
+    ```diff
+    - lazy var bar = {
+    -     Bar(baaz: baaz,
+    -         quux: quux)
+    - }()
+    + lazy var bar = Bar(baaz: baaz,
+    +                    quux: quux)
+    ```
+    """
+
+    let sortDeclarations = """
+    ```diff
+      // swiftformat:sort
+      enum FeatureFlags {
+    -     case upsellB
+    -     case fooFeature
+    -     case barFeature
+    -     case upsellA(
+    -         fooConfiguration: Foo,
+    -         barConfiguration: Bar)
+    +     case barFeature
+    +     case fooFeature
+    +     case upsellA
+    +         fooConfiguration: Foo,
+    +         barConfiguration: Bar)
+    +     case upsellB
+      }
+
+      enum FeatureFlags {
+          // swiftformat:sort:begin
+    -     case upsellB
+    -     case fooFeature
+    -     case barFeature
+    -     case upsellA(
+    -         fooConfiguration: Foo,
+    -         barConfiguration: Bar)
+    +     case barFeature
+    +     case fooFeature
+    +     case upsellA
+    +         fooConfiguration: Foo,
+    +         barConfiguration: Bar)
+    +     case upsellB
+          // swiftformat:sort:end
+
+          var anUnsortedProperty: Foo {
+              Foo()
+          }
+      }
     ```
     """
 }

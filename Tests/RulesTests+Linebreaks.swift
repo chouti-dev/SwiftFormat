@@ -101,6 +101,32 @@ class LinebreakTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.consecutiveBlankLines, options: options)
     }
 
+    func testConsecutiveBlankLinesNoInterpolation() {
+        let input = """
+        \"\"\"
+        AAA
+        ZZZ
+
+
+
+        \"\"\"
+        """
+        testFormatting(for: input, rule: FormatRules.consecutiveBlankLines)
+    }
+
+    func testConsecutiveBlankLinesAfterInterpolation() {
+        let input = """
+        \"\"\"
+        AAA
+        \\(interpolated)
+
+
+
+        \"\"\"
+        """
+        testFormatting(for: input, rule: FormatRules.consecutiveBlankLines)
+    }
+
     func testLintingConsecutiveBlankLinesReportsCorrectLine() {
         let input = "foo\n   \n\nbar"
         XCTAssertEqual(try lint(input, rules: [FormatRules.consecutiveBlankLines]), [
@@ -158,6 +184,71 @@ class LinebreakTests: RulesTests {
         let output = "if x {\n\n    // do something\n\n} else if y {\n\n    // do something else\n}"
         testFormatting(for: input, output, rule: FormatRules.blankLinesAtEndOfScope,
                        exclude: ["blankLinesAtStartOfScope"])
+    }
+
+    // MARK: - blankLinesBetweenImports
+
+    func testBlankLinesBetweenImportsShort() {
+        let input = """
+        import ModuleA
+
+        import ModuleB
+        """
+        let output = """
+        import ModuleA
+        import ModuleB
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLinesBetweenImports)
+    }
+
+    func testBlankLinesBetweenImportsLong() {
+        let input = """
+        import ModuleA
+        import ModuleB
+
+        import ModuleC
+        import ModuleD
+        import ModuleE
+
+        import ModuleF
+
+        import ModuleG
+        import ModuleH
+        """
+        let output = """
+        import ModuleA
+        import ModuleB
+        import ModuleC
+        import ModuleD
+        import ModuleE
+        import ModuleF
+        import ModuleG
+        import ModuleH
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLinesBetweenImports)
+    }
+
+    func testBlankLinesBetweenImportsWithTestable() {
+        let input = """
+        import ModuleA
+
+        @testable import ModuleB
+        import ModuleC
+
+        @testable import ModuleD
+        @testable import ModuleE
+
+        @testable import ModuleF
+        """
+        let output = """
+        import ModuleA
+        @testable import ModuleB
+        import ModuleC
+        @testable import ModuleD
+        @testable import ModuleE
+        @testable import ModuleF
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLinesBetweenImports)
     }
 
     // MARK: - blankLinesBetweenScopes
@@ -276,7 +367,7 @@ class LinebreakTests: RulesTests {
         { print("bar") }()
         """
         let options = FormatOptions(allmanBraces: true)
-        testFormatting(for: input, rule: FormatRules.blankLinesBetweenScopes, options: options)
+        testFormatting(for: input, rule: FormatRules.blankLinesBetweenScopes, options: options, exclude: ["redundantClosure"])
     }
 
     func testBlankLineBeforeWhileIfNotRepeatWhile() {
@@ -318,7 +409,7 @@ class LinebreakTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.blankLinesBetweenScopes)
     }
 
-    func testNoBlankLineBetweenChainedClosureIndents() {
+    func testNoBlankLineBetweenChainedClosures() {
         let input = """
         foo {
             doFoo()
@@ -333,6 +424,39 @@ class LinebreakTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.blankLinesBetweenScopes)
+    }
+
+    func testNoBlankLineBetweenTrailingClosures() {
+        let input = """
+        UIView.animate(withDuration: 0) {
+            fromView.transform = .identity
+        }
+        completion: { finished in
+            context.completeTransition(finished)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.blankLinesBetweenScopes)
+    }
+
+    func testBlankLineBetweenTrailingClosureAndLabelledLoop() {
+        let input = """
+        UIView.animate(withDuration: 0) {
+            fromView.transform = .identity
+        }
+        completion: for foo in bar {
+            print(foo)
+        }
+        """
+        let output = """
+        UIView.animate(withDuration: 0) {
+            fromView.transform = .identity
+        }
+
+        completion: for foo in bar {
+            print(foo)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLinesBetweenScopes)
     }
 
     // MARK: - blankLinesAroundMark
@@ -410,6 +534,42 @@ class LinebreakTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.blankLinesAroundMark)
+    }
+
+    func testInsertBlankLinesJustBeforeMarkNotAfter() {
+        let input = """
+        let foo = "foo"
+        // MARK: bar
+        let bar = "bar"
+        """
+        let output = """
+        let foo = "foo"
+
+        // MARK: bar
+        let bar = "bar"
+        """
+        let options = FormatOptions(lineAfterMarks: false)
+        testFormatting(for: input, output, rule: FormatRules.blankLinesAroundMark, options: options)
+    }
+
+    func testNoInsertExtraBlankLinesAroundMarkWithNoBlankLineAfterMark() {
+        let input = """
+        let foo = "foo"
+
+        // MARK: bar
+        let bar = "bar"
+        """
+        let options = FormatOptions(lineAfterMarks: false)
+        testFormatting(for: input, rule: FormatRules.blankLinesAroundMark, options: options)
+    }
+
+    func testNoInsertBlankLineAfterMarkAtStartOfFile() {
+        let input = """
+        // MARK: bar
+        let bar = "bar"
+        """
+        let options = FormatOptions(lineAfterMarks: false)
+        testFormatting(for: input, rule: FormatRules.blankLinesAroundMark, options: options)
     }
 
     // MARK: - linebreakAtEndOfFile

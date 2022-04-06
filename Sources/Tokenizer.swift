@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.48.17
+//  Version 0.49.7
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -40,7 +40,7 @@ import Foundation
 // behave like identifiers. So too have context-specific keywords such as the following:
 // any, associativity, convenience, didSet, dynamic, final, get, indirect, infix, lazy,
 // left, mutating, none, nonmutating, open, optional, override, postfix, precedence,
-// prefix, Protocol, required, right, set, some, Type, unowned, weak, willSet
+// prefix, Protocol, required, right, set, some, any, Type, unowned, weak, willSet
 private let swiftKeywords = Set([
     "let", "return", "func", "var", "if", "public", "as", "else", "in", "import",
     "class", "try", "guard", "case", "for", "init", "extension", "private", "static",
@@ -96,6 +96,7 @@ public enum TokenType {
 
     // NOT types
     case nonSpace
+    case nonLinebreak
     case nonSpaceOrComment
     case nonSpaceOrLinebreak
     case nonSpaceOrCommentOrLinebreak
@@ -138,7 +139,7 @@ public enum Token: Equatable {
 }
 
 private extension Token {
-    /// Test if token matchs type of another token
+    /// Test if token matches type of another token
     func hasType(of token: Token) -> Bool {
         switch (self, token) {
         case (.number, .number),
@@ -341,6 +342,8 @@ public extension Token {
             return isError
         case .nonSpace:
             return !isSpace
+        case .nonLinebreak:
+            return !isLinebreak
         case .nonSpaceOrComment:
             return !isSpaceOrComment
         case .nonSpaceOrLinebreak:
@@ -727,8 +730,14 @@ private extension UnicodeScalarView {
         guard read("\"") else {
             return nil
         }
-        let multiline = readString("\"\"")
-        return .startOfScope(multiline ? "\"\"\"" : "\"")
+        let start = self
+        if readString("\"\"") {
+            if first != "#" {
+                return .startOfScope("\"\"\"")
+            }
+            self = start
+        }
+        return .startOfScope("\"")
     }
 
     mutating func parseStartOfScope() -> Token? {
@@ -1427,7 +1436,8 @@ public func tokenize(_ source: String) -> [Token] {
         case ":", "=", "->":
             type = .infix
         case ".":
-            type = prevNonSpaceToken.isLvalue || prevNonSpaceToken.isAttribute ? .infix : .prefix
+            type = prevNonSpaceToken.isLvalue || prevNonSpaceToken.isAttribute ||
+                prevNonSpaceToken == .endOfScope("#endif") ? .infix : .prefix
         case "?":
             if prevToken.isSpaceOrCommentOrLinebreak {
                 // ? is a ternary operator, treat it as the start of a scope

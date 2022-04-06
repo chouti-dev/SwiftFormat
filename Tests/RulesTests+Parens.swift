@@ -61,14 +61,14 @@ class ParensTests: RulesTests {
     }
 
     func testRequiredParensNotRemoved3() {
-        let input = "a = (x is y)"
-        testFormatting(for: input, rule: FormatRules.redundantParens)
-    }
-
-    func testRequiredParensNotRemoved4() {
         let input = "x+(-5)"
         testFormatting(for: input, rule: FormatRules.redundantParens,
                        exclude: ["spaceAroundOperators"])
+    }
+
+    func testRedundantParensAroundIsNotRemoved() {
+        let input = "a = (x is Int)"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
     func testRequiredParensNotRemovedBeforeSubscript() {
@@ -149,6 +149,79 @@ class ParensTests: RulesTests {
 
     func testMeaningfulParensAroundPrefixExpressionFollowedByPostfixExpressionNotRemoved() {
         let input = "let foo = (!bar)!"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testMeaningfulParensAroundPrefixExpressionFollowedBySubscriptNotRemoved() {
+        let input = "let foo = (!bar)[5]"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensAroundPostfixExpressionFollowedByPostfixOperatorRemoved() {
+        let input = "let foo = (bar!)!"
+        let output = "let foo = bar!!"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensAroundPostfixExpressionFollowedByPostfixOperatorRemoved2() {
+        let input = "let foo = ( bar! )!"
+        let output = "let foo = bar!!"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensAroundPostfixExpressionRemoved() {
+        let input = "let foo = foo + (bar!)"
+        let output = "let foo = foo + bar!"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensAroundPostfixExpressionFollowedBySubscriptRemoved() {
+        let input = "let foo = (bar!)[5]"
+        let output = "let foo = bar![5]"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensAroundPrefixExpressionRemoved() {
+        let input = "let foo = foo + (!bar)"
+        let output = "let foo = foo + !bar"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensAroundInfixExpressionNotRemoved() {
+        let input = "let foo = (foo + bar)"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensAroundInfixEqualsExpressionNotRemoved() {
+        let input = "let foo = (bar == baz)"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensAroundClosureTypeRemoved() {
+        let input = "typealias Foo = ((Int) -> Bool)"
+        let output = "typealias Foo = (Int) -> Bool"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    // TODO: future enhancement
+//    func testRedundantParensAroundClosureReturnTypeRemoved() {
+//        let input = "typealias Foo = (Int) -> ((Int) -> Bool)"
+//        let output = "typealias Foo = (Int) -> (Int) -> Bool"
+//        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+//    }
+
+    func testRedundantParensAroundNestedClosureTypesNotRemoved() {
+        let input = "typealias Foo = (((Int) -> Bool) -> Int) -> ((String) -> Bool) -> Void"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testMeaningfulParensAroundClosureTypeNotRemoved() {
+        let input = "let foo = ((Int) -> Bool)?"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testMeaningfulParensAroundTryExpressionNotRemoved() {
+        let input = "let foo = (try? bar()) != nil"
         testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
@@ -252,7 +325,8 @@ class ParensTests: RulesTests {
     func testGuardParensRemoved() {
         let input = "guard (x == y) else { return }"
         let output = "guard x == y else { return }"
-        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+        testFormatting(for: input, output, rule: FormatRules.redundantParens,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testForValueParensRemoved() {
@@ -344,6 +418,67 @@ class ParensTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantParens, exclude: ["void"])
     }
 
+    func testRequiredParensNotRemovedAroundOptionalRange() {
+        let input = "let foo = (2...)?"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensRemovedAroundOptionalUnwrap() {
+        let input = "let foo = (bar!)+5"
+        testFormatting(for: input, rule: FormatRules.redundantParens,
+                       exclude: ["spaceAroundOperators"])
+    }
+
+    func testRedundantParensRemovedAroundOptionalOptional() {
+        let input = "let foo: (Int?)?"
+        let output = "let foo: Int??"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensRemovedAroundOptionalOptional2() {
+        let input = "let foo: (Int!)?"
+        let output = "let foo: Int!?"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensRemovedAroundOptionalOptional3() {
+        let input = "let foo: (Int?)!"
+        let output = "let foo: Int?!"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRequiredParensNotRemovedAroundOptionalAnyType() {
+        let input = "let foo: (any Foo)?"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRequiredParensNotRemovedAroundAnyTypeSelf() {
+        let input = "let foo = (any Foo).self"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRequiredParensNotRemovedAroundAnyTypeType() {
+        let input = "let foo: (any Foo).Type"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRequiredParensNotRemovedAroundAnyComposedMetatype() {
+        let input = "let foo: any (A & B).Type"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensRemovedAroundAnyType() {
+        let input = "let foo: (any Foo)"
+        let output = "let foo: any Foo"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensRemovedAroundAnyTypeInsideArray() {
+        let input = "let foo: [(any Foo)]"
+        let output = "let foo: [any Foo]"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
     func testRedundantParensRemovedAroundOptionalClosureType() {
         let input = "let foo = ((() -> ()))?"
         let output = "let foo = (() -> ())?"
@@ -377,7 +512,7 @@ class ParensTests: RulesTests {
 
     func testRequiredParensNotRemovedAfterClosureInWhereClause() {
         let input = "case foo where { x == y }():"
-        testFormatting(for: input, rule: FormatRules.redundantParens)
+        testFormatting(for: input, rule: FormatRules.redundantParens, exclude: ["redundantClosure"])
     }
 
     // around closure arguments
@@ -508,6 +643,15 @@ class ParensTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
+    func testParensNotRemovedBeforeIfBody5() {
+        let input = """
+        if currentProducts != newProducts.map { $0.id }.sorted() {
+            self?.products.accept(newProducts)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
     func testParensNotRemovedBeforeIfBodyAfterTry() {
         let input = "if let foo = try bar() { /* some code */ }"
         testFormatting(for: input, rule: FormatRules.redundantParens)
@@ -540,7 +684,7 @@ class ParensTests: RulesTests {
 
     func testParensNotRemovedAfterAnonymousClosureInsideIfStatementBody() {
         let input = "if let foo = bar(), { x == y }() {}"
-        testFormatting(for: input, rule: FormatRules.redundantParens)
+        testFormatting(for: input, rule: FormatRules.redundantParens, exclude: ["redundantClosure"])
     }
 
     func testParensNotRemovedInGenericInit() {
@@ -771,6 +915,11 @@ class ParensTests: RulesTests {
         let input = "a...(.b)"
         testFormatting(for: input, rule: FormatRules.redundantParens,
                        exclude: ["spaceAroundOperators"])
+    }
+
+    func testParensNotRemovedAroundTrailingRangeFollowedByDot() {
+        let input = "(a...).b"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
     func testParensNotRemovedAroundRangeArgumentBeginningWithPrefixOperator() {

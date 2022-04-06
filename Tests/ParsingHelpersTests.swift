@@ -447,6 +447,14 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertFalse(formatter.isStartOfClosure(at: 25))
     }
 
+    func testClosureInsideIfCondition2() {
+        let formatter = Formatter(tokenize("""
+        if foo == bar.map { $0.baz }.sorted() {}
+        """))
+        XCTAssert(formatter.isStartOfClosure(at: 10))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 22))
+    }
+
     func testClosureAfterGenericType() {
         let formatter = Formatter(tokenize("let foo = Foo<String> {}"))
         XCTAssert(formatter.isStartOfClosure(at: 11))
@@ -813,6 +821,28 @@ class ParsingHelpersTests: XCTestCase {
         formatter.processDeclaredVariables(at: &index, names: &names)
         XCTAssertEqual(names, ["foo", "baz"])
         XCTAssertEqual(index, 28)
+    }
+
+    func testProcessDeclaredVariablesInIfLetAs() {
+        let formatter = Formatter(tokenize("""
+        if let foo = foo as? String, let bar = baz {}
+        """))
+        var index = 2
+        var names = Set<String>()
+        formatter.processDeclaredVariables(at: &index, names: &names)
+        XCTAssertEqual(names, ["foo", "bar"])
+        XCTAssertEqual(index, 22)
+    }
+
+    func testProcessDeclaredVariablesInIfLetWithPostfixOperator() {
+        let formatter = Formatter(tokenize("""
+        if let foo = baz?.foo, let bar = baz?.bar {}
+        """))
+        var index = 2
+        var names = Set<String>()
+        formatter.processDeclaredVariables(at: &index, names: &names)
+        XCTAssertEqual(names, ["foo", "bar"])
+        XCTAssertEqual(index, 23)
     }
 
     func testProcessCaseDeclaredVariablesInIfLetCommaCase() {
@@ -1416,6 +1446,55 @@ class ParsingHelpersTests: XCTestCase {
         _ = Formatter(tokens).parseDeclarations()
     }
 
+    // MARK: declarationScope
+
+    func testDeclarationScope_classAndGlobals() {
+        let input = """
+        let foo = Foo()
+
+        class Foo {
+            let instanceMember = Bar()
+        }
+
+        let bar = Bar()
+        """
+
+        let tokens = tokenize(input)
+        let formatter = Formatter(tokens)
+
+        XCTAssertEqual(formatter.declarationScope(at: 3), .global) // foo
+        XCTAssertEqual(formatter.declarationScope(at: 20), .type) // instanceMember
+        XCTAssertEqual(formatter.declarationScope(at: 33), .global) // bar
+    }
+
+    func testDeclarationScope_classAndLocal() {
+        let input = """
+        class Foo {
+            let instanceMember1 = Bar()
+
+            var instanceMember2: Bar = {
+                Bar()
+            }
+
+            func instanceMethod() {
+                let localMember1 = Bar()
+            }
+
+            let instanceMember3 = Bar()
+        }
+        """
+
+        let tokens = tokenize(input)
+        let formatter = Formatter(tokens)
+
+        XCTAssertEqual(formatter.declarationScope(at: 9), .type) // instanceMember1
+        XCTAssertEqual(formatter.declarationScope(at: 21), .type) // instanceMember2
+        XCTAssertEqual(formatter.declarationScope(at: 31), .local) // Bar()
+        XCTAssertEqual(formatter.declarationScope(at: 42), .type) // instanceMethod
+        XCTAssertEqual(formatter.declarationScope(at: 51), .local) // localMember1
+        XCTAssertEqual(formatter.declarationScope(at: 66), .type) // instanceMember3
+    }
+
     // MARK: spaceEquivalentToWidth
 
     func testSpaceEquivalentToWidth() {
@@ -1443,5 +1522,42 @@ class ParsingHelpersTests: XCTestCase {
         let formatter = Formatter(tokens)
         XCTAssertEqual(formatter.spaceEquivalentToTokens(from: 0, upTo: tokens.count),
                        "          ")
+    }
+
+    // MARK: startOfConditionalStatement
+
+    func testIfTreatedAsConditional() {
+        let formatter = Formatter(tokenize("if bar == baz {}"))
+        for i in formatter.tokens.indices.dropLast(2) {
+            XCTAssertEqual(formatter.startOfConditionalStatement(at: i), 0)
+        }
+    }
+
+    func testIfLetTreatedAsConditional() {
+        let formatter = Formatter(tokenize("if let bar = baz {}"))
+        for i in formatter.tokens.indices.dropLast(2) {
+            XCTAssertEqual(formatter.startOfConditionalStatement(at: i), 0)
+        }
+    }
+
+    func testGuardLetTreatedAsConditional() {
+        let formatter = Formatter(tokenize("guard let foo = bar else {}"))
+        for i in formatter.tokens.indices.dropLast(4) {
+            XCTAssertEqual(formatter.startOfConditionalStatement(at: i), 0)
+        }
+    }
+
+    func testLetNotTreatedAsConditional() {
+        let formatter = Formatter(tokenize("let foo = bar, bar = baz"))
+        for i in formatter.tokens.indices {
+            XCTAssertNil(formatter.startOfConditionalStatement(at: i))
+        }
+    }
+
+    func testEnumCaseNotTreatedAsConditional() {
+        let formatter = Formatter(tokenize("enum Foo { case bar }"))
+        for i in formatter.tokens.indices {
+            XCTAssertNil(formatter.startOfConditionalStatement(at: i))
+        }
     }
 }

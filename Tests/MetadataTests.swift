@@ -12,6 +12,10 @@ import XCTest
 private let projectDirectory = URL(fileURLWithPath: #file)
     .deletingLastPathComponent().deletingLastPathComponent()
 
+private let projectURL = projectDirectory
+    .appendingPathComponent("SwiftFormat.xcodeproj")
+    .appendingPathComponent("project.pbxproj")
+
 private let changeLogURL =
     projectDirectory.appendingPathComponent("CHANGELOG.md")
 
@@ -24,16 +28,39 @@ private let rulesURL =
 private let rulesFile =
     try! String(contentsOf: rulesURL, encoding: .utf8)
 
+private let swiftFormatVersion: String = {
+    let string = try! String(contentsOf: projectURL)
+    let start = string.range(of: "MARKETING_VERSION = ")!.upperBound
+    let end = string.range(of: ";", range: start ..< string.endIndex)!.lowerBound
+    return String(string[start ..< end])
+}()
+
 class MetadataTests: XCTestCase {
     // MARK: generate Rules.md
 
     // NOTE: if test fails, just run it again locally to update rules file
     func testGenerateRulesDocumentation() throws {
-        var result = "# Rules\n"
-        for rule in FormatRules.all {
-            let annotation = rule.isDeprecated ? " *(deprecated)*" : ""
-            result += "\n* [\(rule.name)\(annotation)](#\(rule.name))"
+        var result = "# Default Rules (enabled by default)\n"
+        for rule in FormatRules.default {
+            result += "\n* [\(rule.name)](#\(rule.name))"
         }
+
+        result += "\n\n# Opt-in Rules (disabled by default)\n"
+        for rule in FormatRules.named(FormatRules.disabledByDefault) {
+            guard !rule.isDeprecated else {
+                continue
+            }
+            result += "\n* [\(rule.name)](#\(rule.name))"
+        }
+
+        let deprecatedRules = FormatRules.all.filter { $0.isDeprecated }
+        if !deprecatedRules.isEmpty {
+            result += "\n\n# Deprecated Rules (do not use)\n"
+            for rule in deprecatedRules {
+                result += "\n* [\(rule.name)](#\(rule.name))"
+            }
+        }
+
         result += "\n\n----------"
         for rule in FormatRules.all {
             result += "\n\n## \(rule.name)\n\n\(rule.help)"
@@ -152,7 +179,7 @@ class MetadataTests: XCTestCase {
                         Descriptors.closingParenOnSameLine, Descriptors.linebreak, Descriptors.truncateBlankLines,
                         Descriptors.indent, Descriptors.tabWidth, Descriptors.smartTabs,
                         Descriptors.maxWidth, Descriptors.assetLiteralWidth, Descriptors.wrapReturnType,
-                        Descriptors.wrapConditions,
+                        Descriptors.wrapConditions, Descriptors.wrapTypealiases, Descriptors.wrapTernaryOperators,
                     ]
                 case .identifier("indexWhereLineShouldWrapInLine"), .identifier("indexWhereLineShouldWrap"):
                     referencedOptions += [
@@ -170,6 +197,7 @@ class MetadataTests: XCTestCase {
                 case .identifier("organizeType"):
                     referencedOptions += [
                         Descriptors.categoryMarkComment,
+                        Descriptors.markCategories,
                         Descriptors.beforeMarks,
                         Descriptors.lifecycleMethods,
                         Descriptors.organizeTypes,
@@ -177,6 +205,7 @@ class MetadataTests: XCTestCase {
                         Descriptors.organizeClassThreshold,
                         Descriptors.organizeEnumThreshold,
                         Descriptors.organizeExtensionThreshold,
+                        Descriptors.lineAfterMarks,
                     ]
                 case .identifier("removeSelf"):
                     referencedOptions += [
@@ -256,5 +285,9 @@ class MetadataTests: XCTestCase {
         let podspec = try! String(contentsOf: podspecURL, encoding: .utf8)
         XCTAssertTrue(podspec.contains("\"version\": \"\(SwiftFormat.version)\""), "Podspec version does not match latest release")
         XCTAssertTrue(podspec.contains("\"tag\": \"\(SwiftFormat.version)\""), "Podspec tag does not match latest release")
+    }
+
+    func testVersionConstantUpdated() {
+        XCTAssertEqual(SwiftFormat.version, swiftFormatVersion)
     }
 }

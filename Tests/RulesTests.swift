@@ -53,6 +53,14 @@ class RulesTests: XCTestCase {
             _ = FormatRules.all
         }
 
+        // Check swift versions updated
+        if options.swiftVersion != .undefined {
+            let maxVersion = Version(rawValue: swiftVersions.last!)!
+            XCTAssert(options.swiftVersion <= maxVersion,
+                      "Swift version '\(options.swiftVersion)' not found in swiftVersions array",
+                      file: file, line: line)
+        }
+
         precondition(input != outputs.first || input != outputs.last, "Redundant output parameter")
         precondition((0 ... 2).contains(outputs.count), "Only 0, 1 or 2 output parameters permitted")
         precondition(Set(exclude).intersection(rules.map { $0.name }).isEmpty, "Cannot exclude rule under test")
@@ -62,6 +70,7 @@ class RulesTests: XCTestCase {
             + (rules.first?.name == "organizeDeclarations" ? [] : ["organizeDeclarations"])
             + (rules.first?.name == "extensionAccessControl" ? [] : ["extensionAccessControl"])
             + (rules.first?.name == "markTypes" ? [] : ["markTypes"])
+            + (rules.first?.name == "blockComments" ? [] : ["blockComments"])
         XCTAssertEqual(try format(input, rules: rules, options: options), output, file: file, line: line)
         XCTAssertEqual(try format(input, rules: FormatRules.all(except: exclude), options: options),
                        output2, file: file, line: line)

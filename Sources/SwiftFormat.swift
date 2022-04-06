@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.48.17"
+let swiftFormatVersion = "0.49.7"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -42,7 +42,10 @@ public let swiftFormatConfigurationFile = ".swiftformat"
 public let swiftVersionFile = ".swift-version"
 
 /// Supported Swift versions
-public let swiftVersions = ["3.x", "4.0", "4.1", "4.2", "5.0", "5.1", "5.2", "5.3"]
+public let swiftVersions = [
+    "3.x", "4.0", "4.1", "4.2",
+    "5.0", "5.1", "5.2", "5.3", "5.4", "5.5",
+]
 
 /// An enumeration of the types of error that may be thrown by SwiftFormat
 public enum FormatError: Error, CustomStringConvertible, LocalizedError, CustomNSError {
@@ -115,24 +118,17 @@ public func enumerateFiles(withInputURL inputURL: URL,
 
     let queue = concurrent ? DispatchQueue.global(qos: .userInitiated) : completionQueue
 
-    func wasSkipped(_ inputURL: URL, with options: Options) -> Bool {
-        guard options.shouldSkipFile(inputURL) else {
-            return false
-        }
-        if let handler = skipped {
-            do {
-                onComplete(try handler(inputURL, inputURL, options))
-            } catch {
-                onComplete { throw error }
-            }
-        }
-        return true
-    }
-
     func resolveInputURL(_ inputURL: URL, options: Options) -> (URL, ResourceValues, Options)? {
         let fileOptions = options.fileOptions ?? .default
         let inputURL = inputURL.standardizedFileURL
-        if wasSkipped(inputURL, with: options) {
+        if options.shouldSkipFile(inputURL) {
+            if let handler = skipped {
+                do {
+                    onComplete(try handler(inputURL, inputURL, options))
+                } catch {
+                    onComplete { throw error }
+                }
+            }
             return nil
         }
         do {
@@ -142,9 +138,6 @@ public func enumerateFiles(withInputURL inputURL: URL,
                     if fileOptions.followSymlinks {
                         guard let resolvedURL = try? URL(resolvingAliasFileAt: inputURL) else {
                             throw FormatError.options("Could not resolve alias at \(inputURL.path)")
-                        }
-                        if wasSkipped(resolvedURL, with: options) {
-                            return nil
                         }
                         return resolveInputURL(resolvedURL, options: options)
                     } else {
@@ -158,9 +151,6 @@ public func enumerateFiles(withInputURL inputURL: URL,
             if resourceValues.isSymbolicLink == true {
                 if fileOptions.followSymlinks {
                     let resolvedURL = inputURL.resolvingSymlinksInPath()
-                    if wasSkipped(resolvedURL, with: options) {
-                        return nil
-                    }
                     return resolveInputURL(resolvedURL, options: options)
                 } else {
                     if let handler = skipped {
@@ -189,9 +179,6 @@ public func enumerateFiles(withInputURL inputURL: URL,
         let fileOptions = options.fileOptions ?? .default
         if resourceValues.isRegularFile == true {
             if fileOptions.supportedFileExtensions.contains(inputURL.pathExtension) {
-                if wasSkipped(inputURL, with: options) {
-                    return
-                }
                 let fileInfo = FileInfo(
                     filePath: resourceValues.path,
                     creationDate: resourceValues.creationDate
@@ -205,9 +192,6 @@ public func enumerateFiles(withInputURL inputURL: URL,
                 }
             }
         } else if resourceValues.isDirectory == true {
-            if wasSkipped(inputURL, with: options) {
-                return
-            }
             var options = options
             do {
                 try processDirectory(inputURL, with: &options, logger: logger)
@@ -483,6 +467,7 @@ private func applyRules(
 
     // Infer shared options
     var options = options
+    options.enabledRules = Set(rules.map { $0.name })
     let sharedOptions = FormatRules
         .sharedOptionsForRules(rules)
         .compactMap { Descriptors.byName[$0] }

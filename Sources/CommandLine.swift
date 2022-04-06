@@ -74,6 +74,7 @@ private func print(_ message: String, as type: CLI.OutputType = .info) {
     }
 }
 
+// Print warnings and return true if any was an actual error
 private func printWarnings(_ errors: [Error]) -> Bool {
     var containsError = false
     for error in errors {
@@ -203,9 +204,9 @@ func printHelp(as type: CLI.OutputType) {
     SwiftFormat has a number of rules that can be enabled or disabled. By default
     most rules are enabled. Use --rules to display all enabled/disabled rules.
 
-    --rules            The list of rules to apply. Pass nothing to print all rules
-    --disable          A list of format rules to be disabled (comma-delimited)
-    --enable           A list of disabled rules to be re-enabled (comma-delimited)
+    --rules            The list of rules to apply. Pass nothing to print rules list
+    --disable          Comma-delimited list of format rules to be disabled, or "all"
+    --enable           Comma-delimited list of rules to be enabled, or "all"
     --lintonly         A list of rules to be enabled only when using --lint mode
 
     SwiftFormat's rules can be configured using options. A given option may affect
@@ -402,12 +403,13 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
         var inputURLs = [URL]()
         if let fileListPath = args["filelist"] {
             let fileListURL = try parsePath(fileListPath, for: "filelist", in: directory)
-            do {
-                let source = try String(contentsOf: fileListURL)
-                inputURLs += try parseFileList(source, in: fileListURL.deletingLastPathComponent().path)
-            } catch {
+            if !FileManager.default.fileExists(atPath: fileListURL.path) {
+                throw FormatError.reading("File not found at \(fileListURL.path)")
+            }
+            guard let source = try? String(contentsOf: fileListURL) else {
                 throw FormatError.options("Failed to read file list at \(fileListPath)")
             }
+            inputURLs += try parseFileList(source, in: fileListURL.deletingLastPathComponent().path)
         }
         var useStdin = false
         while let inputPath = args[String(inputURLs.count + 1)] {
@@ -552,7 +554,11 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
                         return URL(fileURLWithPath: cachePath)
                     }
                 #endif
-                return URL(fileURLWithPath: "/var/tmp/")
+                if #available(macOS 10.12, *) {
+                    return FileManager.default.temporaryDirectory
+                } else {
+                    return URL(fileURLWithPath: "/var/tmp/")
+                }
             }().appendingPathComponent("com.charcoaldesign.swiftformat")
             do {
                 try manager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true, attributes: nil)
@@ -600,7 +606,7 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
         }
 
         enum Status {
-            case idle, started, finished(Error?)
+            case idle, started, finished(ExitCode)
         }
 
         var input: String?
@@ -611,7 +617,7 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
                 input = (input ?? "") + line
             }
             guard let input = input else {
-                status = .finished(nil)
+                status = .finished(.ok)
                 return
             }
             do {
@@ -620,48 +626,54 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
                     let tokens = tokenize(input)
                     options.formatOptions = inferFormatOptions(from: tokens)
                     try serializeOptions(options, to: outputURL)
+                    status = .finished(.ok)
                 } else {
                     printRunningMessage()
-                    var shouldSkip = false
                     if let stdinURL = options.formatOptions?.fileInfo.filePath.map(URL.init(fileURLWithPath:)) {
-                        do {
-                            try gatherOptions(&options, for: stdinURL, with: { print($0, as: .info) })
-                            shouldSkip = options.shouldSkipFile(stdinURL)
-                        } catch {
-                            if printWarnings([error]) {
-                                status = .finished(error)
-                                return
-                            }
+                        try gatherOptions(&options, for: stdinURL, with: { print($0, as: .info) })
+                        if options.shouldSkipFile(stdinURL) {
+                            print(input, as: .raw)
+                            status = .finished(.ok)
+                            return
                         }
                     }
-                    let output = shouldSkip ? input : try applyRules(
+                    let output = try applyRules(
                         input, options: options, lineRange: lineRange,
                         verbose: verbose, lint: lint, reporter: reporter
                     )
                     if let outputURL = outputURL, !useStdout {
-                        if (try? String(contentsOf: outputURL)) != output, !dryrun {
-                            do {
-                                try output.write(to: outputURL, atomically: true, encoding: .utf8)
-                            } catch {
-                                throw FormatError.writing("Failed to write file \(outputURL.path)")
-                            }
+                        if !dryrun, (try? String(contentsOf: outputURL)) != output {
+                            try write(output, to: outputURL)
                         }
                     } else {
                         // Write to stdout
-                        print(output, as: .raw)
+                        print(dryrun ? input : output, as: .raw)
                     }
-                    print("Swiftformat completed successfully.", as: .success)
+                    let exitCode: ExitCode
+                    if lint, output != input {
+                        print("Source input did not pass lint check.", as: .error)
+                        exitCode = lenient ? .ok : .lintFailure
+                    } else {
+                        print("SwiftFormat completed successfully.", as: .success)
+                        exitCode = .ok
+                    }
+                    status = .finished(exitCode)
                 }
-                status = .finished(nil)
             } catch {
-                status = .finished(error)
+                if printWarnings([error]) {
+                    status = .finished(.error)
+                } else {
+                    status = .finished(.ok)
+                }
+                // Ensure input isn't lost
+                print(input, as: .raw)
             }
         }
 
         if useStdin {
             processFromStdin()
-            if case let .finished(error) = status, let fatalError = error {
-                throw fatalError
+            if case let .finished(exitCode) = status {
+                return exitCode
             }
             return .ok
         } else if inputURLs.isEmpty {
@@ -676,11 +688,8 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
             // If no input received by now, assume none is coming
             if input != nil {
                 while start.timeIntervalSinceNow > -30 {
-                    if case let .finished(error) = status {
-                        if let error = error {
-                            throw error
-                        }
-                        break
+                    if case let .finished(exitCode) = status {
+                        return exitCode
                     }
                 }
             } else if args["inferoptions"] != nil {
@@ -732,6 +741,19 @@ func processArguments(_ args: [String], in directory: String) -> ExitCode {
         }
         print("error: \(errorMessage)", as: .error)
         return .error
+    }
+}
+
+func write(_ output: String, to file: URL) throws {
+    do {
+        let fm = FileManager.default
+        let attributes = try? fm.attributesOfItem(atPath: file.path)
+        try output.write(to: file, atomically: true, encoding: .utf8)
+        if let created = attributes?[.creationDate] {
+            try? fm.setAttributes([.creationDate: created], ofItemAtPath: file.path)
+        }
+    } catch {
+        throw FormatError.writing("Failed to write file \(file.path)")
     }
 }
 
@@ -982,20 +1004,16 @@ func processInput(_ inputURLs: [URL],
                         showConfigurationWarnings(options)
                     }
                 } else {
-                    do {
-                        if verbose {
-                            print("Writing \(outputURL.path)", as: .info)
-                        }
-                        try output.write(to: outputURL, atomically: true, encoding: .utf8)
-                        return {
-                            outputFlags.filesChecked += 1
-                            outputFlags.filesFailed += 1
-                            outputFlags.filesWritten += 1
-                            cache?[cacheKey] = cacheValue
-                            showConfigurationWarnings(options)
-                        }
-                    } catch {
-                        throw FormatError.writing("Failed to write file \(outputURL.path), \(error)")
+                    if verbose {
+                        print("Writing \(outputURL.path)", as: .info)
+                    }
+                    try write(output, to: outputURL)
+                    return {
+                        outputFlags.filesChecked += 1
+                        outputFlags.filesFailed += 1
+                        outputFlags.filesWritten += 1
+                        cache?[cacheKey] = cacheValue
+                        showConfigurationWarnings(options)
                     }
                 }
             } catch {

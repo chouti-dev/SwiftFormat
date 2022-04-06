@@ -188,7 +188,7 @@ class SyntaxTests: RulesTests {
 
     func testAnonymousVoidArgumentNotConvertedToEmptyParens() {
         let input = "{ (_: Void) -> Void in }"
-        testFormatting(for: input, rule: FormatRules.void)
+        testFormatting(for: input, rule: FormatRules.void, exclude: ["redundantVoidReturnType"])
     }
 
     func testFuncWithAnonymousVoidArgumentNotStripped() {
@@ -231,7 +231,7 @@ class SyntaxTests: RulesTests {
     func testEmptyClosureReturnValueConvertedToVoid() {
         let input = "{ () -> () in }"
         let output = "{ () -> Void in }"
-        testFormatting(for: input, output, rule: FormatRules.void)
+        testFormatting(for: input, output, rule: FormatRules.void, exclude: ["redundantVoidReturnType"])
     }
 
     func testAnonymousVoidClosureNotChanged() {
@@ -317,7 +317,7 @@ class SyntaxTests: RulesTests {
         let input = "{ () -> Void in }"
         let output = "{ () -> () in }"
         let options = FormatOptions(useVoid: false)
-        testFormatting(for: input, output, rule: FormatRules.void, options: options)
+        testFormatting(for: input, output, rule: FormatRules.void, options: options, exclude: ["redundantVoidReturnType"])
     }
 
     func testNoConvertVoidSelfToTuple() {
@@ -374,7 +374,8 @@ class SyntaxTests: RulesTests {
 
     func testClosureArgumentAfterLinebreakInGuardNotMadeTrailing() {
         let input = "guard let foo =\n    bar({ /* some code */ })\nelse { return }"
-        testFormatting(for: input, rule: FormatRules.trailingClosures)
+        testFormatting(for: input, rule: FormatRules.trailingClosures,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testClosureMadeTrailingForNumericTupleMember() {
@@ -424,7 +425,8 @@ class SyntaxTests: RulesTests {
 
     func testParensAroundTrailingClosureInGuardCaseLetNotRemoved() {
         let input = "guard case let .foo(bar) = baz.filter({ $0 == quux }).isEmpty else {}"
-        testFormatting(for: input, rule: FormatRules.trailingClosures)
+        testFormatting(for: input, rule: FormatRules.trailingClosures,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testParensAroundTrailingClosureInWhereClauseLetNotRemoved() {
@@ -1446,7 +1448,8 @@ class SyntaxTests: RulesTests {
     func testGuardAndReplaced() {
         let input = "guard true && true\nelse { return }"
         let output = "guard true, true\nelse { return }"
-        testFormatting(for: input, output, rule: FormatRules.andOperator)
+        testFormatting(for: input, output, rule: FormatRules.andOperator,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testWhileAndReplaced() {
@@ -1464,7 +1467,8 @@ class SyntaxTests: RulesTests {
     func testIfAndParensReplaced() {
         let input = "if true && (true && true) {}"
         let output = "if true, (true && true) {}"
-        testFormatting(for: input, output, rule: FormatRules.andOperator, exclude: ["redundantParens"])
+        testFormatting(for: input, output, rule: FormatRules.andOperator,
+                       exclude: ["redundantParens"])
     }
 
     func testIfFunctionAndReplaced() {
@@ -1813,6 +1817,11 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.typeSugar)
     }
 
+    func testArrayDeclarationNotConvertedToSugar() {
+        let input = "struct Array<Element> {}"
+        testFormatting(for: input, rule: FormatRules.typeSugar)
+    }
+
     // dictionaries
 
     func testDictionaryTypeConvertedToSugar() {
@@ -2053,5 +2062,451 @@ class SyntaxTests: RulesTests {
         let output = "let foo = bar.contains(where: \\.foo)"
         let options = FormatOptions(swiftVersion: "5.2")
         testFormatting(for: input, output, rule: FormatRules.preferKeyPath, options: options)
+    }
+
+    // MARK: - assertionFailures
+
+    func testAssertionFailuresForAssertFalse() {
+        let input = "assert(false)"
+        let output = "assertionFailure()"
+        testFormatting(for: input, output, rule: FormatRules.assertionFailures)
+    }
+
+    func testAssertionFailuresForAssertFalseWithSpaces() {
+        let input = "assert ( false )"
+        let output = "assertionFailure()"
+        testFormatting(for: input, output, rule: FormatRules.assertionFailures)
+    }
+
+    func testAssertionFailuresForAssertFalseWithLinebreaks() {
+        let input = """
+        assert(
+            false
+        )
+        """
+        let output = "assertionFailure()"
+        testFormatting(for: input, output, rule: FormatRules.assertionFailures)
+    }
+
+    func testAssertionFailuresForAssertTrue() {
+        let input = "assert(true)"
+        testFormatting(for: input, rule: FormatRules.assertionFailures)
+    }
+
+    func testAssertionFailuresForAssertFalseWithArgs() {
+        let input = "assert(false, msg, 20, 21)"
+        let output = "assertionFailure(msg, 20, 21)"
+        testFormatting(for: input, output, rule: FormatRules.assertionFailures)
+    }
+
+    func testAssertionFailuresForPreconditionFalse() {
+        let input = "precondition(false)"
+        let output = "preconditionFailure()"
+        testFormatting(for: input, output, rule: FormatRules.assertionFailures)
+    }
+
+    func testAssertionFailuresForPreconditionTrue() {
+        let input = "precondition(true)"
+        testFormatting(for: input, rule: FormatRules.assertionFailures)
+    }
+
+    func testAssertionFailuresForPreconditionFalseWithArgs() {
+        let input = "precondition(false, msg, 0, 1)"
+        let output = "preconditionFailure(msg, 0, 1)"
+        testFormatting(for: input, output, rule: FormatRules.assertionFailures)
+    }
+
+    // MARK: - acronyms
+
+    func testUppercaseAcronyms() {
+        let input = """
+        let url: URL
+        let destinationUrl: URL
+        let id: ID
+        let screenId = "screenId" // We intentionally don't change the content of strings
+        let validUrls: Set<URL>
+        let validUrlschemes: Set<URL>
+
+        let uniqueIdentifier = UUID()
+
+        /// Opens Urls based on their scheme
+        struct UrlRouter {}
+
+        /// The Id of a screen that can be displayed in the app
+        struct ScreenId {}
+        """
+
+        let output = """
+        let url: URL
+        let destinationURL: URL
+        let id: ID
+        let screenID = "screenId" // We intentionally don't change the content of strings
+        let validURLs: Set<URL>
+        let validUrlschemes: Set<URL>
+
+        let uniqueIdentifier = UUID()
+
+        /// Opens URLs based on their scheme
+        struct URLRouter {}
+
+        /// The ID of a screen that can be displayed in the app
+        struct ScreenID {}
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.acronyms)
+    }
+
+    func testUppercaseCustomAcronym() {
+        let input = """
+        let url: URL
+        let destinationUrl: URL
+        let pngData: Data
+        let imageInPngFormat: UIImage
+        """
+
+        let output = """
+        let url: URL
+        let destinationUrl: URL
+        let pngData: Data
+        let imageInPNGFormat: UIImage
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.acronyms, options: FormatOptions(acronyms: ["png"]))
+    }
+
+    func testDisableUppercaseAcronym() {
+        let input = """
+        // swiftformat:disable:next acronyms
+        typeNotOwnedByAuthor.destinationUrl = URL()
+        typeOwnedByAuthor.destinationURL = URL()
+        """
+
+        testFormatting(for: input, rule: FormatRules.acronyms)
+    }
+
+    // MARK: - preferDouble
+
+    func testCGFloatsReplacedByDoubleOnSwift5_5() {
+        let input = """
+        let foo: CGFloat
+        let bar: CGFloat = 5
+        let baz: [CGFloat] = []
+
+        func foo(value: CGFloat) -> CGFloat { value }
+
+        extension CGFloat: Foopable {}
+        """
+        let output = """
+        let foo: Double
+        let bar: Double = 5
+        let baz: [Double] = []
+
+        func foo(value: Double) -> Double { value }
+
+        extension Double: Foopable {}
+        """
+        let options = FormatOptions(swiftVersion: "5.5")
+        testFormatting(for: input, output, rule: FormatRules.preferDouble, options: options)
+    }
+
+    func testCGFloatsNotReplacedByDoubleIfLessThanSwift5_5() {
+        let input = """
+        let foo: CGFloat
+        let bar: CGFloat = 5
+        let baz: [CGFloat] = []
+
+        func foo(value: CGFloat) -> CGFloat { value }
+
+        extension CGFloat: Foopable {}
+        """
+        testFormatting(for: input, rule: FormatRules.preferDouble)
+    }
+
+    // MARK: - blockComments
+
+    func testBlockCommentsOneLine() {
+        let input = "foo = bar /* comment */"
+        let output = "foo = bar // comment"
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testDocBlockCommentsOneLine() {
+        let input = "foo = bar /** doc comment */"
+        let output = "foo = bar /// doc comment"
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testPreservesBlockCommentInSingleLineScope() {
+        let input = "if foo { /* code */ }"
+        testFormatting(for: input, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentsMultiLine() {
+        let input = """
+        /*
+         * foo
+         * bar
+         */
+        """
+        let output = """
+        // foo
+        // bar
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentsWithoutBlankFirstLine() {
+        let input = """
+        /* foo
+         * bar
+         */
+        """
+        let output = """
+        // foo
+        // bar
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentsWithBlankLine() {
+        let input = """
+        /*
+         * foo
+         *
+         * bar
+         */
+        """
+        let output = """
+        // foo
+        //
+        // bar
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockDocCommentsWithAsterisksOnEachLine() {
+        let input = """
+        /**
+         * This is a documentation comment,
+         * not a standard comment.
+         */
+        """
+        let output = """
+        /// This is a documentation comment,
+        /// not a standard comment.
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockDocCommentsWithoutAsterisksOnEachLine() {
+        let input = """
+        /**
+         This is a documentation comment,
+         not a standard comment.
+         */
+        """
+        let output = """
+        /// This is a documentation comment,
+        /// not a standard comment.
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentWithBulletPoints() {
+        let input = """
+        /*
+         This is a list of nice colors:
+
+         * green
+         * blue
+         * red
+
+         Yellow is also great.
+         */
+
+        /*
+         * Another comment.
+         */
+        """
+        let output = """
+        // This is a list of nice colors:
+        //
+        // * green
+        // * blue
+        // * red
+        //
+        // Yellow is also great.
+
+        // Another comment.
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentsNested() {
+        let input = """
+        /*
+         * comment
+         * /* inside */
+         * a comment
+         */
+        """
+        let output = """
+        // comment
+        // inside
+        // a comment
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentsIndentPreserved() {
+        let input = """
+        func foo() {
+            /*
+             foo
+             bar.
+             */
+        }
+        """
+        let output = """
+        func foo() {
+            // foo
+            // bar.
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentsIndentPreserved2() {
+        let input = """
+        func foo() {
+            /*
+             * foo
+             * bar.
+             */
+        }
+        """
+        let output = """
+        func foo() {
+            // foo
+            // bar.
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockDocCommentsIndentPreserved() {
+        let input = """
+        func foo() {
+            /**
+             * foo
+             * bar.
+             */
+        }
+        """
+        let output = """
+        func foo() {
+            /// foo
+            /// bar.
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testLongBlockCommentsWithoutPerLineMarkersFullyConverted() {
+        let input = """
+        /*
+            The beginnings of the lines in this multiline comment body
+            have only spaces in them. There are no asterisks, only spaces.
+
+            This should not cause the blockComments rule to convert only
+            part of the comment body and leave the rest hanging.
+
+            The comment must have at least this many lines to trigger the bug.
+        */
+        """
+        let output = """
+        // The beginnings of the lines in this multiline comment body
+        // have only spaces in them. There are no asterisks, only spaces.
+        //
+        // This should not cause the blockComments rule to convert only
+        // part of the comment body and leave the rest hanging.
+        //
+        // The comment must have at least this many lines to trigger the bug.
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentImmediatelyFollowedByCode() {
+        let input = """
+        /**
+          foo
+
+          bar
+        */
+        func foo() {}
+        """
+        let output = """
+        /// foo
+        ///
+        /// bar
+        func foo() {}
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentImmediatelyFollowedByCode2() {
+        let input = """
+        /**
+         Line 1.
+
+         Line 2.
+
+         Line 3.
+         */
+        foo(bar)
+        """
+        let output = """
+        /// Line 1.
+        ///
+        /// Line 2.
+        ///
+        /// Line 3.
+        foo(bar)
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentImmediatelyFollowedByCode3() {
+        let input = """
+        /* foo
+           bar */
+        func foo() {}
+        """
+        let output = """
+        // foo
+        // bar
+        func foo() {}
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    func testBlockCommentFollowedByBlankLine() {
+        let input = """
+        /**
+          foo
+
+          bar
+        */
+
+        func foo() {}
+        """
+        let output = """
+        /// foo
+        ///
+        /// bar
+
+        func foo() {}
+        """
+        testFormatting(for: input, output, rule: FormatRules.blockComments)
     }
 }

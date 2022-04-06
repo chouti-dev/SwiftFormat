@@ -1424,7 +1424,7 @@ public class LayoutNode: NSObject {
             for block in blocks {
                 try block(animated)
             }
-            // TODO: check if actions are dynamic, otherwise this is uneccesary
+            // TODO: check if actions are dynamic, otherwise this is unnecessary
             try self.bindActions()
         }
 
@@ -1606,20 +1606,14 @@ public class LayoutNode: NSObject {
         return try value(forParameter: name) ?? value(forVariableOrConstantOrParentParameter: name)
     }
 
-    public lazy var viewExpressionTypes: [String: RuntimeType] = {
-        self.viewClass.cachedExpressionTypes
-    }()
-
+    public lazy var viewExpressionTypes: [String: RuntimeType] = self.viewClass.cachedExpressionTypes
     public lazy var viewControllerExpressionTypes: [String: RuntimeType] = {
         self.viewControllerClass.map { $0.cachedExpressionTypes } ?? [:]
     }()
 
     #if arch(i386) || arch(x86_64)
 
-        private lazy var deprecatedSymbols: [String: String] = {
-            self._class.deprecatedSymbols
-        }()
-
+        private lazy var deprecatedSymbols: [String: String] = self._class.deprecatedSymbols
         private func handleDeprecation(for symbol: String) {
             let alternative: String
             if let _alternative = deprecatedSymbols[symbol] {
@@ -2965,7 +2959,7 @@ public class LayoutNode: NSObject {
             // Check if this view controller instance has already been used
             if let controller = viewController {
                 if viewsAndOutlets.contains(controller) {
-                    throw LayoutError("Duplicate \(controller.classForCoder) instance in Layout hierachy", for: self)
+                    throw LayoutError("Duplicate \(controller.classForCoder) instance in Layout hierarchy", for: self)
                 } else {
                     viewsAndOutlets.add(controller)
                 }
@@ -2973,7 +2967,7 @@ public class LayoutNode: NSObject {
 
             // Check if view instance has already been used
             if viewsAndOutlets.contains(view) {
-                throw LayoutError("Duplicate \(view.classForCoder) instance in Layout hierachy", for: self)
+                throw LayoutError("Duplicate \(view.classForCoder) instance in Layout hierarchy", for: self)
             } else {
                 viewsAndOutlets.add(view)
             }

@@ -81,7 +81,7 @@ class BracesTests: RulesTests {
             }(),
         ]
         """
-        testFormatting(for: input, rule: FormatRules.braces)
+        testFormatting(for: input, rule: FormatRules.braces, exclude: ["redundantClosure"])
     }
 
     func testKnRNoMangleClosureReturningClosure() {
@@ -276,6 +276,37 @@ class BracesTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.braces)
     }
 
+    func testBraceUnwrappedIfWrapMultilineStatementBracesRuleDisabled() {
+        let input = """
+        if let foo = bar,
+           let baz = quux
+        {
+            return nil
+        }
+        """
+        let output = """
+        if let foo = bar,
+           let baz = quux {
+            return nil
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.braces,
+                       exclude: ["wrapMultilineStatementBraces"])
+    }
+
+    func testBraceNotUnwrappedIfWrapMultilineStatementBracesRuleDisabled() {
+        let input = """
+        if let foo = bar,
+           let baz = quux
+        {
+            return nil
+        }
+        """
+        testFormatting(for: input, rules: [
+            FormatRules.braces, FormatRules.wrapMultilineStatementBraces,
+        ])
+    }
+
     // allman style
 
     func testKnRBracesAreConverted() {
@@ -447,5 +478,25 @@ class BracesTests: RulesTests {
         """
         let options = FormatOptions(allmanBraces: true)
         testFormatting(for: input, output, rule: FormatRules.braces, options: options)
+    }
+
+    func testEmptyAllmanIfElseBraces() {
+        let input = """
+        if true {
+
+        } else {
+
+        }
+        """
+        let output = """
+        if true
+        {}
+        else
+        {}
+        """
+        let options = FormatOptions(allmanBraces: true)
+        testFormatting(for: input, [output], rules: [
+            FormatRules.braces, FormatRules.emptyBraces, FormatRules.elseOnSameLine,
+        ], options: options)
     }
 }

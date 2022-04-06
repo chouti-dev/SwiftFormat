@@ -1,7 +1,8 @@
-# Rules
+# Default Rules (enabled by default)
 
 * [andOperator](#andOperator)
 * [anyObjectProtocol](#anyObjectProtocol)
+* [assertionFailures](#assertionFailures)
 * [blankLinesAroundMark](#blankLinesAroundMark)
 * [blankLinesAtEndOfScope](#blankLinesAtEndOfScope)
 * [blankLinesAtStartOfScope](#blankLinesAtStartOfScope)
@@ -18,17 +19,15 @@
 * [hoistPatternLet](#hoistPatternLet)
 * [indent](#indent)
 * [initCoderUnavailable](#initCoderUnavailable)
-* [isEmpty](#isEmpty)
 * [leadingDelimiters](#leadingDelimiters)
 * [linebreakAtEndOfFile](#linebreakAtEndOfFile)
 * [linebreaks](#linebreaks)
-* [markTypes](#markTypes)
 * [modifierOrder](#modifierOrder)
 * [numberFormatting](#numberFormatting)
-* [organizeDeclarations](#organizeDeclarations)
 * [preferKeyPath](#preferKeyPath)
 * [redundantBackticks](#redundantBackticks)
 * [redundantBreak](#redundantBreak)
+* [redundantClosure](#redundantClosure)
 * [redundantExtensionACL](#redundantExtensionACL)
 * [redundantFileprivate](#redundantFileprivate)
 * [redundantGet](#redundantGet)
@@ -45,8 +44,8 @@
 * [redundantType](#redundantType)
 * [redundantVoidReturnType](#redundantVoidReturnType)
 * [semicolons](#semicolons)
+* [sortDeclarations](#sortDeclarations)
 * [sortedImports](#sortedImports)
-* [sortedSwitchCases](#sortedSwitchCases)
 * [spaceAroundBraces](#spaceAroundBraces)
 * [spaceAroundBrackets](#spaceAroundBrackets)
 * [spaceAroundComments](#spaceAroundComments)
@@ -58,7 +57,6 @@
 * [spaceInsideComments](#spaceInsideComments)
 * [spaceInsideGenerics](#spaceInsideGenerics)
 * [spaceInsideParens](#spaceInsideParens)
-* [specifiers *(deprecated)*](#specifiers)
 * [strongOutlets](#strongOutlets)
 * [strongifiedSelf](#strongifiedSelf)
 * [todos](#todos)
@@ -71,12 +69,54 @@
 * [wrap](#wrap)
 * [wrapArguments](#wrapArguments)
 * [wrapAttributes](#wrapAttributes)
-* [wrapEnumCases](#wrapEnumCases)
 * [wrapMultilineStatementBraces](#wrapMultilineStatementBraces)
-* [wrapSwitchCases](#wrapSwitchCases)
 * [yodaConditions](#yodaConditions)
 
+# Opt-in Rules (disabled by default)
+
+* [acronyms](#acronyms)
+* [blankLinesBetweenImports](#blankLinesBetweenImports)
+* [blockComments](#blockComments)
+* [isEmpty](#isEmpty)
+* [markTypes](#markTypes)
+* [organizeDeclarations](#organizeDeclarations)
+* [preferDouble](#preferDouble)
+* [sortedSwitchCases](#sortedSwitchCases)
+* [wrapConditionalBodies](#wrapConditionalBodies)
+* [wrapEnumCases](#wrapEnumCases)
+* [wrapSwitchCases](#wrapSwitchCases)
+
+# Deprecated Rules (do not use)
+
+* [specifiers](#specifiers)
+
 ----------
+
+## acronyms
+
+Capitalizes acronyms when the first character is capitalized.
+
+Option | Description
+--- | ---
+`--acronyms` | Acronyms to auto-capitalize. Defaults to "ID,URL,UUID".
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- let destinationUrl: URL
+- let urlRouter: UrlRouter
+- let screenId: String
+- let entityUuid: UUID
+
++ let destinationURL: URL
++ let urlRouter: URLRouter
++ let screenID: String
++ let entityUUID: UUID
+```
+
+</details>
+<br/>
 
 ## andOperator
 
@@ -127,9 +167,39 @@ swift version is set to 4.1 or above.
 </details>
 <br/>
 
+## assertionFailures
+
+Changes all instances of assert(false, ...) to assertionFailure(...) 
+and precondition(false, ...) to preconditionFailure(...).
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- assert(false)
++ assertionFailure()
+```
+
+```diff
+- assert(false, "message", 2, 1)
++ assertionFailure("message", 2, 1)
+```
+
+```diff
+- precondition(false, "message", 2, 1)
++ preconditionFailure("message", 2, 1)
+```
+
+</details>
+<br/>
+
 ## blankLinesAroundMark
 
 Insert blank line before and after `MARK:` comments.
+
+Option | Description
+--- | ---
+`--lineaftermarks` | Insert blank line after "MARK:": "true" (default) or "false"
 
 <details>
 <summary>Examples</summary>
@@ -229,6 +299,27 @@ Remove leading blank line at the start of a scope.
 </details>
 <br/>
 
+## blankLinesBetweenImports
+
+Remove blank lines between import statements.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  import A
+-
+  import B
+  import C
+-
+-
+  @testable import D
+  import E
+```
+
+</details>
+<br/>
+
 ## blankLinesBetweenScopes
 
 Insert blank line before class, struct, enum, extension, protocol or function
@@ -257,6 +348,36 @@ declarations.
 +
   var baz: Bool
   var quux: Int
+```
+
+</details>
+<br/>
+
+## blockComments
+
+Changes block comments to single line comments.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- /*
+-  * foo
+-  * bar
+-  */
+
++ // foo
++ // bar
+```
+
+```diff
+- /**
+-  * foo
+-  * bar
+-  */
+
++ /// foo
++ /// bar
 ```
 
 </details>
@@ -539,6 +660,7 @@ Option | Description
 `--indentcase` | Indent cases inside a switch: "true" or "false" (default)
 `--ifdef` | #if indenting: "indent" (default), "no-indent" or "outdent"
 `--xcodeindentation` | Match Xcode indenting: "enabled" or "disabled" (default)
+`--indentstrings` | Indent Multiline Strings: "false" (default) or "true"
 
 <details>
 <summary>Examples</summary>
@@ -757,11 +879,12 @@ Option | Description
 
 ## organizeDeclarations
 
-Organizes declarations within class, struct, and enum bodies.
+Organizes declarations within class, struct, enum, actor, and extension bodies.
 
 Option | Description
 --- | ---
 `--categorymark` | Template for category mark comments. Defaults to "MARK: %c"
+`--markcategories` | Insert MARK comments between categories (true by default)
 `--beforemarks` | Declarations placed before first mark (e.g. `typealias,struct`)
 `--lifecycle` | Names of additional Lifecycle methods (e.g. `viewDidLoad`)
 `--organizetypes` | Declarations to organize (default: `class,actor,struct,enum`)
@@ -819,6 +942,10 @@ Option | Description
 </details>
 <br/>
 
+## preferDouble
+
+Replaces occurrences of CGFloat with Double when targeting Swift 5.5 and above.
+
 ## preferKeyPath
 
 Convert trivial `map { $0.foo }` closures to keyPath-based syntax.
@@ -873,6 +1000,31 @@ Remove redundant `break` in switch case.
         print("default")
 -       break
   }
+```
+
+</details>
+<br/>
+
+## redundantClosure
+
+Removes redundant closures bodies, containing a single statement,
+which are called immediately.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- let foo = { Foo() }()
++ let foo = Foo()
+```
+
+```diff
+- lazy var bar = {
+-     Bar(baaz: baaz,
+-         quux: quux)
+- }()
++ lazy var bar = Bar(baaz: baaz,
++                    quux: quux)
 ```
 
 </details>
@@ -1194,14 +1346,30 @@ Remove redundant type from variable declarations.
 
 Option | Description
 --- | ---
-`--redundanttype` | Keep "inferred" (default) or "explicit" type annotation
+`--redundanttype` | "inferred", "explicit", or "infer-locals-only" (default)
 
 <details>
 <summary>Examples</summary>
 
 ```diff
+// inferred
 - let view: UIView = UIView()
 + let view = UIView()
+
+// explicit
+- let view: UIView = UIView()
++ let view: UIView = .init()
+
+// infer-locals-only
+  class Foo {
+-     let view: UIView = UIView()
++     let view: UIView = .init()
+
+      func method() {
+-         let view: UIView = UIView()
++         let view = UIView()
+      }
+  }
 ```
 
 </details>
@@ -1210,6 +1378,10 @@ Option | Description
 ## redundantVoidReturnType
 
 Remove explicit `Void` return type.
+
+Option | Description
+--- | ---
+`--closurevoid` | Closure void returns: "remove" (default) or "preserve"
 
 <details>
 <summary>Examples</summary>
@@ -1253,6 +1425,57 @@ Option | Description
 // semicolon is not removed if it would affect the behavior of the code
 return;
 goto(fail)
+```
+
+</details>
+<br/>
+
+## sortDeclarations
+
+Sorts the body of declarations with // swiftformat:sort
+and declarations between // swiftformat:sort:begin and
+// swiftformat:sort:end comments.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  // swiftformat:sort
+  enum FeatureFlags {
+-     case upsellB
+-     case fooFeature
+-     case barFeature
+-     case upsellA(
+-         fooConfiguration: Foo,
+-         barConfiguration: Bar)
++     case barFeature
++     case fooFeature
++     case upsellA
++         fooConfiguration: Foo,
++         barConfiguration: Bar)
++     case upsellB
+  }
+
+  enum FeatureFlags {
+      // swiftformat:sort:begin
+-     case upsellB
+-     case fooFeature
+-     case barFeature
+-     case upsellA(
+-         fooConfiguration: Foo,
+-         barConfiguration: Bar)
++     case barFeature
++     case fooFeature
++     case upsellA
++         fooConfiguration: Foo,
++         barConfiguration: Bar)
++     case upsellB
+      // swiftformat:sort:end
+
+      var anUnsortedProperty: Foo {
+          Foo()
+      }
+  }
 ```
 
 </details>
@@ -1749,6 +1972,7 @@ Option | Description
 `--maxwidth` | Maximum length of a line before wrapping. defaults to "none"
 `--nowrapoperators` | Comma-delimited list of operators that shouldn't be wrapped
 `--assetliterals` | Color/image literal width. "actual-width" or "visual-width"
+`--wrapternary` | Wrap ternary operators: "default", "before-operators"
 
 ## wrapArguments
 
@@ -1762,6 +1986,7 @@ Option | Description
 `--closingparen` | Closing paren position: "balanced" (default) or "same-line"
 `--wrapreturntype` | Wrap return type: "if-multiline", "preserve" (default)
 `--wrapconditions` | Wrap conditions: "before-first", "after-first", "preserve"
+`--wraptypealiases` | Wrap typealiases: "before-first", "after-first", "preserve"
 
 <details>
 <summary>Examples</summary>
@@ -1871,6 +2096,30 @@ Option | Description
 - enum Foo { }
 
 + @objc enum Foo {}
+```
+
+</details>
+<br/>
+
+## wrapConditionalBodies
+
+Wrap the bodies of inline conditional statements onto a new line.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- guard let foo = bar else { return baz }
++ guard let foo = bar else {
++     return baz
++ }
+```
+
+```diff
+- if foo { return bar }
++ if foo {
++    return bar
++ }
 ```
 
 </details>

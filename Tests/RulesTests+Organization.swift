@@ -290,7 +290,7 @@ class OrganizationTests: RulesTests {
         testFormatting(
             for: input, output,
             rule: FormatRules.organizeDeclarations,
-            exclude: ["blankLinesAtEndOfScope", "redundantType"]
+            exclude: ["blankLinesAtEndOfScope", "redundantType", "redundantClosure"]
         )
     }
 
@@ -1160,7 +1160,7 @@ class OrganizationTests: RulesTests {
         }
         """
 
-        testFormatting(for: input, rule: FormatRules.organizeDeclarations)
+        testFormatting(for: input, rule: FormatRules.organizeDeclarations, exclude: ["redundantClosure"])
     }
 
     func testFuncWithNestedInitNotTreatedAsLifecycle() {
@@ -1218,6 +1218,115 @@ class OrganizationTests: RulesTests {
 
         testFormatting(for: input, output, rule: FormatRules.organizeDeclarations,
                        exclude: ["blankLinesAtStartOfScope"])
+    }
+
+    func testOrganizeClassDeclarationsIntoCategoriesWithNoBlankLineAfterMark() {
+        let input = """
+        class Foo {
+            private func privateMethod() {}
+
+            private let bar = 1
+            public let baz = 1
+            open var quack = 2
+            var quux = 2
+
+            init() {}
+
+            /// Doc comment
+            public func publicMethod() {}
+        }
+        """
+
+        let output = """
+        class Foo {
+
+            // MARK: Lifecycle
+            init() {}
+
+            // MARK: Open
+            open var quack = 2
+
+            // MARK: Public
+            public let baz = 1
+
+            /// Doc comment
+            public func publicMethod() {}
+
+            // MARK: Internal
+            var quux = 2
+
+            // MARK: Private
+            private let bar = 1
+
+            private func privateMethod() {}
+
+        }
+        """
+        let options = FormatOptions(lineAfterMarks: false)
+        testFormatting(
+            for: input, output,
+            rule: FormatRules.organizeDeclarations,
+            options: options,
+            exclude: ["blankLinesAtStartOfScope", "blankLinesAtEndOfScope"]
+        )
+    }
+
+    func testOrganizeWithNoCategoryMarks_noSpacesBetweenDeclarations() {
+        let input = """
+        class Foo {
+            private func privateMethod() {}
+            private let bar = 1
+            public let baz = 1
+        }
+        """
+
+        let output = """
+        class Foo {
+            public let baz = 1
+
+            private let bar = 1
+
+            private func privateMethod() {}
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: FormatRules.organizeDeclarations,
+            options: FormatOptions(markCategories: false)
+        )
+    }
+
+    func testOrganizeWithNoCategoryMarks_withSpacesBetweenDeclarations() {
+        let input = """
+        class Foo {
+            private func privateMethod() {}
+
+            private let bar = 1
+
+            public let baz = 1
+
+            private func anotherPrivateMethod() {}
+        }
+        """
+
+        let output = """
+        class Foo {
+            public let baz = 1
+
+            private let bar = 1
+
+            private func privateMethod() {}
+
+            private func anotherPrivateMethod() {}
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: FormatRules.organizeDeclarations,
+            options: FormatOptions(markCategories: false)
+        )
     }
 
     // MARK: extensionAccessControl .onDeclarations
@@ -2302,6 +2411,31 @@ class OrganizationTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.markTypes)
     }
 
+    func testAddsMarkBeforeTypesWithNoBlankLineAfterMark() {
+        let input = """
+        struct Foo {}
+        class Bar {}
+        enum Baz {}
+        protocol Quux {}
+        """
+
+        let output = """
+        // MARK: - Foo
+        struct Foo {}
+
+        // MARK: - Bar
+        class Bar {}
+
+        // MARK: - Baz
+        enum Baz {}
+
+        // MARK: - Quux
+        protocol Quux {}
+        """
+        let options = FormatOptions(lineAfterMarks: false)
+        testFormatting(for: input, output, rule: FormatRules.markTypes, options: options)
+    }
+
     // MARK: - sortedImports
 
     func testSortedImportsSimpleCase() {
@@ -2718,6 +2852,12 @@ class OrganizationTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.modifierOrder)
     }
 
+    func testUnownedUnsafeModifierNotMangled() {
+        let input = "unowned(unsafe) lazy var foo"
+        let output = "lazy unowned(unsafe) var foo"
+        testFormatting(for: input, output, rule: FormatRules.modifierOrder)
+    }
+
     func testPrivateRequiredStaticFuncModifiers() {
         let input = "required static private func foo()"
         let output = "private required static func foo()"
@@ -2770,5 +2910,338 @@ class OrganizationTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.modifierOrder)
+    }
+
+    // MARK: - sortDeclarations
+
+    func testSortEnumBody() {
+        let input = """
+        // swiftformat:sort
+        enum FeatureFlags {
+            case upsellB
+            case fooFeature(
+                fooConfiguration: Foo,
+                barConfiguration: Bar
+            )
+            case barFeature // Trailing comment -- bar feature
+            // Leading comment -- upsell A
+            case upsellA(
+                fooConfiguration: Foo,
+                barConfiguration: Bar
+            )
+        }
+
+        enum NextType {
+            case foo
+            case bar
+        }
+        """
+
+        let output = """
+        // swiftformat:sort
+        enum FeatureFlags {
+            case barFeature // Trailing comment -- bar feature
+            case fooFeature(
+                fooConfiguration: Foo,
+                barConfiguration: Bar
+            )
+            // Leading comment -- upsell A
+            case upsellA(
+                fooConfiguration: Foo,
+                barConfiguration: Bar
+            )
+            case upsellB
+        }
+
+        enum NextType {
+            case foo
+            case bar
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.sortDeclarations)
+    }
+
+    func testSortEnumBodyWithOnlyOneCase() {
+        let input = """
+        // swiftformat:sort
+        enum FeatureFlags {
+            case upsellB
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.sortDeclarations)
+    }
+
+    func testSortEnumBodyWithoutCase() {
+        let input = """
+        // swiftformat:sort
+        enum FeatureFlags {}
+        """
+
+        testFormatting(for: input, rule: FormatRules.sortDeclarations)
+    }
+
+    func testNoSortUnannotatedType() {
+        let input = """
+        enum FeatureFlags {
+            case upsellB
+            case fooFeature
+            case barFeature
+            case upsellA
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.sortDeclarations)
+    }
+
+    func testPreservesSortedBody() {
+        let input = """
+        // swiftformat:sort
+        enum FeatureFlags {
+            case barFeature
+            case fooFeature
+            case upsellA
+            case upsellB
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.sortDeclarations)
+    }
+
+    func testTypeBodyWithBlankLines() {
+        let input = """
+        // swiftformat:sort
+        enum FeatureFlags {
+
+            case upsellB
+
+            case fooFeature
+
+            case barFeature
+
+            case upsellA
+
+        }
+        """
+
+        let output = """
+        // swiftformat:sort
+        enum FeatureFlags {
+
+            case barFeature
+
+            case fooFeature
+
+            case upsellA
+
+            case upsellB
+
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.sortDeclarations, exclude: ["blankLinesAtStartOfScope", "blankLinesAtEndOfScope"])
+    }
+
+    func testSortClassWithMixedDeclarationTypes() {
+        let input = """
+        // swiftformat:sort
+        class Foo {
+            let quuxProperty = Quux()
+            let barProperty = Bar()
+
+            var fooComputedProperty: Foo {
+                Foo()
+            }
+
+            func baazFunction() -> Baaz {
+                Baaz()
+            }
+        }
+        """
+
+        let output = """
+        // swiftformat:sort
+        class Foo {
+            func baazFunction() -> Baaz {
+                Baaz()
+            }
+            let barProperty = Bar()
+
+            var fooComputedProperty: Foo {
+                Foo()
+            }
+
+            let quuxProperty = Quux()
+        }
+        """
+
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.sortDeclarations, FormatRules.consecutiveBlankLines],
+                       exclude: ["blankLinesBetweenScopes"])
+    }
+
+    func testSortBetweenDirectiveCommentsInType() {
+        let input = """
+        enum FeatureFlags {
+            // swiftformat:sort:begin
+            case upsellB
+            case fooFeature
+            case barFeature
+            case upsellA
+            // swiftformat:sort:end
+
+            var anUnsortedProperty: Foo {
+                Foo()
+            }
+        }
+        """
+
+        let output = """
+        enum FeatureFlags {
+            // swiftformat:sort:begin
+            case barFeature
+            case fooFeature
+            case upsellA
+            case upsellB
+            // swiftformat:sort:end
+
+            var anUnsortedProperty: Foo {
+                Foo()
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.sortDeclarations)
+    }
+
+    func testSortTopLevelDeclarations() {
+        let input = """
+        let anUnsortedGlobal = 0
+
+        // swiftformat:sort:begin
+        let sortThisGlobal = 1
+        public let thisGlobalIsSorted = 2
+        private let anotherSortedGlobal = 5
+        let sortAllOfThem = 8
+        // swiftformat:sort:end
+
+        let anotherUnsortedGlobal = 9
+        """
+
+        let output = """
+        let anUnsortedGlobal = 0
+
+        // swiftformat:sort:begin
+        private let anotherSortedGlobal = 5
+        let sortAllOfThem = 8
+        let sortThisGlobal = 1
+        public let thisGlobalIsSorted = 2
+        // swiftformat:sort:end
+
+        let anotherUnsortedGlobal = 9
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.sortDeclarations)
+    }
+
+    func testDoesntConflictWithOrganizeDeclarations() {
+        let input = """
+        // swiftformat:sort
+        enum FeatureFlags {
+            case barFeature
+            case fooFeature
+            case upsellA
+            case upsellB
+
+            // MARK: Internal
+
+            var anUnsortedProperty: Foo {
+                Foo()
+            }
+
+            var unsortedProperty: Foo {
+                Foo()
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.organizeDeclarations)
+    }
+
+    func testSortsWithinOrganizeDeclarations() {
+        let input = """
+        // swiftformat:sort
+        enum FeatureFlags {
+            case fooFeature
+            case barFeature
+            case upsellB
+            case upsellA
+
+            // MARK: Internal
+
+            var sortedProperty: Foo {
+                Foo()
+            }
+
+            var aSortedProperty: Foo {
+                Foo()
+            }
+        }
+        """
+
+        let output = """
+        // swiftformat:sort
+        enum FeatureFlags {
+            case barFeature
+            case fooFeature
+            case upsellA
+
+            case upsellB
+
+            // MARK: Internal
+
+            var aSortedProperty: Foo {
+                Foo()
+            }
+
+            var sortedProperty: Foo {
+                Foo()
+            }
+
+        }
+        """
+
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.organizeDeclarations, FormatRules.blankLinesBetweenScopes],
+                       exclude: ["blankLinesAtEndOfScope"])
+    }
+
+    func testSortDeclarationsUsesLocalizedCompare() {
+        let input = """
+        // swiftformat:sort
+        enum FeatureFlags {
+            case upsella
+            case upsellA
+            case upsellb
+            case upsellB
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.sortDeclarations)
+    }
+
+    func testOrganizeDeclarationsSortUsesLocalizedCompare() {
+        let input = """
+        // swiftformat:sort
+        enum FeatureFlags {
+            case upsella
+            case upsellA
+            case upsellb
+            case upsellB
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.organizeDeclarations)
     }
 }

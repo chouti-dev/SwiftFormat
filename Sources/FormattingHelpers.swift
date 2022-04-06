@@ -26,13 +26,25 @@ extension Formatter {
         else {
             return false
         }
-        if let scopeStart = index(of: .startOfScope, before: i),
-           tokens[scopeStart] == .startOfScope("("),
-           case let .identifier(fn)? = last(.nonSpaceOrCommentOrLinebreak, before: scopeStart),
-           options.selfRequired.contains(fn) ||
-           fn == "expect" // Special case to support autoclosure arguments in the Nimble framework
-        {
-            return false
+        var index = i
+        loop: while let scopeStart = self.index(of: .startOfScope, before: index) {
+            switch tokens[scopeStart] {
+            case .startOfScope("["):
+                break
+            case .startOfScope("("):
+                if case let .identifier(fn)? = last(.nonSpaceOrCommentOrLinebreak, before: scopeStart),
+                   options.selfRequired.contains(fn) ||
+                   fn == "expect" // Special case to support autoclosure arguments in the Nimble framework
+                {
+                    return false
+                }
+            case let token:
+                if token.isStringDelimiter {
+                    break
+                }
+                break loop
+            }
+            index = scopeStart
         }
         removeTokens(in: i ..< nextIndex)
         return true
@@ -48,7 +60,17 @@ extension Formatter {
         var locals = Set<String>()
         while let token = token(at: index) {
             outer: switch token {
-            case .identifier where last(.nonSpace, before: index)?.isOperator == false:
+            case let .identifier(name) where last(.nonSpace, before: index)?.isOperator == false:
+                if name == "self", removeSelf, isEnabled, let nextIndex = self.index(
+                    of: .nonSpaceOrCommentOrLinebreak,
+                    after: index, if: { $0 == .operator(".", .infix) }
+                ), case .identifier? = next(
+                    .nonSpaceOrComment,
+                    after: nextIndex
+                ) {
+                    _ = self.removeSelf(at: index, exclude: names.union(locals))
+                    break
+                }
                 switch next(.nonSpaceOrCommentOrLinebreak, after: index) {
                 case .delimiter(":")? where !scopeIndexStack.isEmpty, .operator(".", _)?:
                     break outer
@@ -97,8 +119,11 @@ extension Formatter {
                         fallthrough
                     case .number, .identifier:
                         index = max(index, nextIndex)
-                        if nextToken(after: index, where: {
-                            $0 == .delimiter(",") || $0.isOperator(ofType: .infix)
+                        if next(.nonSpaceOrCommentOrLinebreak, after: index, if: {
+                            $0.isOperator(ofType: .infix) || $0.isOperator(ofType: .postfix) || [
+                                .keyword("is"), .keyword("as"), .delimiter(","),
+                                .startOfScope("["), .startOfScope("("),
+                            ].contains($0)
                         }) == nil {
                             names.formUnion(locals)
                             return
@@ -605,6 +630,184 @@ extension Formatter {
                 }
             }
         }
+
+        /// Wraps / re-wraps a multi-line statement where each delimiter index
+        /// should be the first token on its line, if the statement
+        /// is longer than the max width or there is already a linebreak
+        /// adjacent to one of the delimiters
+        @discardableResult
+        func wrapMultilineStatement(
+            startIndex: Int,
+            delimiterIndices: [Int],
+            endIndex: Int
+        ) -> Bool {
+            // ** Decide whether or not this statement needs to be wrapped / re-wrapped
+            let range = startOfLine(at: startIndex) ... endIndex
+            let length = tokens[range].map { $0.string }.joined().count
+
+            // Only wrap if this line if longer than the max width...
+            let overMaximumWidth = maxWidth > 0 && length > maxWidth
+
+            // ... or if there is at least one delimiter currently adjacent to a linebreak,
+            // which means this statement is already being wrapped in some way
+            // and should be re-wrapped to the expected way if necessary
+            let delimitersAdjacentToLinebreak = delimiterIndices.filter { delimiterIndex in
+                last(.nonSpaceOrComment, before: delimiterIndex)?.is(.linebreak) == true
+                    || next(.nonSpaceOrComment, after: delimiterIndex)?.is(.linebreak) == true
+            }.count
+
+            if !(overMaximumWidth || delimitersAdjacentToLinebreak > 0) {
+                return false
+            }
+
+            // ** Now that we know this is supposed to wrap,
+            //    make sure each delimiter is the start of a line
+            let indent = indentForLine(at: startIndex) + options.indent
+
+            for indexToWrap in delimiterIndices.reversed() {
+                // if this item isn't already on its own line, then wrap it
+                if last(.nonSpaceOrComment, before: indexToWrap)?.is(.linebreak) == false {
+                    // Remove the space immediately before this token if present,
+                    // so it isn't orphaned on the previous line once we wrap
+                    if tokens[indexToWrap - 1].isSpace {
+                        removeToken(at: indexToWrap - 1)
+                    }
+
+                    insertSpace(indent, at: indexToWrap - 1)
+                    insertLinebreak(at: indexToWrap - 1)
+
+                    // While we're here, make sure there's exactly one space after the delimiter
+                    let updatedAndIndex = indexToWrap + 1
+                    if let nextExpressionIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: updatedAndIndex) {
+                        replaceTokens(
+                            in: (updatedAndIndex + 1) ..< nextExpressionIndex,
+                            with: .space(" ")
+                        )
+                    }
+                }
+            }
+
+            return true
+        }
+
+        // -- wraptypealiases
+        forEach(.keyword("typealias")) { typealiasIndex, _ in
+            guard
+                options.wrapTypealiases == .beforeFirst || options.wrapTypealiases == .afterFirst,
+                let equalsIndex = index(of: .operator("=", .infix), after: typealiasIndex),
+                // Any type can follow the equals index of a typealias,
+                // but we're specifically looking to wrap lengthy composite protocols.
+                //  - Valid composite protocols are strictly _only_ identifiers
+                //    separated by `&` tokens. Protocols can't be generic,
+                //    so we know that this typealias can't be generic.
+                //  - `&` tokens in types are also _only valid_ for composite protocol types,
+                //    so if we see one then we know this if what we're looking for.
+                // https://docs.swift.org/swift-book/ReferenceManual/Types.html#grammar_protocol-composition-type
+                let firstIdentifierIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: equalsIndex),
+                tokens[firstIdentifierIndex].isIdentifier,
+                let firstAndIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: firstIdentifierIndex),
+                tokens[firstAndIndex] == .operator("&", .infix)
+            else { return }
+
+            // Parse through to the end of the composite protocol type
+            // so we know how long it is (and where the &s are)
+            var lastIdentifierIndex = firstIdentifierIndex
+            var andTokenIndices = [Int]()
+
+            while
+                let nextAndIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: lastIdentifierIndex),
+                tokens[nextAndIndex] == .operator("&", .infix),
+                let nextIdentifierIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: nextAndIndex),
+                tokens[nextIdentifierIndex].isIdentifier
+            {
+                andTokenIndices.append(nextAndIndex)
+                lastIdentifierIndex = nextIdentifierIndex
+            }
+
+            // Decide which indices to wrap at
+            //  - We always wrap at each `&`
+            //  - For `beforeFirst`, we also wrap before the `=`
+            let wrapIndices: [Int]
+            switch options.wrapTypealiases {
+            case .afterFirst:
+                wrapIndices = andTokenIndices
+            case .beforeFirst:
+                wrapIndices = [equalsIndex] + andTokenIndices
+            case .default, .disabled, .preserve:
+                return
+            }
+
+            let didWrap = wrapMultilineStatement(
+                startIndex: typealiasIndex,
+                delimiterIndices: wrapIndices,
+                endIndex: lastIdentifierIndex
+            )
+
+            guard didWrap else { return }
+
+            // If we're using `afterFirst` and there was unexpectedly a linebreak
+            // between the `typealias` and the `=`, we need to remove it
+            let rangeBetweenTypealiasAndEquals = (typealiasIndex + 1) ..< equalsIndex
+            if options.wrapTypealiases == .afterFirst,
+               let linebreakIndex = rangeBetweenTypealiasAndEquals.first(where: { tokens[$0].isLinebreak })
+            {
+                removeToken(at: linebreakIndex)
+                if tokens[linebreakIndex].isSpace, tokens[linebreakIndex] != .space(" ") {
+                    replaceToken(at: linebreakIndex, with: .space(" "))
+                }
+            }
+        }
+
+        // --wrapternary
+        forEach(.operator("?", .infix)) { conditionIndex, _ in
+            guard
+                options.wrapTernaryOperators != .default,
+                let expressionStartIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: conditionIndex)
+            else { return }
+
+            // Find the : operator that separates the true and false branches
+            // of this ternary operator
+            //  - You can have nested ternary operators, so the immediate-next colon
+            //    is not necessarily the colon of _this_ ternary operator.
+            //  - To track nested ternary operators, we maintain a count of
+            //    the unterminated `?` tokens that we've seen.
+            //  - This ternary's colon token is the first colon we find
+            //    where there isn't an unterminated `?`.
+            var unterimatedTernaryCount = 0
+            var currentIndex = conditionIndex + 1
+            var foundColonIndex: Int?
+
+            while
+                foundColonIndex == nil,
+                currentIndex < tokens.count
+            {
+                switch tokens[currentIndex] {
+                case .operator("?", .infix):
+                    unterimatedTernaryCount += 1
+                case .operator(":", .infix):
+                    if unterimatedTernaryCount == 0 {
+                        foundColonIndex = currentIndex
+                    } else {
+                        unterimatedTernaryCount -= 1
+                    }
+                default:
+                    break
+                }
+
+                currentIndex += 1
+            }
+
+            guard
+                let colonIndex = foundColonIndex,
+                let endOfElseExpression = endOfExpression(at: colonIndex, upTo: [])
+            else { return }
+
+            wrapMultilineStatement(
+                startIndex: expressionStartIndex,
+                delimiterIndices: [conditionIndex, colonIndex],
+                endIndex: endOfElseExpression
+            )
+        }
     }
 
     func removeParen(at index: Int) {
@@ -909,7 +1112,7 @@ extension Formatter {
             }
 
             // Enum cases don't fit into any of the other categories,
-            // so they should go in the intial top section.
+            // so they should go in the initial top section.
             //  - The user can also provide other declaration types to place in this category
             if keyword == "case" || options.beforeMarks.contains(keyword) {
                 return .beforeMarks
@@ -1083,7 +1286,7 @@ extension Formatter {
             searchIndex -= 1
         }
 
-        // Make sure there are atleast two newlines,
+        // Make sure there are at least two newlines,
         // so we get a blank line between individual declaration types
         while numberOfTrailingLinebreaks < 2 {
             parser.insertLinebreak(at: parser.tokens.count)
@@ -1229,6 +1432,12 @@ extension Formatter {
             (declaration: $0, category: category(of: $0), type: type(of: $0))
         }
 
+        // If this type has a leading :sort directive, we sort alphabetically
+        // within the subcategories (where ordering is otherwise undefined)
+        let sortAlphabeticallyWithinSubcategories = typeDeclaration.open.contains(where: {
+            $0.isComment && $0.string.contains("swiftformat:sort") && !$0.string.contains(":sort:")
+        })
+
         /// Sorts the given categoried declarations based on their derived metadata
         func sortDeclarations(
             _ declarations: CategorizedDeclarations,
@@ -1260,6 +1469,16 @@ extension Formatter {
                        lhsTypeSortOrder != rhsTypeSortOrder
                     {
                         return lhsTypeSortOrder < rhsTypeSortOrder
+                    }
+
+                    // If this type had a :sort directive, we sort alphabetically
+                    // within the subcategories (where ordering is otherwise undefined)
+                    if sortAlphabeticallyWithinSubcategories,
+                       let lhsName = lhs.declaration.name,
+                       let rhsName = rhs.declaration.name,
+                       lhsName != rhsName
+                    {
+                        return lhsName.localizedCompare(rhsName) == .orderedAscending
                     }
 
                     // Respect the original declaration ordering when the categories and types are the same
@@ -1314,7 +1533,7 @@ extension Formatter {
 
             // Whether or not the two given declaration orderings preserve
             // the same synthesized memberwise initializer
-            func preservesSynthesizedMemberwiseInitiaizer(
+            func preservesSynthesizedMemberwiseInitializer(
                 _ lhs: CategorizedDeclarations,
                 _ rhs: CategorizedDeclarations
             ) -> Bool {
@@ -1329,7 +1548,7 @@ extension Formatter {
                 return lhsPropertiesOrder == rhsPropertiesOrder
             }
 
-            if !preservesSynthesizedMemberwiseInitiaizer(categorizedDeclarations, sortedDeclarations) {
+            if !preservesSynthesizedMemberwiseInitializer(categorizedDeclarations, sortedDeclarations) {
                 // If sorting by category and by type could cause compilation failures
                 // by not correctly preserving the synthesized memberwise initializer,
                 // try to sort _only_ by category (so we can try to preserve the correct category separators)
@@ -1337,7 +1556,7 @@ extension Formatter {
 
                 // If sorting _only_ by category still changes the synthesized memberwise initializer,
                 // then there's nothing we can do to organize this struct.
-                if !preservesSynthesizedMemberwiseInitiaizer(categorizedDeclarations, sortedDeclarations) {
+                if !preservesSynthesizedMemberwiseInitializer(categorizedDeclarations, sortedDeclarations) {
                     return typeDeclaration
                 }
             }
@@ -1354,14 +1573,16 @@ extension Formatter {
             else { continue }
 
             // Build the MARK declaration, but only when there is more than one category present.
-            if numberOfCategories > 1,
+            if options.markCategories,
+               numberOfCategories > 1,
                let markComment = category.markComment(from: options.categoryMarkComment)
             {
                 let firstDeclaration = sortedDeclarations[indexOfFirstDeclaration].declaration
                 let declarationParser = Formatter(firstDeclaration.tokens)
                 let indentation = declarationParser.indentForLine(at: 0)
 
-                let markDeclaration = tokenize("\(indentation)\(markComment)\n\n")
+                let endMarkDeclaration = options.lineAfterMarks ? "\n\n" : "\n"
+                let markDeclaration = tokenize("\(indentation)\(markComment)\(endMarkDeclaration)")
 
                 sortedDeclarations.insert(
                     (.declaration(kind: "comment", tokens: markDeclaration), category, nil),

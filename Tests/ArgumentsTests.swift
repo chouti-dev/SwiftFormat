@@ -690,8 +690,19 @@ class ArgumentsTests: XCTestCase {
     }
 
     func testParseModifierOrderOption() throws {
-        let options = try Options(["modifierorder": "private(set),public"], in: "")
-        XCTAssertEqual(options.formatOptions?.modifierOrder, ["private(set)", "public"])
+        let options = try Options(["modifierorder": "private(set),public,unowned"], in: "")
+        XCTAssertEqual(options.formatOptions?.modifierOrder, ["private(set)", "public", "unowned"])
+    }
+
+    func testParseParameterizedModifierOrderOption() throws {
+        let options = try Options(["modifierorder": "unowned(unsafe),unowned(safe)"], in: "")
+        XCTAssertEqual(options.formatOptions?.modifierOrder, ["unowned(unsafe)", "unowned(safe)"])
+    }
+
+    func testParseInvalidModifierOrderOption() throws {
+        XCTAssertThrowsError(try Options(["modifierorder": "unknowned"], in: "")) { error in
+            XCTAssertEqual("\(error)", "'unknowned' is not a valid modifier (did you mean 'unowned'?) in --modifierorder")
+        }
     }
 
     func testParseSpecifierOrderOption() throws {
@@ -709,6 +720,13 @@ class ArgumentsTests: XCTestCase {
     func testParseRulesCaseInsensitive() throws {
         let rules = try parseRules("strongoutlets")
         XCTAssertEqual(rules, ["strongOutlets"])
+    }
+
+    func testParseAllRule() throws {
+        let rules = try parseRules("all")
+        XCTAssertEqual(rules, FormatRules.all.compactMap {
+            $0.isDeprecated ? nil : $0.name
+        })
     }
 
     func testParseInvalidRuleThrows() {

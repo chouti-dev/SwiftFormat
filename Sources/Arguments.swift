@@ -214,16 +214,15 @@ func parseCommaDelimitedList(_ string: String) -> [String] {
 // Parse a comma-delimited string into an array of rules
 let allRules = Set(FormatRules.byName.keys)
 func parseRules(_ rules: String) throws -> [String] {
-    return try parseCommaDelimitedList(rules).map { proposedName in
-        if let name = allRules.first(where: {
-            $0.lowercased() == proposedName.lowercased()
-        }) {
-            return name
+    return try parseCommaDelimitedList(rules).flatMap { proposedName -> [String] in
+        let lowercaseName = proposedName.lowercased()
+        if let name = allRules.first(where: { $0.lowercased() == lowercaseName }) {
+            return [name]
+        } else if lowercaseName == "all" {
+            return FormatRules.all.compactMap { $0.isDeprecated ? nil : $0.name }
         }
-        if Descriptors.all.contains(where: {
-            $0.argumentName == proposedName
-        }) {
-            for rule in FormatRules.all where rule.options.contains(proposedName) {
+        if Descriptors.all.contains(where: { $0.argumentName == lowercaseName }) {
+            for rule in FormatRules.all where rule.options.contains(lowercaseName) {
                 throw FormatError.options(
                     "'\(proposedName)' is not a formatting rule. Did you mean '\(rule.name)'?"
                 )
@@ -482,11 +481,6 @@ func argumentsFor(_ options: Options, excludingDefaults: Bool = false) -> [Strin
             }
             args[descriptor.argumentName] = value
         }
-        // Special case for wrapParameters
-        let argumentName = Descriptors.wrapParameters.argumentName
-        if args[argumentName] == WrapMode.default.rawValue {
-            args[argumentName] = args[Descriptors.wrapArguments.argumentName]
-        }
     }
     if options.lint {
         args["lint"] = ""
@@ -541,11 +535,11 @@ public func rulesFor(_ args: [String: String], lint: Bool) throws -> Set<String>
     rules = try args["rules"].map {
         try Set(parseRules($0))
     } ?? rules.subtracting(FormatRules.disabledByDefault)
-    try args["enable"].map {
-        try rules.formUnion(parseRules($0))
-    }
     try args["disable"].map {
         try rules.subtract(parseRules($0))
+    }
+    try args["enable"].map {
+        try rules.formUnion(parseRules($0))
     }
     try args["lintonly"].map { rulesString in
         if lint {
@@ -633,10 +627,9 @@ func warningsForArguments(_ args: [String: String]) -> [String] {
                     return false
                 }
                 return rule.options.contains(arg) || rule.sharedOptions.contains(arg)
-            }) {
-                let expected = FormatRules.all.first(where: {
-                    $0.options.contains(arg)
-                })?.name ?? "associated"
+            }), let expected = FormatRules.all.first(where: {
+                $0.options.contains(arg)
+            })?.name {
                 warnings.append("--\(arg) option has no effect when \(expected) rule is disabled")
             }
         }

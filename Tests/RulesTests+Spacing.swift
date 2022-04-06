@@ -58,6 +58,24 @@ class SpacingTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
     }
 
+    func testSpaceBetweenParenAndAny() {
+        let input = "func any ()"
+        let output = "func any()"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
+    func testSpaceBetweenParenAndAnyType() {
+        let input = "let foo: any(A & B).Type"
+        let output = "let foo: any (A & B).Type"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
+    func testSpaceBetweenParenAndSomeType() {
+        let input = "func foo() -> some(A & B).Type"
+        let output = "func foo() -> some (A & B).Type"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
     func testNoSpaceBetweenParenAndInit() {
         let input = "init ()"
         let output = "init()"
@@ -119,13 +137,13 @@ class SpacingTests: RulesTests {
     func testAddSpaceBetweenCaptureListAndArguments2() {
         let input = "{ [weak self]() -> Void in }"
         let output = "{ [weak self] () -> Void in }"
-        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens, exclude: ["redundantVoidReturnType"])
     }
 
     func testAddSpaceBetweenCaptureListAndArguments3() {
         let input = "{ [weak self]() throws -> Void in }"
         let output = "{ [weak self] () throws -> Void in }"
-        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens, exclude: ["redundantVoidReturnType"])
     }
 
     func testAddSpaceBetweenCaptureListAndArguments4() {
@@ -149,7 +167,7 @@ class SpacingTests: RulesTests {
     func testAddSpaceBetweenCaptureListAndArguments7() {
         let input = "Foo<Bar>(0) { [weak self]() -> Void in }"
         let output = "Foo<Bar>(0) { [weak self] () -> Void in }"
-        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens, exclude: ["redundantVoidReturnType"])
     }
 
     func testSpaceBetweenClosingParenAndOpenBrace() {
@@ -161,12 +179,13 @@ class SpacingTests: RulesTests {
     func testNoSpaceBetweenClosingBraceAndParens() {
         let input = "{ block } ()"
         let output = "{ block }()"
-        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens, exclude: ["redundantClosure"])
     }
 
     func testDontRemoveSpaceBetweenOpeningBraceAndParens() {
         let input = "a = (b + c)"
-        testFormatting(for: input, rule: FormatRules.spaceAroundParens)
+        testFormatting(for: input, rule: FormatRules.spaceAroundParens,
+                       exclude: ["redundantParens"])
     }
 
     func testKeywordAsIdentifierParensSpacing() {
@@ -344,12 +363,14 @@ class SpacingTests: RulesTests {
     func testSpaceAroundTrailingClosure() {
         let input = "if x{ y }else{ z }"
         let output = "if x { y } else { z }"
-        testFormatting(for: input, output, rule: FormatRules.spaceAroundBraces)
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundBraces,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testNoSpaceAroundClosureInsiderParens() {
         let input = "foo({ $0 == 5 })"
-        testFormatting(for: input, rule: FormatRules.spaceAroundBraces, exclude: ["trailingClosures"])
+        testFormatting(for: input, rule: FormatRules.spaceAroundBraces,
+                       exclude: ["trailingClosures"])
     }
 
     func testNoExtraSpaceAroundBracesAtStartOrEndOfFile() {
@@ -557,8 +578,8 @@ class SpacingTests: RulesTests {
     }
 
     func testSpaceAtStartOfLine() {
-        let input = "foo\n    ,bar"
-        let output = "foo\n    , bar"
+        let input = "print(foo\n      ,bar)"
+        let output = "print(foo\n      , bar)"
         testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators,
                        exclude: ["leadingDelimiters"])
     }

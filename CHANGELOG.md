@@ -1,5 +1,99 @@
 # Change Log
 
+## [0.49.7](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.49.7) (2022-04-03)
+
+- Redundant `self` is now correctly removed in `if let` assignments
+- Fixed infinite recursion bug that would cause formatting to time out for some inputs
+- Lint failure now returns an error code when using stdin, matching behavior for file inputs
+- Fixed bug where parens were incorrectly removed around optional ranges
+- Updated `unusedParens` rule for new shorthand `if let` syntax in Swift 5.7
+- Updated indenting of function chains to match latest Xcode behavior
+- Fixed build error on macOS 10.11 and earlier
+
+## [0.49.6](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.49.6) (2022-03-15)
+
+- Fixed bug where `redundantParens` rule removed required parens in `any` type expressions
+- Fixed whitespace behavior around `some`/`any` keywords
+- Fixed crash when `// swiftformat:sort` was applied to an enum with only one case
+- SwiftFormat can now be built on Windows
+
+## [0.49.5](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.49.5) (2022-03-06)
+
+- Fixed bug where `redundantClosure` incorrectly inlined throwing closures
+- Fixed bug where in `--exclude` path matching failed when using `--stdinpath`
+- Fixed a bug with `typeSugar` rule when overriding stdlib types locally in your code
+- Multiline statement braces are now unwrapped if `wrapMultilineStatementBraces` disabled
+- Added `// swiftformat:sort` directive to sort declarations by name
+- You can now use `--disable all` or `--enable all` as shorthand for all rules
+- The rules in the `Rules.md` file are now grouped by their default/enabled status
+
+## [0.49.4](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.49.4) (2022-02-07)
+
+- Fixed creation date being modified on formatted files
+- Fixed case where a closure inside an if condition was mistaken for the body
+- Fixed `blockComments` rule removing leading `*`s used as bullet points
+- Fixed bug when parsing a raw string containing three consecutive unescaped quotes
+- Fixed spurious warning about unused `--wrapparameters` option
+- Fixed edge case when using `--allman` indenting
+
+## [0.49.3](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.49.3) (2022-01-26)
+
+- Fixed required `let` being removed inside View Builders
+- Fixed `blockComments` rule mangling code on next line after comment (really this time)
+- Fixed unsafe removal of `self` inside `if` statements containing postfix operators
+- Fixed `--selfrequired` behavior inside interpolated strings
+- Fixed indenting of labelled trailing closures
+
+## [0.49.2](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.49.2) (2022-01-16)
+
+- Fixed literal values being incorrectly removed by `redundantType` rule
+- Fixed `redundantSelf` rule removing `self` from shadowed variables after an `as`/`is` condition
+- Fixed bug where `redundantClosure` rule could break the build for certain `Void` closures
+- Fixed parsing error in function calls followed by a subscript
+- Fixed `blockComments` rule mangling code on next line after comment
+- The `redundantClosure` rule is no longer applied if closure calls a method that returns `Never`
+- Fixed meaningless warning for deprecated options
+
+## [0.49.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.49.1) (2021-12-09)
+
+- The `blockComments` rule now handles empty leading and trailing comment lines correctly
+- Fixed crash in `blockComments` rule
+- The `redundantType` rule now handles comma-delimited declarations correctly
+- Fixed spurious `self` removal when using `--self init-only` and `--swiftversion 5.4` or above
+- Added support for the `unowned(safe)` and `unowned(unsafe)` ownership modifiers
+- Fixed `wrapMultilineStatementBraces` error in SwiftFormat for Xcode app
+
+## [0.49.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.49.0) (2021-12-04)
+
+- The `redundantType` rule can now remove redundant types for properties initialized with literal values
+- The `redundantType` rule now removes types only for local variables by default (to aid compilation performance)
+- Added `assertionFailures` rule for automatically converting `assert(false, ...)` to `assertionFailure(...)`
+- Added `acronyms` rule to auto-capitalize acronyms (disabled by default)
+- Added `preferDouble` rule to replace `CGFloat` with `Double` on Swift 5.5 and above (disabled by default)
+- Added `wrapConditionalBodies` rule to unwrap single-line guard and if statements (disabled by default)
+- Added `blockComments` rule to replace multiline block comments with line comments (disabled by default)
+- Added `blankLinesBetweenImports` rule to remove blank lines between import statements (disabled by default)
+- Added `redundantClosure` rule to remove unnecessary closure wrappers
+- Added `--lineaftermarks` option to add/remove a blank line after `// MARK:` comments
+- Added `--markCategories` option for `organizeDeclarations` rule
+- Added `--wrapternary` option for controlling how ternary operators are wrapped
+- Added `--wraptypealiases` option for controlling how typealiases are wrapped
+- Added `--indentstrings` option for controlling how multiline strings are indented
+- Extended `redundantParens` rule to handle more cases
+- Extended `wrapMultilineStatementBraces` rule to handle more cases
+- Extended `redundantVoidReturnType` rule to apply to closure return values
+- Fixed bug where `consecutiveBlankLines` rule would strip linebreaks inside multiline string
+- Fixed bug with indenting of wrapped method chains when using `--xcodeindentation`
+- SwiftFormat for Xcode app binary is no longer hosted in source repository
+
+## [0.48.18](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.18) (2021-11-06)
+
+- Fixed `redundantObjc` bug where `private(set)` prevented `@objc` attribute from being stripped
+- Fixed indenting of wrapped member chains in or after `#if`/`#else`/`#endif` blocks
+- The `--selfrequired` exclusion list is now applied to nested expressions within function's arguments
+- Fixed parsing bug in `redundantSelf` rule that raised spurious error about missing `}`
+- Fixed bug where error is `--filelist` files were incorrectly reported
+
 ## [0.48.17](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.48.17) (2021-10-18)
 
 - Fixed bug where `trailingCommas` rule added comma to wrapped capture list with comment
@@ -814,9 +908,9 @@
 ## [0.37.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.37.0) (2018-12-17)
 
 - Added `isEmpty` rule, which converts instances of `if foo.count == 0 {}` to `if foo.isEmpty` (disabled by default)
-- Added `redundantLetError` rule, which removes `let error` from `catch let error {}` because it's implict
+- Added `redundantLetError` rule, which removes `let error` from `catch let error {}` because it's implicit
 - The `todos` rule now converts `/// MARK:` to `// MARK:`, as the former isn't recognized by Xcode
-- Fixed problem with the peformance tests target not building locally in Xcode 10.1
+- Fixed problem with the performance tests target not building locally in Xcode 10.1
 
 ## [0.36.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.36.0) (2018-12-15)
 
@@ -940,7 +1034,7 @@
 - Added `swiftformat:disable all` and `swiftformat:enable all` directives
 - Fixed a bug where redundant parens were not always removed correctly
 - Fixed errors when parsing custom operators such as `<>`, `|>` or `<<>>`
-- Fixed divide-by-zero crash when specifiying number groupings with a value of zero
+- Fixed divide-by-zero crash when specifying number groupings with a value of zero
 - Rules are now always applied in alphabetical order to ensure consistency
 - Fixed the `--conflictmarkers` command-line option
 
@@ -1117,7 +1211,7 @@
 ## [0.29.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.29.0) (2017-06-20)
 
 - Changed specifier order from `private(set) public` to `public private(set)`
-- Added `redundantInit` rule to remove explict `init` references where they aren't needed
+- Added `redundantInit` rule to remove explicit `init` references where they aren't needed
 - Fixed indentation of class declarations with protocols wrapped onto multiple lines
 
 ## [0.28.6](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.28.6) (2017-05-31)

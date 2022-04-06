@@ -169,12 +169,12 @@ class IndentTests: RulesTests {
 
     func testUnindentClosingParenAroundBraces() {
         let input = """
-        foo(success: {
+        quux(success: {
             self.bar()
                 })
         """
         let output = """
-        foo(success: {
+        quux(success: {
             self.bar()
         })
         """
@@ -204,14 +204,22 @@ class IndentTests: RulesTests {
 
     func testIndentClosureArguments() {
         let input = """
-        foo(bar: {
-                print(bar)
-            },
-            baz: {
-                print(baz)
-            })
+        quux(bar: {
+          print(bar)
+        },
+        baz: {
+          print(baz)
+        })
         """
-        testFormatting(for: input, rule: FormatRules.indent)
+        let output = """
+        quux(bar: {
+                 print(bar)
+             },
+             baz: {
+                 print(baz)
+             })
+        """
+        testFormatting(for: input, output, rule: FormatRules.indent)
     }
 
     func testIndentClosureArguments2() {
@@ -290,15 +298,13 @@ class IndentTests: RulesTests {
 
     func testIndentTrailingClosureArgumentsAfterFunction() {
         let input = """
-        var epoxyViewportLogger: EpoxyViewportLogger = {
-            EpoxyViewportLogger(
-                debounceInterval: 0.5,
-                viewportStartImpressionHandler: { [weak self] _, viewportLoggingContext in
-                    self?.viewportLoggingRegistry.logViewportSessionStart(with: viewportLoggingContext)
-                }) { [weak self] _, viewportLoggingContext in
-                    self?.viewportLoggingRegistry.logViewportSessionEnd(with: viewportLoggingContext)
-                }
-        }()
+        var epoxyViewportLogger = EpoxyViewportLogger(
+            debounceInterval: 0.5,
+            viewportStartImpressionHandler: { [weak self] _, viewportLoggingContext in
+                self?.viewportLoggingRegistry.logViewportSessionStart(with: viewportLoggingContext)
+            }) { [weak self] _, viewportLoggingContext in
+                self?.viewportLoggingRegistry.logViewportSessionEnd(with: viewportLoggingContext)
+            }
         """
         let options = FormatOptions(closingParenOnSameLine: true)
         testFormatting(for: input, rule: FormatRules.indent, options: options)
@@ -375,7 +381,8 @@ class IndentTests: RulesTests {
             return viewController
         }
         """
-        testFormatting(for: input, rule: FormatRules.indent)
+        testFormatting(for: input, rule: FormatRules.indent,
+                       exclude: ["braces", "wrapMultilineStatementBraces"])
     }
 
     func testIndentLineAfterIndentedInlineClosure() {
@@ -507,8 +514,34 @@ class IndentTests: RulesTests {
     }
 
     func testIndentMultilineSwitchCaseCommentsCorrectly() {
-        let input = "switch x {\n/*\n * comment\n */\ncase y:\nbreak\n/*\n * comment\n */\ndefault:\nbreak\n}"
-        let output = "switch x {\n/*\n * comment\n */\ncase y:\n    break\n/*\n * comment\n */\ndefault:\n    break\n}"
+        let input = """
+        switch x {
+        /*
+         * comment
+         */
+        case y:
+        break
+        /*
+         * comment
+         */
+        default:
+        break
+        }
+        """
+        let output = """
+        switch x {
+        /*
+         * comment
+         */
+        case y:
+            break
+        /*
+         * comment
+         */
+        default:
+            break
+        }
+        """
         testFormatting(for: input, output, rule: FormatRules.indent)
     }
 
@@ -543,7 +576,8 @@ class IndentTests: RulesTests {
     func testIndentGuardCase() {
         let input = "{\nguard case .Foo = error else {}\n}"
         let output = "{\n    guard case .Foo = error else {}\n}"
-        testFormatting(for: input, output, rule: FormatRules.indent)
+        testFormatting(for: input, output, rule: FormatRules.indent,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testIndentIfElse() {
@@ -1015,13 +1049,15 @@ class IndentTests: RulesTests {
 
     func testWrappedLineBeforeGuardElse() {
         let input = "guard let foo = bar\nelse { return }"
-        testFormatting(for: input, rule: FormatRules.indent)
+        testFormatting(for: input, rule: FormatRules.indent,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testWrappedLineAfterGuardElse() {
         // Don't indent because this case is handled by braces rule
         let input = "guard let foo = bar else\n{ return }"
-        testFormatting(for: input, rule: FormatRules.indent, exclude: ["elseOnSameLine"])
+        testFormatting(for: input, rule: FormatRules.indent,
+                       exclude: ["elseOnSameLine", "wrapConditionalBodies"])
     }
 
     func testWrappedLineAfterComment() {
@@ -1043,7 +1079,8 @@ class IndentTests: RulesTests {
                   let bar = bar else { break }
         }
         """
-        testFormatting(for: input, rule: FormatRules.indent, exclude: ["wrapMultilineStatementBraces"])
+        testFormatting(for: input, rule: FormatRules.indent,
+                       exclude: ["wrapMultilineStatementBraces", "wrapConditionalBodies"])
     }
 
     func testConsecutiveWraps() {
@@ -1142,8 +1179,32 @@ class IndentTests: RulesTests {
     }
 
     func testChainedClosureIndentsAfterIfCondition2() {
-        let input = "if foo {\nbar()\n.baz()\n}\n\nfoo\n.bar {\nbaz()\n}.bar {\nbaz()\n}"
-        let output = "if foo {\n    bar()\n        .baz()\n}\n\nfoo\n    .bar {\n        baz()\n    }.bar {\n        baz()\n    }"
+        let input = """
+        if foo {
+        bar()
+        .baz()
+        }
+
+        foo
+        .bar {
+        baz()
+        }.bar {
+        baz()
+        }
+        """
+        let output = """
+        if foo {
+            bar()
+                .baz()
+        }
+
+        foo
+            .bar {
+                baz()
+            }.bar {
+                baz()
+            }
+        """
         testFormatting(for: input, output, rule: FormatRules.indent)
     }
 
@@ -1195,14 +1256,8 @@ class IndentTests: RulesTests {
         })
         .buttonStyle(bar())
         """
-        let output = """
-        Button(action: {
-            print("foo")
-        })
-            .buttonStyle(bar())
-        """
         let options = FormatOptions(xcodeIndentation: true)
-        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 
     func testWrappedClosureIndentAfterAssignment() {
@@ -1299,7 +1354,14 @@ class IndentTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.indent)
     }
 
-    func testIndentEnumDictionaryKeysAndValues() {
+    func testIndentWrappedStringDictionaryKeysAndValues() {
+        let input = "[\n\"foo\":\n\"bar\",\n\"baz\":\n\"quux\",\n]"
+        let output = "[\n    \"foo\":\n        \"bar\",\n    \"baz\":\n        \"quux\",\n]"
+        let options = FormatOptions(wrapCollections: .disabled)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentWrappedEnumDictionaryKeysAndValues() {
         let input = "[\n.foo:\n.bar,\n.baz:\n.quux,\n]"
         let output = "[\n    .foo:\n        .bar,\n    .baz:\n        .quux,\n]"
         let options = FormatOptions(wrapCollections: .disabled)
@@ -1386,7 +1448,8 @@ class IndentTests: RulesTests {
         }
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: false)
-        testFormatting(for: input, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, rule: FormatRules.indent, options: options,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testSingleIndentTrailingClosureBody2() {
@@ -1400,7 +1463,8 @@ class IndentTests: RulesTests {
         }
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
-        testFormatting(for: input, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, rule: FormatRules.indent, options: options,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testDoubleIndentTrailingClosureBody() {
@@ -1415,7 +1479,8 @@ class IndentTests: RulesTests {
         }
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
-        testFormatting(for: input, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, rule: FormatRules.indent, options: options,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testDoubleIndentTrailingClosureBody2() {
@@ -1458,7 +1523,8 @@ class IndentTests: RulesTests {
         }
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
-        testFormatting(for: input, rule: FormatRules.indent, options: options, exclude: ["braces"])
+        testFormatting(for: input, rule: FormatRules.indent, options: options,
+                       exclude: ["braces", "wrapConditionalBodies"])
     }
 
     func testSingleIndentTrailingClosureBodyOfShortMethod() {
@@ -1469,7 +1535,8 @@ class IndentTests: RulesTests {
         }
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
-        testFormatting(for: input, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, rule: FormatRules.indent, options: options,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testNoDoubleIndentInInsideClosure() {
@@ -1479,7 +1546,8 @@ class IndentTests: RulesTests {
             baz
         })
         """
-        testFormatting(for: input, rule: FormatRules.indent, exclude: ["trailingClosures"])
+        testFormatting(for: input, rule: FormatRules.indent,
+                       exclude: ["trailingClosures"])
     }
 
     func testNoDoubleIndentInInsideClosure2() {
@@ -1502,6 +1570,99 @@ class IndentTests: RulesTests {
         .baz
         """
         testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentChainedPropertiesAfterFunctionCallWithXcodeIndentation() {
+        let input = """
+        let foo = Foo(
+            bar: baz
+        )
+        .bar
+        .baz
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentChainedPropertiesAfterFunctionCall2() {
+        let input = """
+        let foo = Foo({
+            print("")
+        })
+        .bar
+        .baz
+        """
+        testFormatting(for: input, rule: FormatRules.indent,
+                       exclude: ["trailingClosures"])
+    }
+
+    func testIndentChainedPropertiesAfterFunctionCallWithXcodeIndentation2() {
+        let input = """
+        let foo = Foo({
+            print("")
+        })
+        .bar
+        .baz
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options,
+                       exclude: ["trailingClosures"])
+    }
+
+    func testIndentChainedMethodsAfterTrailingClosure() {
+        let input = """
+        func foo() -> some View {
+            HStack(spacing: 0) {
+                foo()
+            }
+            .bar()
+            .baz()
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentChainedMethodsAfterTrailingClosureWithXcodeIndentation() {
+        let input = """
+        func foo() -> some View {
+            HStack(spacing: 0) {
+                foo()
+            }
+            .bar()
+            .baz()
+        }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentChainedMethodsAfterWrappedMethodAfterTrailingClosure() {
+        let input = """
+        func foo() -> some View {
+            HStack(spacing: 0) {
+                foo()
+            }
+            .bar(foo: 1,
+                 bar: baz ? 2 : 3)
+            .baz()
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentChainedMethodsAfterWrappedMethodAfterTrailingClosureWithXcodeIndentation() {
+        let input = """
+        func foo() -> some View {
+            HStack(spacing: 0) {
+                foo()
+            }
+            .bar(foo: 1,
+                 bar: baz ? 2 : 3)
+            .baz()
+        }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 
     func testChainedFunctionOnNewLineWithXcodeIndentation() {
@@ -1579,7 +1740,8 @@ class IndentTests: RulesTests {
             .baz
         else { return }
         """
-        testFormatting(for: input, rule: FormatRules.indent)
+        testFormatting(for: input, rule: FormatRules.indent,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testChainedFunctionInGuardWithXcodeIndentation() {
@@ -1598,7 +1760,8 @@ class IndentTests: RulesTests {
         else { return }
         """
         let options = FormatOptions(xcodeIndentation: true)
-        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, output, rule: FormatRules.indent,
+                       options: options, exclude: ["wrapConditionalBodies"])
     }
 
     func testChainedFunctionInGuardIndentation2() {
@@ -1612,7 +1775,8 @@ class IndentTests: RulesTests {
               yetAnotherBool
         else { return }
         """
-        testFormatting(for: input, rule: FormatRules.indent)
+        testFormatting(for: input, rule: FormatRules.indent,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testChainedFunctionInGuardWithXcodeIndentation2() {
@@ -1626,6 +1790,7 @@ class IndentTests: RulesTests {
             yetAnotherBool
         else { return }
         """
+        // TODO: fix indent for `yetAnotherBool`
         let output = """
         guard aBool,
               anotherBool,
@@ -1637,7 +1802,8 @@ class IndentTests: RulesTests {
         else { return }
         """
         let options = FormatOptions(xcodeIndentation: true)
-        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, output, rule: FormatRules.indent,
+                       options: options, exclude: ["wrapConditionalBodies"])
     }
 
     func testWrappedChainedFunctionsWithNestedScopeIndent() {
@@ -1655,6 +1821,81 @@ class IndentTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testConditionalCompiledWrappedChainedFunctionIndent() {
+        let input = """
+        var body: some View {
+            VStack {
+                // some view
+            }
+            #if os(macOS)
+                .frame(minWidth: 200)
+            #endif
+        }
+        """
+        let output = """
+        var body: some View {
+            VStack {
+                // some view
+            }
+            #if os(macOS)
+            .frame(minWidth: 200)
+            #endif
+        }
+        """
+        let options = FormatOptions(ifdefIndent: .indent)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testConditionalCompiledWrappedChainedFunctionWithIfdefNoIndent() {
+        let input = """
+        var body: some View {
+            VStack {
+                // some view
+            }
+            #if os(macOS)
+                .frame(minWidth: 200)
+            #endif
+        }
+        """
+        let output = """
+        var body: some View {
+            VStack {
+                // some view
+            }
+            #if os(macOS)
+            .frame(minWidth: 200)
+            #endif
+        }
+        """
+        let options = FormatOptions(ifdefIndent: .noIndent)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testConditionalCompiledWrappedChainedFunctionWithIfdefOutdent() {
+        let input = """
+        var body: some View {
+            VStack {
+                // some view
+            }
+        #if os(macOS)
+        .frame(minWidth: 200)
+        #endif
+        }
+        """
+        let output = """
+        var body: some View {
+            VStack {
+                // some view
+            }
+        #if os(macOS)
+            .frame(minWidth: 200)
+        #endif
+        }
+        """
+        let options = FormatOptions(ifdefIndent: .outdent)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
     }
 
     func testChainedOrOperatorsInFunctionWithReturnOnNewLine() {
@@ -1771,6 +2012,32 @@ class IndentTests: RulesTests {
                 else: {
                     $0.font(.hsControl)
                 }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentLinewrappedMultipleTrailingClosures() {
+        let input = """
+        UIView.animate(withDuration: 0) {
+            fromView.transform = .identity
+        }
+        completion: { finished in
+            context.completeTransition(finished)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentLinewrappedMultipleTrailingClosures2() {
+        let input = """
+        func foo() {
+            UIView.animate(withDuration: 0) {
+                fromView.transform = .identity
+            }
+            completion: { finished in
+                context.completeTransition(finished)
+            }
         }
         """
         testFormatting(for: input, rule: FormatRules.indent)
@@ -1989,6 +2256,154 @@ class IndentTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.indent)
     }
 
+    // indentStrings = true
+
+    func testIndentMultilineStringInMethod() {
+        let input = #"""
+        func foo() {
+            let sql = """
+            SELECT *
+            FROM authors
+            WHERE authors.name LIKE '%David%'
+            """
+        }
+        """#
+        let output = #"""
+        func foo() {
+            let sql = """
+                SELECT *
+                FROM authors
+                WHERE authors.name LIKE '%David%'
+                """
+        }
+        """#
+        let options = FormatOptions(indentStrings: true)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testNoIndentMultilineStringWithOmittedReturn() {
+        let input = #"""
+        var string: String {
+            """
+            SELECT *
+            FROM authors
+            WHERE authors.name LIKE '%David%'
+            """
+        }
+        """#
+        let options = FormatOptions(indentStrings: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testNoIndentMultilineStringOnOwnLineInMethodCall() {
+        let input = #"""
+        XCTAssertEqual(
+            loggingService.assertions,
+            """
+            My long mutli-line assertion.
+            This error was not recoverable.
+            """
+        )
+        """#
+        let options = FormatOptions(indentStrings: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentMultilineStringInMethodCall() {
+        let input = #"""
+        XCTAssertEqual(loggingService.assertions, """
+        My long mutli-line assertion.
+        This error was not recoverable.
+        """)
+        """#
+        let output = #"""
+        XCTAssertEqual(loggingService.assertions, """
+            My long mutli-line assertion.
+            This error was not recoverable.
+            """)
+        """#
+        let options = FormatOptions(indentStrings: true)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentMultilineStringAtTopLevel() {
+        let input = #"""
+        let sql = """
+        SELECT *
+        FROM  authors,
+              books
+        WHERE authors.name LIKE '%David%'
+             AND pubdate < $1
+        """
+        """#
+        let output = #"""
+        let sql = """
+          SELECT *
+          FROM  authors,
+                books
+          WHERE authors.name LIKE '%David%'
+               AND pubdate < $1
+          """
+        """#
+        let options = FormatOptions(indent: "  ", indentStrings: true)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentMultilineStringWithBlankLine() {
+        let input = #"""
+        let generatedClass = """
+        import UIKit
+
+        class ViewController: UIViewController { }
+        """
+        """#
+
+        let output = #"""
+        let generatedClass = """
+            import UIKit
+
+            class ViewController: UIViewController { }
+            """
+        """#
+        let options = FormatOptions(indentStrings: true)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentMultilineStringPreservesBlankLines() {
+        let input = #"""
+        let generatedClass = """
+            import UIKit
+
+            class ViewController: UIViewController { }
+            """
+        """#
+        let options = FormatOptions(indentStrings: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testUnindentMultilineStringAtTopLevel() {
+        let input = #"""
+        let sql = """
+          SELECT *
+          FROM  authors,
+                books
+          WHERE authors.name LIKE '%David%'
+               AND pubdate < $1
+          """
+        """#
+        let output = #"""
+        let sql = """
+        SELECT *
+        FROM  authors,
+              books
+        WHERE authors.name LIKE '%David%'
+             AND pubdate < $1
+        """
+        """#
+        let options = FormatOptions(indent: "  ", indentStrings: false)
+        testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
     // indent multiline raw strings
 
     func testIndentIndentedSimpleRawMultilineString() {
@@ -2190,12 +2605,41 @@ class IndentTests: RulesTests {
             func foo() {
                 Text("Hello")
                 #if os(iOS)
+                .font(.largeTitle)
+                #elseif os(macOS)
+                        .font(.headline)
+                #else
+                    .font(.headline)
+                #endif
+            }
+        }
+        """
+        let output = """
+        class Bar {
+            func foo() {
+                Text("Hello")
+                #if os(iOS)
                     .font(.largeTitle)
                 #elseif os(macOS)
                     .font(.headline)
                 #else
                     .font(.headline)
                 #endif
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.indent)
+    }
+
+    func testIndentIfDefPostfixMemberSyntax2() {
+        let input = """
+        class Bar {
+            func foo() {
+                Text("Hello")
+                #if os(iOS)
+                    .font(.largeTitle)
+                #endif
+                    .color(.red)
             }
         }
         """
@@ -2667,6 +3111,6 @@ class IndentTests: RulesTests {
         """
         let options = FormatOptions(indent: "\t", truncateBlankLines: false, tabWidth: 2)
         testFormatting(for: input, rule: FormatRules.indent, options: options,
-                       exclude: ["consecutiveBlankLines"])
+                       exclude: ["consecutiveBlankLines", "wrapConditionalBodies"])
     }
 }

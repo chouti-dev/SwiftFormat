@@ -112,8 +112,20 @@ public enum WrapReturnType: String, CaseIterable {
 
 /// Annotation which should be kept when removing a redundant type
 public enum RedundantType: String, CaseIterable {
+    /// Preserves the type as a part of the property definition:
+    /// `let foo: Foo = Foo()` becomes `let foo: Foo = .init()`
     case explicit
+
+    /// Uses type inference to omit the type in the property definition:
+    /// `let foo: Foo = Foo()` becomes `let foo = Foo()`
     case inferred
+
+    /// Uses `.inferred` for properties within local scopes (method bodies, etc.),
+    /// but `.explicit` for globals and properties within types.
+    ///  - This is because type checking for globals and type properties
+    ///    using inferred types can be more expensive.
+    ///    https://twitter.com/uint_min/status/1441448033988722691?s=21
+    case inferLocalsOnly = "infer-locals-only"
 }
 
 /// Argument type for empty brace spacing behavior
@@ -121,6 +133,21 @@ public enum EmptyBracesSpacing: String, CaseIterable {
     case spaced
     case noSpace = "no-space"
     case linebreak
+}
+
+/// Wrapping behavior for multi-line ternary operators
+public enum TernaryOperatorWrapMode: String, CaseIterable {
+    /// Wraps ternary operators using the default `wrap` behavior,
+    /// which performs the minimum amount of wrapping necessary.
+    case `default`
+    /// Wraps long / multi-line ternary operators before each of the component operators
+    case beforeOperators = "before-operators"
+}
+
+/// Whether or not to remove `-> Void` from closures
+public enum ClosureVoidReturn: String, CaseIterable {
+    case remove
+    case preserve
 }
 
 /// Version number wrapper
@@ -302,6 +329,7 @@ public enum MarkMode: String, CaseIterable {
 /// Configuration options for formatting. These aren't actually used by the
 /// Formatter class itself, but it makes them available to the format rules.
 public struct FormatOptions: CustomStringConvertible {
+    public var lineAfterMarks: Bool
     public var indent: String
     public var linebreak: String
     public var allowInlineSemicolons: Bool
@@ -319,9 +347,11 @@ public struct FormatOptions: CustomStringConvertible {
     public var wrapArguments: WrapMode
     public var wrapParameters: WrapMode
     public var wrapCollections: WrapMode
+    public var wrapTypealiases: WrapMode
     public var closingParenOnSameLine: Bool
     public var wrapReturnType: WrapReturnType
     public var wrapConditions: WrapMode
+    public var wrapTernaryOperators: TernaryOperatorWrapMode
     public var uppercaseHex: Bool
     public var uppercaseExponent: Bool
     public var decimalGrouping: Grouping
@@ -357,6 +387,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var markExtensions: MarkMode
     public var extensionMarkComment: String
     public var groupedExtensionMarkComment: String
+    public var markCategories: Bool
     public var categoryMarkComment: String
     public var beforeMarks: Set<String>
     public var lifecycleMethods: Set<String>
@@ -369,6 +400,9 @@ public struct FormatOptions: CustomStringConvertible {
     public var extensionACLPlacement: ExtensionACLPlacement
     public var redundantType: RedundantType
     public var emptyBracesSpacing: EmptyBracesSpacing
+    public var acronyms: Set<String>
+    public var indentStrings: Bool
+    public var closureVoidReturn: ClosureVoidReturn
 
     // Deprecated
     public var indentComments: Bool
@@ -379,9 +413,13 @@ public struct FormatOptions: CustomStringConvertible {
     public var swiftVersion: Version
     public var fileInfo: FileInfo
 
+    // Enabled rules
+    var enabledRules: Set<String> = []
+
     public static let `default` = FormatOptions()
 
-    public init(indent: String = "    ",
+    public init(lineAfterMarks: Bool = true,
+                indent: String = "    ",
                 linebreak: String = "\n",
                 allowInlineSemicolons: Bool = true,
                 spaceAroundRangeOperators: Bool = true,
@@ -399,9 +437,11 @@ public struct FormatOptions: CustomStringConvertible {
                 wrapArguments: WrapMode = .preserve,
                 wrapParameters: WrapMode = .default,
                 wrapCollections: WrapMode = .preserve,
+                wrapTypealiases: WrapMode = .preserve,
                 closingParenOnSameLine: Bool = false,
                 wrapReturnType: WrapReturnType = .preserve,
                 wrapConditions: WrapMode = .preserve,
+                wrapTernaryOperators: TernaryOperatorWrapMode = .default,
                 uppercaseHex: Bool = true,
                 uppercaseExponent: Bool = false,
                 decimalGrouping: Grouping = .group(3, 6),
@@ -437,6 +477,7 @@ public struct FormatOptions: CustomStringConvertible {
                 markExtensions: MarkMode = .always,
                 extensionMarkComment: String = "MARK: - %t + %c",
                 groupedExtensionMarkComment: String = "MARK: %c",
+                markCategories: Bool = true,
                 categoryMarkComment: String = "MARK: %c",
                 beforeMarks: Set<String> = [],
                 lifecycleMethods: Set<String> = [],
@@ -447,14 +488,18 @@ public struct FormatOptions: CustomStringConvertible {
                 organizeExtensionThreshold: Int = 0,
                 yodaSwap: YodaMode = .always,
                 extensionACLPlacement: ExtensionACLPlacement = .onExtension,
-                redundantType: RedundantType = .inferred,
+                redundantType: RedundantType = .inferLocalsOnly,
                 emptyBracesSpacing: EmptyBracesSpacing = .noSpace,
+                acronyms: Set<String> = ["ID", "URL", "UUID"],
+                indentStrings: Bool = false,
+                closureVoidReturn: ClosureVoidReturn = .remove,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
                 swiftVersion: Version = .undefined,
                 fileInfo: FileInfo = FileInfo())
     {
+        self.lineAfterMarks = lineAfterMarks
         self.indent = indent
         self.linebreak = linebreak
         self.allowInlineSemicolons = allowInlineSemicolons
@@ -473,9 +518,11 @@ public struct FormatOptions: CustomStringConvertible {
         self.wrapArguments = wrapArguments
         self.wrapParameters = wrapParameters
         self.wrapCollections = wrapCollections
+        self.wrapTypealiases = wrapTypealiases
         self.closingParenOnSameLine = closingParenOnSameLine
         self.wrapReturnType = wrapReturnType
         self.wrapConditions = wrapConditions
+        self.wrapTernaryOperators = wrapTernaryOperators
         self.uppercaseHex = uppercaseHex
         self.uppercaseExponent = uppercaseExponent
         self.decimalGrouping = decimalGrouping
@@ -511,6 +558,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.markExtensions = markExtensions
         self.extensionMarkComment = extensionMarkComment
         self.groupedExtensionMarkComment = groupedExtensionMarkComment
+        self.markCategories = markCategories
         self.categoryMarkComment = categoryMarkComment
         self.beforeMarks = beforeMarks
         self.lifecycleMethods = lifecycleMethods
@@ -523,6 +571,9 @@ public struct FormatOptions: CustomStringConvertible {
         self.extensionACLPlacement = extensionACLPlacement
         self.redundantType = redundantType
         self.emptyBracesSpacing = emptyBracesSpacing
+        self.acronyms = acronyms
+        self.indentStrings = indentStrings
+        self.closureVoidReturn = closureVoidReturn
         // Doesn't really belong here, but hard to put elsewhere
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers
@@ -543,6 +594,7 @@ public struct FormatOptions: CustomStringConvertible {
         let pairs = Mirror(reflecting: self).children.map { ($0!, $1) }
         var options = Dictionary(pairs, uniquingKeysWith: { $1 })
         options["fileInfo"] = nil // Special case
+        options["enabledRules"] = nil // Special case
         return options
     }
 
@@ -579,17 +631,19 @@ public struct FileOptions {
     }
 
     public func shouldSkipFile(_ inputURL: URL) -> Bool {
-        let path = inputURL.standardizedFileURL.path
-        for excluded in excludedGlobs {
-            guard excluded.matches(path) else {
-                continue
+        let parts = inputURL.standardizedFileURL.path.components(separatedBy: "/")
+        var path: String!
+        var shouldSkip = false
+        for part in parts {
+            path = path.map { "\($0)/\(part)" } ?? part
+            if !shouldSkip, excludedGlobs.contains(where: { $0.matches(path) }) {
+                shouldSkip = true
             }
-            if unexcludedGlobs.contains(where: { $0.matches(path) }) {
-                return false
+            if shouldSkip, unexcludedGlobs.contains(where: { $0.matches(path) }) {
+                shouldSkip = false
             }
-            return true
         }
-        return false
+        return shouldSkip
     }
 }
 
