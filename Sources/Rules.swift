@@ -291,7 +291,7 @@ public struct _FormatRules {
     public let spaceAroundBrackets = FormatRule(
         help: "Add or remove space around square brackets."
     ) { formatter in
-        formatter.forEach(.startOfScope("[")) { i, token in
+        formatter.forEach(.startOfScope("[")) { i, _ in
             guard let prevToken = formatter.token(at: i - 1) else {
                 return
             }
@@ -2866,10 +2866,17 @@ public struct _FormatRules {
         options: ["closurevoid"]
     ) { formatter in
         formatter.forEach(.operator("->", .infix)) { i, _ in
-            guard var endIndex = formatter.index(of: .nonSpace, after: i) else { return }
+            guard var endIndex = formatter.index(of: .nonSpaceOrLinebreak, after: i) else { return }
             switch formatter.tokens[endIndex] {
             case .identifier("Void"):
                 break
+            case .identifier("Swift"):
+                guard let dotIndex = formatter.index(of: .nonSpaceOrLinebreak, after: endIndex, if: {
+                    $0 == .operator(".", .infix)
+                }), let voidIndex = formatter.index(of: .nonSpace, after: dotIndex, if: {
+                    $0 == .identifier("Void")
+                }) else { return }
+                endIndex = voidIndex
             case .startOfScope("("):
                 guard let nextIndex = formatter.index(of: .nonSpace, after: endIndex) else { return }
                 switch formatter.tokens[nextIndex] {
@@ -3663,12 +3670,13 @@ public struct _FormatRules {
         guard !formatter.options.fragment else { return }
 
         func removeUsed<T>(from argNames: inout [String], with associatedData: inout [T],
-                           in range: CountableRange<Int>)
+                           locals: Set<String> = [], in range: CountableRange<Int>)
         {
             var isDeclaration = false
             var wasDeclaration = false
             var isConditional = false
-            var locals = Set<String>()
+            var isGuard = false
+            var locals = locals
             var tempLocals = Set<String>()
             func pushLocals() {
                 if isDeclaration, isConditional {
@@ -3694,6 +3702,8 @@ public struct _FormatRules {
                 }
                 let token = formatter.tokens[i]
                 switch token {
+                case .keyword("guard"):
+                    isGuard = true
                 case .keyword("let"), .keyword("var"), .keyword("func"), .keyword("for"):
                     isDeclaration = true
                     var i = i
@@ -3721,12 +3731,37 @@ public struct _FormatRules {
                         }
                     }
                 case .startOfScope("{"):
-                    pushLocals()
                     guard let endIndex = formatter.endOfScope(at: i) else {
                         argNames.removeAll()
                         return
                     }
-                    removeUsed(from: &argNames, with: &associatedData, in: i + 1 ..< endIndex)
+                    if formatter.isStartOfClosure(at: i) {
+                        removeUsed(from: &argNames, with: &associatedData,
+                                   locals: locals, in: i + 1 ..< endIndex)
+                    } else if isGuard {
+                        removeUsed(from: &argNames, with: &associatedData,
+                                   locals: locals, in: i + 1 ..< endIndex)
+                        pushLocals()
+                    } else {
+                        let prevLocals = locals
+                        pushLocals()
+                        removeUsed(from: &argNames, with: &associatedData,
+                                   locals: locals, in: i + 1 ..< endIndex)
+                        locals = prevLocals
+                    }
+
+                    isGuard = false
+                    i = endIndex
+                case .endOfScope("case"), .endOfScope("default"):
+                    pushLocals()
+                    guard let colonIndex = formatter.index(of: .startOfScope(":"), after: i),
+                          let endIndex = formatter.endOfScope(at: colonIndex)
+                    else {
+                        argNames.removeAll()
+                        return
+                    }
+                    removeUsed(from: &argNames, with: &associatedData,
+                               locals: locals, in: i + 1 ..< endIndex)
                     i = endIndex
                 case .operator("=", .infix), .delimiter(":"), .startOfScope(":"),
                      .keyword("in"), .keyword("where"):
@@ -4642,7 +4677,21 @@ public struct _FormatRules {
             firstChar != "$", String(firstChar).uppercased() == String(firstChar) else {
                 return
             }
-
+            var j = dotIndex
+            while let prevIndex = formatter.index(
+                of: prevToken, before: j
+            ) ?? formatter.index(
+                of: .startOfScope, before: j
+            ) {
+                j = prevIndex
+                if prevToken == formatter.tokens[prevIndex],
+                   let prevPrevToken = formatter.last(
+                       .nonSpaceOrCommentOrLinebreak, before: prevIndex
+                   ), [.keyword("let"), .keyword("var")].contains(prevPrevToken)
+                {
+                    return
+                }
+            }
             formatter.removeTokens(in: i + 1 ..< openParenIndex)
             formatter.removeTokens(in: dotIndex ... i)
         }

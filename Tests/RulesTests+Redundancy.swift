@@ -762,6 +762,33 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantInit)
     }
 
+    func testNoRemoveInitForLowercaseType() {
+        let input = """
+        let foo = bar.init()
+        """
+        testFormatting(for: input, rule: FormatRules.redundantInit)
+    }
+
+    func testNoRemoveInitForLocalLetType() {
+        let input = """
+        let Foo = Foo.self
+        let foo = Foo.init()
+        """
+        testFormatting(for: input, rule: FormatRules.redundantInit)
+    }
+
+    func testNoRemoveInitForLocalLetType2() {
+        let input = """
+        let Foo = Foo.self
+        if x {
+            return Foo.init(x)
+        } else {
+            return Foo.init(y)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantInit)
+    }
+
     // MARK: - redundantLetError
 
     func testCatchLetError() {
@@ -1644,6 +1671,24 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantVoidReturnType)
     }
 
+    func testRemoveRedundantVoidReturnType2() {
+        let input = "func foo() ->\n    Void {}"
+        let output = "func foo() {}"
+        testFormatting(for: input, output, rule: FormatRules.redundantVoidReturnType)
+    }
+
+    func testRemoveRedundantSwiftDotVoidReturnType() {
+        let input = "func foo() -> Swift.Void {}"
+        let output = "func foo() {}"
+        testFormatting(for: input, output, rule: FormatRules.redundantVoidReturnType)
+    }
+
+    func testRemoveRedundantSwiftDotVoidReturnType2() {
+        let input = "func foo() -> Swift\n    .Void {}"
+        let output = "func foo() {}"
+        testFormatting(for: input, output, rule: FormatRules.redundantVoidReturnType)
+    }
+
     func testRemoveRedundantEmptyReturnType() {
         let input = "func foo() -> () {}"
         let output = "func foo() {}"
@@ -1680,6 +1725,12 @@ class RedundancyTests: RulesTests {
 
     func testRemoveRedundantVoidInClosureArguments2() {
         let input = "methodWithTrailingClosure { foo -> Void in foo() }"
+        let output = "methodWithTrailingClosure { foo in foo() }"
+        testFormatting(for: input, output, rule: FormatRules.redundantVoidReturnType)
+    }
+
+    func testRemoveRedundantSwiftDotVoidInClosureArguments2() {
+        let input = "methodWithTrailingClosure { foo -> Swift.Void in foo() }"
         let output = "methodWithTrailingClosure { foo in foo() }"
         testFormatting(for: input, output, rule: FormatRules.redundantVoidReturnType)
     }
@@ -4942,6 +4993,19 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 
+    func testParameterUsedInSwitchCaseAfterShadowing() {
+        let input = """
+        func issue(name: String) -> String {
+            switch self {
+            case .b(let name): return name
+            case .a: return name
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments,
+                       exclude: ["hoistPatternLet"])
+    }
+
     // functions
 
     func testMarkUnusedFunctionArgument() {
@@ -5097,6 +5161,18 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 
+    func testShadowedUsedArguments4() {
+        let input = """
+        func foo(bar: Int) {
+            if let bar = baz {
+                return
+            }
+            print(bar)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
     func testTryArgumentNotMarkedUnused() {
         let input = """
         func foo(bar: String) throws -> String? {
@@ -5117,6 +5193,24 @@ class RedundancyTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testConditionalIfLetMarkedAsUnused() {
+        let input = """
+        func foo(bar: UIViewController) {
+            if let bar = baz {
+                bar.loadViewIfNeeded()
+            }
+        }
+        """
+        let output = """
+        func foo(bar _: UIViewController) {
+            if let bar = baz {
+                bar.loadViewIfNeeded()
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
     }
 
     func testConditionAfterIfCaseHoistedLetNotMarkedUnused() {
@@ -5256,6 +5350,39 @@ class RedundancyTests: RulesTests {
         let output = """
         func method(_: Int?, _: Int?) {
             var foo, bar: Int?
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedClosureNotMarkedUnused() {
+        let input = """
+        func foo(bar: () -> Void) {
+            let bar = {
+                print("log")
+                bar()
+            }
+            bar()
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedClosureMarkedUnused() {
+        let input = """
+        func foo(bar: () -> Void) {
+            let bar = {
+                print("log")
+            }
+            bar()
+        }
+        """
+        let output = """
+        func foo(bar _: () -> Void) {
+            let bar = {
+                print("log")
+            }
+            bar()
         }
         """
         testFormatting(for: input, output, rule: FormatRules.unusedArguments)
