@@ -1596,6 +1596,11 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantLet)
     }
 
+    func testNoRemoveAsyncLet() {
+        let input = "async let _ = foo()"
+        testFormatting(for: input, rule: FormatRules.redundantLet)
+    }
+
     // MARK: - redundantPattern
 
     func testRemoveRedundantPatternInIfCase() {
@@ -1719,6 +1724,12 @@ class RedundancyTests: RulesTests {
 
     func testRemoveRedundantVoidInClosureArguments() {
         let input = "{ (foo: Bar) -> Void in foo() }"
+        let output = "{ (foo: Bar) in foo() }"
+        testFormatting(for: input, output, rule: FormatRules.redundantVoidReturnType)
+    }
+
+    func testRemoveRedundantEmptyReturnTypeInClosureArguments() {
+        let input = "{ (foo: Bar) -> () in foo() }"
         let output = "{ (foo: Bar) in foo() }"
         testFormatting(for: input, output, rule: FormatRules.redundantVoidReturnType)
     }
@@ -4947,6 +4958,96 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 
+    func testUnusedPropertyWrapperArgument() {
+        let input = """
+        ForEach($list.notes) { $note in
+            Text(note.foobar)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedThrowingClosureArgument() {
+        let input = "foo = { bar throws in \"\" }"
+        let output = "foo = { _ throws in \"\" }"
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testUsedThrowingClosureArgument() {
+        let input = "let foo = { bar throws in bar + \"\" }"
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedTrailingAsyncClosureArgument() {
+        let input = """
+        app.get { foo async in
+            print("No foo")
+        }
+        """
+        let output = """
+        app.get { _ async in
+            print("No foo")
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedTrailingAsyncClosureArgument2() {
+        let input = """
+        app.get { foo async -> String in
+            "No foo"
+        }
+        """
+        let output = """
+        app.get { _ async -> String in
+            "No foo"
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedTrailingAsyncClosureArgument3() {
+        let input = """
+        app.get { (foo: String) async -> String in
+            "No foo"
+        }
+        """
+        let output = """
+        app.get { (_: String) async -> String in
+            "No foo"
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
+    func testUsedTrailingAsyncClosureArgument() {
+        let input = """
+        app.get { foo async -> String in
+            "\\(foo)"
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testTrailingAsyncClosureArgumentAlreadyMarkedUnused() {
+        let input = "app.get { _ async in 5 }"
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedTrailingClosureArgumentCalledAsync() {
+        let input = """
+        app.get { async -> String in
+            "No async"
+        }
+        """
+        let output = """
+        app.get { _ -> String in
+            "No async"
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+    }
+
     // init
 
     func testParameterUsedInInit() {
@@ -5171,6 +5272,24 @@ class RedundancyTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testShadowedUsedArgumentInSwitchCase() {
+        let input = """
+        func foo(bar baz: Foo) -> Foo? {
+            switch (a, b) {
+            case (0, _),
+                 (_, nil):
+                return .none
+            case let (1, baz?):
+                return .bar(baz)
+            default:
+                return baz
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments,
+                       exclude: ["sortedSwitchCases"])
     }
 
     func testTryArgumentNotMarkedUnused() {
@@ -5780,6 +5899,30 @@ class RedundancyTests: RulesTests {
 
     func testKeepsClosureThatThrowsError() {
         let input = "let foo = try bar ?? { throw NSError() }()"
+        testFormatting(for: input, rule: FormatRules.redundantClosure)
+    }
+
+    func testKeepsDiscardableResultClosure() {
+        let input = """
+        @discardableResult
+        func discardableResult() -> String { "hello world" }
+
+        // We can't remove this closure, since the method called inline
+        // would return a String instead.
+        let void: Void = { discardableResult() }()
+        """
+        testFormatting(for: input, rule: FormatRules.redundantClosure)
+    }
+
+    func testKeepsDiscardableResultClosure2() {
+        let input = """
+        @discardableResult
+        func discardableResult() -> String { "hello world" }
+
+        // We can't remove this closure, since the method called inline
+        // would return a String instead.
+        let void: () = { discardableResult() }()
+        """
         testFormatting(for: input, rule: FormatRules.redundantClosure)
     }
 }

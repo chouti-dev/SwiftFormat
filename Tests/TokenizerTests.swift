@@ -103,6 +103,19 @@ class TokenizerTests: XCTestCase {
         XCTAssertEqual(tokenize(input), output)
     }
 
+    func testForwardBackslashOperator() {
+        let input = "infix operator /\\"
+        let output: [Token] = [
+            .identifier("infix"),
+            .space(" "),
+            .keyword("operator"),
+            .space(" "),
+            .operator("/", .none),
+            .operator("\\", .none),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
     // MARK: Hashbang
 
     func testHashbangOnItsOwnInFile() {
@@ -266,6 +279,41 @@ class TokenizerTests: XCTestCase {
             .startOfScope("\""),
             .stringBody("\\\\"),
             .endOfScope("\""),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testUnterminatedString() {
+        let input = "\"foo"
+        let output: [Token] = [
+            .startOfScope("\""),
+            .stringBody("foo"),
+            .error(""),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testUnterminatedString2() {
+        let input = "\"foo\nbar"
+        let output: [Token] = [
+            .startOfScope("\""),
+            .stringBody("foo"),
+            .error(""),
+            .linebreak("\n", 1),
+            .identifier("bar"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testUnterminatedString3() {
+        let input = "\"foo\n\""
+        let output: [Token] = [
+            .startOfScope("\""),
+            .stringBody("foo"),
+            .error(""),
+            .linebreak("\n", 1),
+            .startOfScope("\""),
+            .error(""),
         ]
         XCTAssertEqual(tokenize(input), output)
     }
@@ -659,6 +707,222 @@ class TokenizerTests: XCTestCase {
             .linebreak("\n", 2),
             .space("    "),
             .endOfScope("\"\"\"##"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    // MARK: Regex literals
+
+    func testSingleLineRegexLiteral() {
+        let input = "let regex = /(\\w+)\\s\\s+(\\S+)\\s\\s+((?:(?!\\s\\s).)*)\\s\\s+(.*)/"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("regex"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("/"),
+            .stringBody("(\\w+)\\s\\s+(\\S+)\\s\\s+((?:(?!\\s\\s).)*)\\s\\s+(.*)"),
+            .endOfScope("/"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testSingleLineRegexLiteralStartingWithEscapeSequence() {
+        let input = "let regex = /\\w+/"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("regex"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("/"),
+            .stringBody("\\w+"),
+            .endOfScope("/"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testSingleLineRegexLiteralWithEscapedParens() {
+        let input = "let regex = /\\(foo\\)/"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("regex"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("/"),
+            .stringBody("\\(foo\\)"),
+            .endOfScope("/"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testRegexLiteralInArray() {
+        let input = "[/foo/]"
+        let output: [Token] = [
+            .startOfScope("["),
+            .startOfScope("/"),
+            .stringBody("foo"),
+            .endOfScope("/"),
+            .endOfScope("]"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testHashedSingleLineRegexLiteral() {
+        let input = "let regex = #/foo/bar/#"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("regex"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("#/"),
+            .stringBody("foo/bar"),
+            .endOfScope("/#"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testMultilineRegexLiteral() {
+        let input = """
+        let regex = #/
+        foo
+        /#
+        """
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("regex"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("#/"),
+            .linebreak("\n", 1),
+            .stringBody("foo"),
+            .linebreak("\n", 2),
+            .endOfScope("/#"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testMultilineRegexLiteral2() {
+        let input = """
+        let regex = ##/
+        foo
+        bar
+        /##
+        """
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("regex"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("##/"),
+            .linebreak("\n", 1),
+            .stringBody("foo"),
+            .linebreak("\n", 2),
+            .stringBody("bar"),
+            .linebreak("\n", 3),
+            .endOfScope("/##"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testPrefixPostfixSlashOperatorNotPermitted() {
+        let input = "let x = /0; let y = 1/"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("x"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("/"),
+            .stringBody("0; let y = 1"),
+            .endOfScope("/"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testInlineSlashPairTreatedAsOperators() {
+        let input = "x+/y/+z"
+        let output: [Token] = [
+            .identifier("x"),
+            .operator("+/", .infix),
+            .identifier("y"),
+            .operator("/+", .infix),
+            .identifier("z"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testCasePathTreatedAsOperator() {
+        let input = "let foo = /Foo.bar"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("foo"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .operator("/", .prefix),
+            .identifier("Foo"),
+            .operator(".", .infix),
+            .identifier("bar"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testCasePathTreatedAsOperator2() {
+        let input = "let foo = /Foo.bar\nbaz"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("foo"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .operator("/", .prefix),
+            .identifier("Foo"),
+            .operator(".", .infix),
+            .identifier("bar"),
+            .linebreak("\n", 2),
+            .identifier("baz"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testCasePathInParenthesesTreatedAsOperator() {
+        let input = "foo(/Foo.bar)"
+        let output: [Token] = [
+            .identifier("foo"),
+            .startOfScope("("),
+            .operator("/", .prefix),
+            .identifier("Foo"),
+            .operator(".", .infix),
+            .identifier("bar"),
+            .endOfScope(")"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testDivideOperatorInParenthesesTreatedAsOperator() {
+        let input = "return (/)\n"
+        let output: [Token] = [
+            .keyword("return"),
+            .space(" "),
+            .startOfScope("("),
+            .operator("/", .none),
+            .endOfScope(")"),
+            .linebreak("\n", 2),
         ]
         XCTAssertEqual(tokenize(input), output)
     }
@@ -2242,6 +2506,38 @@ class TokenizerTests: XCTestCase {
         XCTAssertEqual(tokenize(input), output)
     }
 
+    func testChevronOperatorDoesntBreakScopeStack() {
+        let input = "if a << b != 0 { let foo = bar() }"
+        let output: [Token] = [
+            .keyword("if"),
+            .space(" "),
+            .identifier("a"),
+            .space(" "),
+            .operator("<<", .infix),
+            .space(" "),
+            .identifier("b"),
+            .space(" "),
+            .operator("!=", .infix),
+            .space(" "),
+            .number("0", .integer),
+            .space(" "),
+            .startOfScope("{"),
+            .space(" "),
+            .keyword("let"),
+            .space(" "),
+            .identifier("foo"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .identifier("bar"),
+            .startOfScope("("),
+            .endOfScope(")"),
+            .space(" "),
+            .endOfScope("}"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
     func testGenericAsFunctionType() {
         let input = "Foo<Bar,Baz>->Void"
         let output: [Token] = [
@@ -2741,6 +3037,42 @@ class TokenizerTests: XCTestCase {
             .space(" "),
             .identifier("C"),
             .endOfScope(">"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testIfLessThanGreaterThanExpression() {
+        let input = "if x < (y + z), y > (z * w) {}"
+        let output: [Token] = [
+            .keyword("if"),
+            .space(" "),
+            .identifier("x"),
+            .space(" "),
+            .operator("<", .infix),
+            .space(" "),
+            .startOfScope("("),
+            .identifier("y"),
+            .space(" "),
+            .operator("+", .infix),
+            .space(" "),
+            .identifier("z"),
+            .endOfScope(")"),
+            .delimiter(","),
+            .space(" "),
+            .identifier("y"),
+            .space(" "),
+            .operator(">", .infix),
+            .space(" "),
+            .startOfScope("("),
+            .identifier("z"),
+            .space(" "),
+            .operator("*", .infix),
+            .space(" "),
+            .identifier("w"),
+            .endOfScope(")"),
+            .space(" "),
+            .startOfScope("{"),
+            .endOfScope("}"),
         ]
         XCTAssertEqual(tokenize(input), output)
     }
@@ -3671,6 +4003,83 @@ class TokenizerTests: XCTestCase {
         XCTAssertEqual(tokenize(input), output)
     }
 
+    func testUncheckedSendableEnum() {
+        let input = "enum Foo: @unchecked Sendable { case bar }"
+        let output: [Token] = [
+            .keyword("enum"),
+            .space(" "),
+            .identifier("Foo"),
+            .delimiter(":"),
+            .space(" "),
+            .keyword("@unchecked"),
+            .space(" "),
+            .identifier("Sendable"),
+            .space(" "),
+            .startOfScope("{"),
+            .space(" "),
+            .keyword("case"),
+            .space(" "),
+            .identifier("bar"),
+            .space(" "),
+            .endOfScope("}"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testForCaseLetPreceededByAwait() {
+        let input = "func forGroup(_ group: TaskGroup<String?>) async { for await case let value? in group { print(value.description) } }"
+        let output: [Token] = [
+            .keyword("func"),
+            .space(" "),
+            .identifier("forGroup"),
+            .startOfScope("("),
+            .identifier("_"),
+            .space(" "),
+            .identifier("group"),
+            .delimiter(":"),
+            .space(" "),
+            .identifier("TaskGroup"),
+            .startOfScope("<"),
+            .identifier("String"),
+            .operator("?", .postfix),
+            .endOfScope(">"),
+            .endOfScope(")"),
+            .space(" "),
+            .identifier("async"),
+            .space(" "),
+            .startOfScope("{"),
+            .space(" "),
+            .keyword("for"),
+            .space(" "),
+            .keyword("await"),
+            .space(" "),
+            .keyword("case"),
+            .space(" "),
+            .keyword("let"),
+            .space(" "),
+            .identifier("value"),
+            .operator("?", .postfix),
+            .space(" "),
+            .keyword("in"),
+            .space(" "),
+            .identifier("group"),
+            .space(" "),
+            .startOfScope("{"),
+            .space(" "),
+            .identifier("print"),
+            .startOfScope("("),
+            .identifier("value"),
+            .operator(".", .infix),
+            .identifier("description"),
+            .endOfScope(")"),
+            .space(" "),
+            .endOfScope("}"),
+            .space(" "),
+            .endOfScope("}"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
     // MARK: dot prefix
 
     func testEnumValueInDictionaryLiteral() {
@@ -3992,6 +4401,107 @@ class TokenizerTests: XCTestCase {
             .operator("=", .infix),
             .space(" "),
             .identifier("foo"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    // MARK: some / any
+
+    func testSomeView() {
+        let input = "var body: some View {}"
+        let output: [Token] = [
+            .keyword("var"),
+            .space(" "),
+            .identifier("body"),
+            .delimiter(":"),
+            .space(" "),
+            .identifier("some"),
+            .space(" "),
+            .identifier("View"),
+            .space(" "),
+            .startOfScope("{"),
+            .endOfScope("}"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testAnyView() {
+        let input = "var body: any View {}"
+        let output: [Token] = [
+            .keyword("var"),
+            .space(" "),
+            .identifier("body"),
+            .delimiter(":"),
+            .space(" "),
+            .identifier("any"),
+            .space(" "),
+            .identifier("View"),
+            .space(" "),
+            .startOfScope("{"),
+            .endOfScope("}"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testSomeAnimal() {
+        let input = "func feed(_ animal: some Animal) {}"
+        let output: [Token] = [
+            .keyword("func"),
+            .space(" "),
+            .identifier("feed"),
+            .startOfScope("("),
+            .identifier("_"),
+            .space(" "),
+            .identifier("animal"),
+            .delimiter(":"),
+            .space(" "),
+            .identifier("some"),
+            .space(" "),
+            .identifier("Animal"),
+            .endOfScope(")"),
+            .space(" "),
+            .startOfScope("{"),
+            .endOfScope("}"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testAnyAnimal() {
+        let input = "func feed(_ animal: any Animal) {}"
+        let output: [Token] = [
+            .keyword("func"),
+            .space(" "),
+            .identifier("feed"),
+            .startOfScope("("),
+            .identifier("_"),
+            .space(" "),
+            .identifier("animal"),
+            .delimiter(":"),
+            .space(" "),
+            .identifier("any"),
+            .space(" "),
+            .identifier("Animal"),
+            .endOfScope(")"),
+            .space(" "),
+            .startOfScope("{"),
+            .endOfScope("}"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testAnyAnimalArray() {
+        let input = "let animals: [any Animal]"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("animals"),
+            .delimiter(":"),
+            .space(" "),
+            .startOfScope("["),
+            .identifier("any"),
+            .space(" "),
+            .identifier("Animal"),
+            .endOfScope("]"),
         ]
         XCTAssertEqual(tokenize(input), output)
     }

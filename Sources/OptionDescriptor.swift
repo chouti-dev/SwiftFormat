@@ -207,6 +207,7 @@ class OptionDescriptor {
         }
     }
 
+    @_disfavoredOverload
     convenience init<T: RawRepresentable>(
         argumentName: String,
         displayName: String,
@@ -389,7 +390,7 @@ struct _Descriptors {
     let useVoid = OptionDescriptor(
         argumentName: "voidtype",
         displayName: "Void Type",
-        help: "How Void types are represented: \"void\" (default) or \"tuple\"",
+        help: "How void types are represented: \"void\" (default) or \"tuple\"",
         keyPath: \.useVoid,
         trueValues: ["void"],
         falseValues: ["tuple", "tuples", "()"]
@@ -709,7 +710,7 @@ struct _Descriptors {
     let shortOptionals = OptionDescriptor(
         argumentName: "shortoptionals",
         displayName: "Short Optional Syntax",
-        help: "Use ? for Optionals \"always\" (default) or \"except-properties\"",
+        help: "Use ? for optionals \"always\" (default) or \"except-properties\"",
         keyPath: \.shortOptionals
     )
     let markTypes = OptionDescriptor(
@@ -857,7 +858,7 @@ struct _Descriptors {
     let indentStrings = OptionDescriptor(
         argumentName: "indentstrings",
         displayName: "Indent Strings",
-        help: "Indent Multiline Strings: \"false\" (default) or \"true\"",
+        help: "Indent multiline strings: \"false\" (default) or \"true\"",
         keyPath: \.indentStrings,
         trueValues: ["true", "enabled"],
         falseValues: ["false", "disabled"]
@@ -867,6 +868,14 @@ struct _Descriptors {
         displayName: "Closure Void Return",
         help: "Closure void returns: \"remove\" (default) or \"preserve\"",
         keyPath: \.closureVoidReturn
+    )
+    let removeStartOrEndBlankLinesFromTypes = OptionDescriptor(
+        argumentName: "typeblanklines",
+        displayName: "Remove blank lines from types",
+        help: "\"remove\" (default) or \"preserve\" blank lines from types",
+        keyPath: \.removeStartOrEndBlankLinesFromTypes,
+        trueValues: ["remove"],
+        falseValues: ["preserve"]
     )
 
     // MARK: - Internal

@@ -173,6 +173,11 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertFalse(formatter.isStartOfClosure(at: 12))
     }
 
+    func testFunctionWithOpaqueReturnTypeNotTreatedAsClosure() {
+        let formatter = Formatter(tokenize("func foo() -> any Bar {}"))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 12))
+    }
+
     func testThrowingFunctionWithGenericReturnTypeNotTreatedAsClosure() {
         let formatter = Formatter(tokenize("func foo<Baz>() throws -> Bar<Baz> {}"))
         XCTAssertFalse(formatter.isStartOfClosure(at: 18))
@@ -380,6 +385,11 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssert(formatter.isStartOfClosure(at: 0))
     }
 
+    func testAsyncClosure2() {
+        let formatter = Formatter(tokenize("{ foo async in foo }"))
+        XCTAssert(formatter.isStartOfClosure(at: 0))
+    }
+
     func testFunctionNamedAsync() {
         let formatter = Formatter(tokenize("foo = async { bar }"))
         XCTAssert(formatter.isStartOfClosure(at: 6))
@@ -524,6 +534,20 @@ class ParsingHelpersTests: XCTestCase {
         }
         """))
         XCTAssertFalse(formatter.isStartOfClosure(at: 19))
+    }
+
+    func testMainActorClosure() {
+        let formatter = Formatter(tokenize("""
+        let foo = { @MainActor in () }
+        """))
+        XCTAssert(formatter.isStartOfClosure(at: 6))
+    }
+
+    func testThrowingClosure() {
+        let formatter = Formatter(tokenize("""
+        let foo = { bar throws in bar }
+        """))
+        XCTAssert(formatter.isStartOfClosure(at: 6))
     }
 
     // MARK: isAccessorKeyword
@@ -1559,5 +1583,39 @@ class ParsingHelpersTests: XCTestCase {
         for i in formatter.tokens.indices {
             XCTAssertNil(formatter.startOfConditionalStatement(at: i))
         }
+    }
+
+    // MARK: isStartOfStatement
+
+    func testAsyncAfterFuncNotTreatedAsStartOfStatement() {
+        let formatter = Formatter(tokenize("""
+        func foo()
+            async
+        """))
+        XCTAssertFalse(formatter.isStartOfStatement(at: 7))
+    }
+
+    func testAsyncLetTreatedAsStartOfStatement() {
+        let formatter = Formatter(tokenize("""
+        async let foo = bar()
+        """))
+        XCTAssert(formatter.isStartOfStatement(at: 0))
+    }
+
+    func testAsyncIdentifierTreatedAsStartOfStatement() {
+        let formatter = Formatter(tokenize("""
+        func async() {}
+        async()
+        """))
+        XCTAssert(formatter.isStartOfStatement(at: 9))
+    }
+
+    func testAsyncIdentifierNotTreatedAsStartOfStatement() {
+        let formatter = Formatter(tokenize("""
+        func async() {}
+        let foo =
+            async()
+        """))
+        XCTAssertFalse(formatter.isStartOfStatement(at: 16))
     }
 }

@@ -463,7 +463,7 @@ extension Formatter {
             return true
         case .operator(_, .none),
              .keyword("deinit"), .keyword("catch"), .keyword("else"), .keyword("repeat"),
-             .keyword("throws"), .keyword("rethrows"), .keyword("async"):
+             .keyword("throws"), .keyword("rethrows"):
             return false
         case .endOfScope("}"):
             guard let startOfScope = index(of: .startOfScope("{"), before: prevIndex) else {
@@ -572,7 +572,7 @@ extension Formatter {
         var i = i
         while let token = token(at: i) {
             switch token {
-            case .keyword("in"), .keyword("throws"), .keyword("rethrows"), .keyword("async"):
+            case .keyword("in"), .keyword("throws"), .keyword("rethrows"):
                 guard let scopeIndex = index(of: .startOfScope, before: i, if: {
                     $0 == .startOfScope("{")
                 }) else {
@@ -631,7 +631,7 @@ extension Formatter {
     /// If the token at the specified index is part of a conditional statement, returns the index of the first
     /// token in the statement (e.g. `if`, `guard`, `while`, etc.), otherwise returns nil
     func startOfConditionalStatement(at i: Int) -> Int? {
-        guard var index = indexOfLastSignificantKeyword(at: i) else {
+        guard var index = indexOfLastSignificantKeyword(at: i, excluding: ["else"]) else {
             return nil
         }
 
@@ -671,10 +671,10 @@ extension Formatter {
                 return nil
             }
             switch tokens[prevIndex] {
-            case .delimiter(","):
-                return prevIndex
             case let .keyword(name) where
                 ["if", "guard", "while", "for", "case", "catch"].contains(name):
+                fallthrough
+            case .delimiter(","):
                 return isAfterBrace(prevIndex, i) ? nil : prevIndex
             default:
                 return nil
@@ -852,7 +852,7 @@ extension Formatter {
         guard let token = token(at: i) else { return true }
         switch token {
         case let .keyword(string) where [
-            "where", "dynamicType", "rethrows", "throws", "async",
+            "where", "dynamicType", "rethrows", "throws",
         ].contains(string):
             return false
         case .keyword("as"):
@@ -888,6 +888,16 @@ extension Formatter {
                 return false
             }
             return true
+        case .identifier("async"):
+            if next(.nonSpaceOrCommentOrLinebreak, after: i) == .keyword("let") {
+                return true
+            }
+            if last(.nonSpaceOrCommentOrLinebreak, before: i) == .endOfScope(")"),
+               lastSignificantKeyword(at: i) == "func"
+            {
+                return false
+            }
+            fallthrough
         case .identifier:
             if isTrailingClosureLabel(at: i) {
                 return false
@@ -968,6 +978,18 @@ extension Formatter {
             default:
                 continue
             }
+        }
+        return false
+    }
+
+    /// Returns true if the token at the specified index is inside a single-line string literal (including inside an interpolation)
+    func isInSingleLineStringLiteral(at i: Int) -> Bool {
+        var i = i
+        while let token = token(at: i), !token.isLinebreak {
+            if token.isStringDelimiter {
+                return !token.isMultilineStringDelimiter
+            }
+            i -= 1
         }
         return false
     }
@@ -1094,8 +1116,10 @@ extension Formatter {
               let nextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: endIndex)
         else { return false }
         switch tokens[nextIndex] {
-        case .operator("->", .infix), .keyword("throws"), .keyword("rethrows"), .keyword("async"):
+        case .operator("->", .infix), .keyword("throws"), .keyword("rethrows"):
             return true
+        case .keyword("in"):
+            return last(.nonSpaceOrLinebreak, before: i) != .keyword("for")
         case .identifier("async"):
             if let nextToken = next(.nonSpaceOrCommentOrLinebreak, after: nextIndex),
                [.operator("->", .infix), .keyword("throws"), .keyword("rethrows")].contains(nextToken)
@@ -1775,6 +1799,40 @@ extension Formatter {
             return ["true", "false"].contains(name) ? .identifier("Bool") : .identifier(name)
         case let token:
             return token.isStringDelimiter ? .identifier("String") : token
+        }
+    }
+
+    /// Returns end of last index of Void type declaration starting at specified index, or nil if not Void
+    func endOfVoidType(at index: Int) -> Int? {
+        switch tokens[index] {
+        case .identifier("Void"):
+            return index
+        case .identifier("Swift"):
+            guard let dotIndex = self.index(of: .nonSpaceOrLinebreak, after: index, if: {
+                $0 == .operator(".", .infix)
+            }), let voidIndex = self.index(of: .nonSpace, after: dotIndex, if: {
+                $0 == .identifier("Void")
+            }) else { return nil }
+            return voidIndex
+        case .startOfScope("("):
+            guard let nextIndex = self.index(of: .nonSpace, after: index) else {
+                return nil
+            }
+            switch tokens[nextIndex] {
+            case .endOfScope(")"):
+                return nextIndex
+            case .identifier("Void"):
+                guard let nextIndex = self.index(of: .nonSpace, after: nextIndex),
+                      case .endOfScope(")") = tokens[nextIndex]
+                else {
+                    return nil
+                }
+                return nextIndex
+            default:
+                return nil
+            }
+        default:
+            return nil
         }
     }
 }

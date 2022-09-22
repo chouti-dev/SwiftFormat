@@ -410,6 +410,23 @@ class CommandLineTests: XCTestCase {
         ])
     }
 
+    // MARK: script input files
+
+    func testParseScriptInput() throws {
+        let result = try parseScriptInput(from: [
+            "SCRIPT_INPUT_FILE_COUNT": "2",
+            "SCRIPT_INPUT_FILE_0": "\(projectDirectory.path)/File1.swift",
+            "SCRIPT_INPUT_FILE_1": "\(projectDirectory.path)/File2.swift",
+        ])
+        XCTAssertEqual(
+            result,
+            [
+                URL(fileURLWithPath: "\(projectDirectory.path)/File1.swift"),
+                URL(fileURLWithPath: "\(projectDirectory.path)/File2.swift"),
+            ]
+        )
+    }
+
     // MARK: config
 
     func testBadConfigFails() {
@@ -454,5 +471,15 @@ class CommandLineTests: XCTestCase {
         }
         // NOTE: to update regression suite, run again without `--lint` argument
         XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "Snapshots --unexclude Snapshots --symlinks follow --cache ignore --lint"), .ok)
+    }
+
+    func testRegressionSuiteNotDisabled() throws {
+        let commandLineTests = try String(contentsOf: URL(fileURLWithPath: #file))
+        let range = try XCTUnwrap(
+            commandLineTests.range(of: "testRegressionSuiteNotDisabled()")
+        )
+        XCTAssert(commandLineTests[..<range.lowerBound].contains("""
+        with: "Snapshots --unexclude Snapshots --symlinks follow --cache ignore --lint")
+        """))
     }
 }

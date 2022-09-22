@@ -267,6 +267,10 @@ Remove trailing blank line at the end of a scope.
 
 Remove leading blank line at the start of a scope.
 
+Option | Description
+--- | ---
+`--typeblanklines` | "remove" (default) or "preserve" blank lines from types
+
 <details>
 <summary>Examples</summary>
 
@@ -660,7 +664,7 @@ Option | Description
 `--indentcase` | Indent cases inside a switch: "true" or "false" (default)
 `--ifdef` | #if indenting: "indent" (default), "no-indent" or "outdent"
 `--xcodeindentation` | Match Xcode indenting: "enabled" or "disabled" (default)
-`--indentstrings` | Indent Multiline Strings: "false" (default) or "true"
+`--indentstrings` | Indent multiline strings: "false" (default) or "true"
 
 <details>
 <summary>Examples</summary>
@@ -1857,7 +1861,7 @@ Prefer shorthand syntax for Arrays, Dictionaries and Optionals.
 
 Option | Description
 --- | ---
-`--shortoptionals` | Use ? for Optionals "always" (default) or "except-properties"
+`--shortoptionals` | Use ? for optionals "always" (default) or "except-properties"
 
 <details>
 <summary>Examples</summary>
@@ -1930,7 +1934,7 @@ Use `Void` for type declarations and `()` for values.
 
 Option | Description
 --- | ---
-`--voidtype` | How Void types are represented: "void" (default) or "tuple"
+`--voidtype` | How void types are represented: "void" (default) or "tuple"
 
 <details>
 <summary>Examples</summary>

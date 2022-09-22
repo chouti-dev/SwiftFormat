@@ -11,6 +11,35 @@ import Foundation
 // MARK: shared helper methods
 
 extension Formatter {
+    // should brace be wrapped according to `wrapMultilineStatementBraces` rule?
+    func shouldWrapMultilineStatementBrace(at index: Int) -> Bool {
+        assert(tokens[index] == .startOfScope("{"))
+        guard let endIndex = endOfScope(at: index),
+              tokens[index + 1 ..< endIndex].contains(where: { $0.isLinebreak }),
+              let prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: index),
+              let prevToken = token(at: prevIndex), !prevToken.isStartOfScope,
+              !prevToken.isDelimiter
+        else {
+            return false
+        }
+        let indent = indentForLine(at: prevIndex)
+        guard isStartOfClosure(at: index) else {
+            return indent > indentForLine(at: endIndex)
+        }
+        if prevToken == .endOfScope(")"),
+           !tokens[startOfLine(at: prevIndex, excludingIndent: true)].is(.endOfScope),
+           let startIndex = self.index(of: .startOfScope("("), before: prevIndex),
+           indentForLine(at: startIndex) < indent
+        {
+            if options.wrapArguments == .beforeFirst {
+                return !onSameLine(startIndex, prevIndex)
+            } else {
+                return next(.nonSpaceOrComment, after: startIndex)?.isLinebreak == true
+            }
+        }
+        return false
+    }
+
     // remove self if possible
     func removeSelf(at i: Int, exclude: Set<String>, include: Set<String>? = nil) -> Bool {
         assert(tokens[i] == .identifier("self"))
@@ -762,7 +791,8 @@ extension Formatter {
         forEach(.operator("?", .infix)) { conditionIndex, _ in
             guard
                 options.wrapTernaryOperators != .default,
-                let expressionStartIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: conditionIndex)
+                let expressionStartIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: conditionIndex),
+                !isInSingleLineStringLiteral(at: conditionIndex)
             else { return }
 
             // Find the : operator that separates the true and false branches
@@ -1195,14 +1225,14 @@ extension Formatter {
             let declarationParser = Formatter(tokens)
             let declarationTypeToken = declarationParser.tokens[declarationTypeTokenIndex]
 
-            let isStaticDeclaration = declarationParser.lastToken(
-                before: declarationTypeTokenIndex,
-                where: { $0 == .keyword("static") }
+            let isStaticDeclaration = declarationParser.index(
+                of: .keyword("static"),
+                before: declarationTypeTokenIndex
             ) != nil
 
-            let isClassDeclaration = declarationParser.lastToken(
-                before: declarationTypeTokenIndex,
-                where: { $0 == .keyword("class") }
+            let isClassDeclaration = declarationParser.index(
+                of: .keyword("class"),
+                before: declarationTypeTokenIndex
             ) != nil
 
             switch declarationTypeToken {

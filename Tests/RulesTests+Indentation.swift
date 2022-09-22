@@ -410,6 +410,20 @@ class IndentTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.indent)
     }
 
+    func testIndentMultilineStatementDoesntFailToTerminate() {
+        let input = """
+        foo(one: 1,
+            two: 2).bar { _ in
+            "one"
+        }
+        """
+        let options = FormatOptions(
+            wrapArguments: .afterFirst,
+            closingParenOnSameLine: true
+        )
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
     // indent switch/case
 
     func testSwitchCaseIndenting() {
@@ -1341,7 +1355,8 @@ class IndentTests: RulesTests {
     func testIndentInsideWrappedVarStatement() {
         let input = "var Foo:\nBar {\nreturn 5\n}"
         let output = "var Foo:\n    Bar {\n    return 5\n}"
-        testFormatting(for: input, output, rule: FormatRules.indent)
+        testFormatting(for: input, output, rule: FormatRules.indent,
+                       exclude: ["wrapMultilineStatementBraces"])
     }
 
     func testNoIndentAfterOperatorDeclaration() {
@@ -1480,7 +1495,7 @@ class IndentTests: RulesTests {
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
         testFormatting(for: input, rule: FormatRules.indent, options: options,
-                       exclude: ["wrapConditionalBodies"])
+                       exclude: ["wrapConditionalBodies", "wrapMultilineStatementBraces"])
     }
 
     func testDoubleIndentTrailingClosureBody2() {
@@ -1559,6 +1574,87 @@ class IndentTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testNoDoubleIndentInInsideClosure3() {
+        let input = """
+        foo {
+            [weak self] _ in
+            self?.bar()
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testNoDoubleIndentInInsideClosure4() {
+        let input = """
+        foo {
+            (baz: Int) in
+            self?.bar(baz)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testNoDoubleIndentInInsideClosure5() {
+        let input = """
+        foo { [weak self] bar in
+            for baz in bar {
+                self?.print(baz)
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testNoDoubleIndentInInsideClosure6() {
+        let input = """
+        foo { (bar: [Int]) in
+            for baz in bar {
+                print(baz)
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testNoDoubleIndentForInInsideFunction() {
+        let input = """
+        func foo() { // comment here
+            for idx in 0 ..< 100 {
+                print(idx)
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testNoUnindentTrailingClosure() {
+        let input = """
+        private final class Foo {
+            func animateTransition() {
+                guard let fromVC = transitionContext.viewController(forKey: .from),
+                      let toVC = transitionContext.viewController(forKey: .to) else {
+                    return
+                }
+
+                UIView.transition(
+                    with: transitionContext.containerView,
+                    duration: transitionDuration(using: transitionContext),
+                    options: []) {
+                        fromVC.view.alpha = 0
+                        transitionContext.containerView.addSubview(toVC.view)
+                        toVC.view.frame = transitionContext.finalFrame(for: toVC)
+                        toVC.view.alpha = 1
+                    } completion: { _ in
+                        transitionContext.completeTransition(true)
+                        fromVC.view.removeFromSuperview()
+                    }
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent,
+                       exclude: ["wrapArguments", "wrapMultilineStatementBraces"])
     }
 
     func testIndentChainedPropertiesAfterFunctionCall() {
@@ -1689,6 +1785,20 @@ class IndentTests: RulesTests {
             .quux { _ in
                 false
             }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testCommentSeparatedChainedFunctionAfterBraceWithXcodeIndentation() {
+        let input = """
+        func foo() {
+            bar {
+                doSomething()
+            }
+            // baz
+            .baz()
+        }
         """
         let options = FormatOptions(xcodeIndentation: true)
         testFormatting(for: input, rule: FormatRules.indent, options: options)
@@ -2412,6 +2522,29 @@ class IndentTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.indent)
     }
 
+    // indent multiline regex literals
+
+    func testIndentMultilineRegularExpression() {
+        let input = """
+        let regex = #/
+            (foo+)
+            [bar]*
+            (baz?)
+        /#
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testNoMisindentCasePath() {
+        let input = """
+        reducer.pullback(
+            casePath: /Action.action,
+            environment: {}
+        )
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
     // indent #if/#else/#elseif/#endif (mode: indent)
 
     func testIfEndifIndenting() {
@@ -3112,5 +3245,68 @@ class IndentTests: RulesTests {
         let options = FormatOptions(indent: "\t", truncateBlankLines: false, tabWidth: 2)
         testFormatting(for: input, rule: FormatRules.indent, options: options,
                        exclude: ["consecutiveBlankLines", "wrapConditionalBodies"])
+    }
+
+    // async
+
+    func testAsyncThrowsNotUnindented() {
+        let input = """
+        func multilineFunction(
+            foo _: String,
+            bar _: String)
+            async throws -> String {}
+        """
+        let options = FormatOptions(closingParenOnSameLine: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentAsyncLet() {
+        let input = """
+        func foo() async {
+                async let bar = baz()
+        async let baz = quux()
+        }
+        """
+        let output = """
+        func foo() async {
+            async let bar = baz()
+            async let baz = quux()
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.indent)
+    }
+
+    func testIndentAsyncLetAfterLet() {
+        let input = """
+        func myFunc() {
+            let x = 1
+            async let foo = bar()
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentAsyncLetAfterBrace() {
+        let input = """
+        func myFunc() {
+            let x = 1
+            enum Baz {
+                case foo
+            }
+            async let foo = bar()
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testAsyncFunctionArgumentLabelNotIndented() {
+        let input = """
+        func multilineFunction(
+            foo _: String,
+            async _: String)
+            -> String {}
+        """
+        let options = FormatOptions(closingParenOnSameLine: true)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 }

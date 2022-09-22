@@ -1244,6 +1244,27 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.enumNamespaces)
     }
 
+    func testClassFuncNotReplacedByEnum() {
+        let input = """
+        class Foo {
+            class override func foo() {
+                Bar.bar()
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.enumNamespaces,
+                       exclude: ["modifierOrder", "specifiers"])
+    }
+
+    func testOpenClassNotReplacedByEnum() {
+        let input = """
+        open class Foo {
+            public static let bar = "bar"
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.enumNamespaces)
+    }
+
     // MARK: - numberFormatting
 
     // hex case
@@ -1531,6 +1552,17 @@ class SyntaxTests: RulesTests {
         let input = "if a == b // foo\n    && b == c {}"
         let output = "if a == b, // foo\n    b == c {}"
         testFormatting(for: input, output, rule: FormatRules.andOperator, exclude: ["indent"])
+    }
+
+    func testNoReplaceAndOperatorWhereGenericsAmbiguous() {
+        let input = "if x < y && z > (a * b) {}"
+        testFormatting(for: input, rule: FormatRules.andOperator)
+    }
+
+    func testNoReplaceAndOperatorWhereGenericsAmbiguous2() {
+        let input = "if x < y && z && w > (a * b) {}"
+        let output = "if x < y, z && w > (a * b) {}"
+        testFormatting(for: input, output, rule: FormatRules.andOperator)
     }
 
     func testNoReplaceAndInViewBuilder() {
@@ -1822,6 +1854,23 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.typeSugar)
     }
 
+    func testExtensionTypeSugar() {
+        let input = """
+        extension Array<Foo> {}
+        extension Optional<Foo> {}
+        extension Dictionary<Foo, Bar> {}
+        extension Optional<Array<Dictionary<Foo, Array<Bar>>>> {}
+        """
+
+        let output = """
+        extension [Foo] {}
+        extension Foo? {}
+        extension [Foo: Bar] {}
+        extension [[Foo: [Bar]]]? {}
+        """
+        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+    }
+
     // dictionaries
 
     func testDictionaryTypeConvertedToSugar() {
@@ -2062,6 +2111,12 @@ class SyntaxTests: RulesTests {
         let output = "let foo = bar.contains(where: \\.foo)"
         let options = FormatOptions(swiftVersion: "5.2")
         testFormatting(for: input, output, rule: FormatRules.preferKeyPath, options: options)
+    }
+
+    func testMultipleTrailingClosuresNotConvertedToKeyPath() {
+        let input = "foo.map { $0.bar } reverse: { $0.bar }"
+        let options = FormatOptions(swiftVersion: "5.2")
+        testFormatting(for: input, rule: FormatRules.preferKeyPath, options: options)
     }
 
     // MARK: - assertionFailures

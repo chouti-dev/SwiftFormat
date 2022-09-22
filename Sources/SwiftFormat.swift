@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.49.9"
+let swiftFormatVersion = "0.49.18"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -44,7 +44,7 @@ public let swiftVersionFile = ".swift-version"
 /// Supported Swift versions
 public let swiftVersions = [
     "3.x", "4.0", "4.1", "4.2",
-    "5.0", "5.1", "5.2", "5.3", "5.4", "5.5",
+    "5.0", "5.1", "5.2", "5.3", "5.4", "5.5", "5.6", "5.7",
 ]
 
 /// An enumeration of the types of error that may be thrown by SwiftFormat
@@ -287,6 +287,7 @@ private func processDirectory(_ inputURL: URL, with options: inout Options, logg
         let versionString = try String(contentsOf: versionFile, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if Version(rawValue: versionString) != nil {
+            logger?("Reading swift-version file at \(versionFile.path) (version \(versionString))")
             args["swiftversion"] = versionString
         } else {
             // Don't treat as error, per: https://github.com/nicklockwood/SwiftFormat/issues/639
