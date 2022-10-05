@@ -677,13 +677,15 @@ class SyntaxTests: RulesTests {
     // breaking the `testNoOverHoistSwitchCaseWithNestedParens` case
     func testHoistSwitchCaseWithNestedParens() {
         let input = "import Foo\nswitch (foo, bar) {\ncase (.baz(let quux), Foo.bar): break\n}"
-        testFormatting(for: input, rule: FormatRules.hoistPatternLet)
+        testFormatting(for: input, rule: FormatRules.hoistPatternLet,
+                       exclude: ["blankLineAfterImports"])
     }
 
     // TODO: this could actually hoist the let by one level, but that's tricky to implement
     func testNoOverHoistSwitchCaseWithNestedParens() {
         let input = "import Foo\nswitch (foo, bar) {\ncase (.baz(let quux), bar): break\n}"
-        testFormatting(for: input, rule: FormatRules.hoistPatternLet)
+        testFormatting(for: input, rule: FormatRules.hoistPatternLet,
+                       exclude: ["blankLineAfterImports"])
     }
 
     func testNoHoistLetWithEmptArg() {
@@ -1265,6 +1267,16 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.enumNamespaces)
     }
 
+    func testClassNotReplacedByEnum() {
+        let input = """
+        class Foo {
+            public static let bar = "bar"
+        }
+        """
+        let options = FormatOptions(enumNamespaces: .structsOnly)
+        testFormatting(for: input, rule: FormatRules.enumNamespaces, options: options)
+    }
+
     // MARK: - numberFormatting
 
     // hex case
@@ -1783,7 +1795,8 @@ class SyntaxTests: RulesTests {
         let input = "import Foundation\nprotocol Foo: class {}"
         let output = "import Foundation\nprotocol Foo: AnyObject {}"
         let options = FormatOptions(swiftVersion: "4.1")
-        testFormatting(for: input, output, rule: FormatRules.anyObjectProtocol, options: options)
+        testFormatting(for: input, output, rule: FormatRules.anyObjectProtocol, options: options,
+                       exclude: ["blankLineAfterImports"])
     }
 
     func testClassDeclarationNotReplacedByAnyObject() {
@@ -2563,5 +2576,346 @@ class SyntaxTests: RulesTests {
         func foo() {}
         """
         testFormatting(for: input, output, rule: FormatRules.blockComments)
+    }
+
+    // MARK: - opaqueGenericParameters
+
+    func testGenericNotModifiedBelowSwift5_7() {
+        let input = """
+        func foo<T>(_ value: T) {
+            print(value)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.6")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testOpaqueGenericParameterWithNoConstraint() {
+        let input = """
+        func foo<T>(_ value: T) {
+            print(value)
+        }
+        """
+
+        let output = """
+        func foo(_ value: some Any) {
+            print(value)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testDisableSomeAnyGenericType() {
+        let input = """
+        func foo<T>(_ value: T) {
+            print(value)
+        }
+        """
+
+        let options = FormatOptions(useSomeAny: false, swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testOpaqueGenericParameterWithConstraintInBracket() {
+        let input = """
+        func foo<T: Fooable, U: Barable>(_ fooable: T, barable: U) -> Baaz {
+            print(fooable, barable)
+        }
+        """
+
+        let output = """
+        func foo(_ fooable: some Fooable, barable: some Barable) -> Baaz {
+            print(fooable, barable)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testOpaqueGenericParameterWithConstraintsInWhereClause() {
+        let input = """
+        func foo<T, U>(_ t: T, _ u: U) -> Baaz where T: Fooable, T: Barable, U: Baazable {
+            print(t, u)
+        }
+        """
+
+        let output = """
+        func foo(_ t: some Fooable & Barable, _ u: some Baazable) -> Baaz {
+            print(t, u)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testOpaqueGenericParameterCanRemoveOneButNotOthers_onOneLine() {
+        let input = """
+        func foo<S: Baazable, T: Fooable, U: Barable>(_ foo: T, bar1: U, bar2: U) where S.AssociatedType == Baaz, T: Quuxable, U: Qaaxable {
+            print(foo, bar1, bar2)
+        }
+        """
+
+        let output = """
+        func foo<S: Baazable, U: Barable>(_ foo: some Fooable & Quuxable, bar1: U, bar2: U) where S.AssociatedType == Baaz, U: Qaaxable {
+            print(foo, bar1, bar2)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testOpaqueGenericParameterCanRemoveOneButNotOthers_onMultipleLines() {
+        let input = """
+        func foo<
+            S: Baazable,
+            T: Fooable,
+            U: Barable
+        >(_ foo: T, bar1: U, bar2: U) where
+            S.AssociatedType == Baaz,
+            T: Quuxable,
+            U: Qaaxable
+        {
+            print(foo, bar1, bar2)
+        }
+        """
+
+        let output = """
+        func foo<
+            S: Baazable,
+            U: Barable
+        >(_ foo: some Fooable & Quuxable, bar1: U, bar2: U) where
+            S.AssociatedType == Baaz,
+            U: Qaaxable
+        {
+            print(foo, bar1, bar2)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testOpaqueGenericParameterWithUnknownAssociatedTypeConstraint() {
+        // If we knew that `T.AssociatedType` was the protocol's primary
+        // associated type we could update this to `value: some Fooable<Bar>`,
+        // but we don't necessarily have that type information available.
+        //  - If primary associated types become very widespread, it may make
+        //    sense to assume (or have an option to assume) that this would work.
+        let input = """
+        func foo<T: Fooable>(_ value: T) where T.AssociatedType == Bar {
+            print(value)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testOpaqueGenericParameterWithAssociatedTypeConformance() {
+        // There is no opaque generic parameter syntax that supports this type of constraint
+        let input = """
+        func foo<T: Fooable>(_ value: T) where T.AssociatedType: Bar {
+            print(value)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testOpaqueGenericParameterWithKnownAssociatedTypeConstraint() {
+        // For known types (like those in the standard library),
+        // we are able to know their primary associated types
+        let input = """
+        func foo<T: Collection>(_ value: T) where T.Element == Foo {
+            print(value)
+        }
+        """
+
+        let output = """
+        func foo(_ value: some Collection<Foo>) {
+            print(value)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericTypeUsedInMultipleParameters() {
+        let input = """
+        func foo<T: Fooable>(_ first: T, second: T) {
+            print(first, second)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericTypeUsedInClosureMultipleTimes() {
+        let input = """
+        func foo<T: Fooable>(_ closure: (T) -> T) {
+            closure(foo)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericTypeUsedAsReturnType() {
+        // A generic used as a return type is different from an opaque result type (SE-244).
+        // In `-> T where T: Fooable`, the generic type is caller-specified, but with
+        // `-> some Fooable` the generic type is specified by the function implementation.
+        // Because those represent different concepts, we can't convert between them.
+        let input = """
+        func foo<T: Fooable>() -> T {
+            // ...
+        }
+
+        func bar<T>() -> T where T: Barable {
+            // ...
+        }
+
+        func baaz<T: Baazable>() -> Set<SomeComplicatedNestedGeneric<T, Bar>> {
+            // ...
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericTypeUsedAsReturnTypeAndParameter() {
+        // Since we can't change the return value, we can't change any of the use cases of T
+        let input = """
+        func foo<T: Fooable>(_ value: T) -> T {
+            value
+        }
+
+        func bar<T>(_ value: T) -> T where T: Barable {
+            value
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    // MARK: - genericExtensions
+
+    func testGenericExtensionNotModifiedBeforeSwift5_7() {
+        let input = "extension Array where Element == Foo {}"
+
+        let options = FormatOptions(swiftVersion: "5.6")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testUpdatesArrayGenericExtensionToAngleBracketSyntax() {
+        let input = "extension Array where Element == Foo {}"
+        let output = "extension Array<Foo> {}"
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options, exclude: ["typeSugar"])
+    }
+
+    func testUpdatesOptionalGenericExtensionToAngleBracketSyntax() {
+        let input = "extension Optional where Wrapped == Foo {}"
+        let output = "extension Optional<Foo> {}"
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options, exclude: ["typeSugar"])
+    }
+
+    func testUpdatesArrayGenericExtensionToAngleBracketSyntaxWithSelf() {
+        let input = "extension Array where Self.Element == Foo {}"
+        let output = "extension Array<Foo> {}"
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options, exclude: ["typeSugar"])
+    }
+
+    func testUpdatesDictionaryGenericExtensionToAngleBracketSyntax() {
+        let input = "extension Dictionary where Key == Foo, Value == Bar {}"
+        let output = "extension Dictionary<Foo, Bar> {}"
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options, exclude: ["typeSugar"])
+    }
+
+    func testRequiresAllGenericTypesToBeProvided() {
+        // No type provided for `Value`, so we can't use the angle bracket syntax
+        let input = "extension Dictionary where Key == Foo {}"
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.genericExtensions, options: options)
+    }
+
+    func testHandlesNestedCollectionTypes() {
+        let input = "extension Array where Element == [[Foo: Bar]] {}"
+        let output = "extension Array<[[Foo: Bar]]> {}"
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options, exclude: ["typeSugar"])
+    }
+
+    func testDoesntUpdateIneligibleConstraints() {
+        // This could potentially by `extension Optional<some Fooable>` in a future language version
+        // but that syntax isn't implemented as of Swift 5.7
+        let input = "extension Optional where Wrapped: Fooable {}"
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.genericExtensions, options: options)
+    }
+
+    func testPreservesOtherConstraintsInWhereClause() {
+        let input = "extension Collection where Element == String, Index == Int {}"
+        let output = "extension Collection<String> where Index == Int {}"
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options)
+    }
+
+    func testSupportsUserProvidedGenericTypes() {
+        let input = """
+        extension StateStore where State == FooState, Action == FooAction {}
+        extension LinkedList where Element == Foo {}
+        """
+        let output = """
+        extension StateStore<FooState, FooAction> {}
+        extension LinkedList<Foo> {}
+        """
+
+        let options = FormatOptions(
+            genericTypes: "LinkedList<Element>;StateStore<State, Action>",
+            swiftVersion: "5.7"
+        )
+        testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options)
+    }
+
+    func testSupportsMultilineUserProvidedGenericTypes() {
+        let input = """
+        extension Reducer where
+            State == MyFeatureState,
+            Action == MyFeatureAction,
+            Environment == ApplicationEnvironment
+        {}
+        """
+        let output = """
+        extension Reducer<MyFeatureState, MyFeatureAction, ApplicationEnvironment> {}
+        """
+
+        let options = FormatOptions(
+            genericTypes: "Reducer<State, Action, Environment>",
+            swiftVersion: "5.7"
+        )
+        testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options)
     }
 }

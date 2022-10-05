@@ -392,6 +392,83 @@ class LinebreakTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.blankLinesBetweenImports)
     }
 
+    // MARK: - blankLineAfterImports
+
+    func testBlankLineAfterImport() {
+        let input = """
+        import ModuleA
+        @testable import ModuleB
+        import ModuleC
+        @testable import ModuleD
+        @testable import ModuleE
+        @testable import ModuleF
+        class foo {}
+        """
+        let output = """
+        import ModuleA
+        @testable import ModuleB
+        import ModuleC
+        @testable import ModuleD
+        @testable import ModuleE
+        @testable import ModuleF
+
+        class foo {}
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLineAfterImports)
+    }
+
+    func testBlankLinesBetweenConditionalImports() {
+        let input = """
+        #if foo
+            import ModuleA
+        #else
+            import ModuleB
+        #endif
+        import ModuleC
+        func foo() {}
+        """
+        let output = """
+        #if foo
+            import ModuleA
+        #else
+            import ModuleB
+        #endif
+        import ModuleC
+
+        func foo() {}
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLineAfterImports)
+    }
+
+    func testBlankLinesBetweenNestedConditionalImports() {
+        let input = """
+        #if foo
+            import ModuleA
+            #if bar
+                import ModuleB
+            #endif
+        #else
+            import ModuleC
+        #endif
+        import ModuleD
+        func foo() {}
+        """
+        let output = """
+        #if foo
+            import ModuleA
+            #if bar
+                import ModuleB
+            #endif
+        #else
+            import ModuleC
+        #endif
+        import ModuleD
+
+        func foo() {}
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLineAfterImports)
+    }
+
     // MARK: - blankLinesBetweenScopes
 
     func testBlankLineBetweenFunctions() {

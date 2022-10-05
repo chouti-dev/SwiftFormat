@@ -16,6 +16,7 @@
 * [enumNamespaces](#enumNamespaces)
 * [extensionAccessControl](#extensionAccessControl)
 * [fileHeader](#fileHeader)
+* [genericExtensions](#genericExtensions)
 * [hoistPatternLet](#hoistPatternLet)
 * [indent](#indent)
 * [initCoderUnavailable](#initCoderUnavailable)
@@ -24,6 +25,7 @@
 * [linebreaks](#linebreaks)
 * [modifierOrder](#modifierOrder)
 * [numberFormatting](#numberFormatting)
+* [opaqueGenericParameters](#opaqueGenericParameters)
 * [preferKeyPath](#preferKeyPath)
 * [redundantBackticks](#redundantBackticks)
 * [redundantBreak](#redundantBreak)
@@ -36,6 +38,7 @@
 * [redundantLetError](#redundantLetError)
 * [redundantNilInit](#redundantNilInit)
 * [redundantObjc](#redundantObjc)
+* [redundantOptionalBinding](#redundantOptionalBinding)
 * [redundantParens](#redundantParens)
 * [redundantPattern](#redundantPattern)
 * [redundantRawValues](#redundantRawValues)
@@ -70,11 +73,13 @@
 * [wrapArguments](#wrapArguments)
 * [wrapAttributes](#wrapAttributes)
 * [wrapMultilineStatementBraces](#wrapMultilineStatementBraces)
+* [wrapSingleLineComments](#wrapSingleLineComments)
 * [yodaConditions](#yodaConditions)
 
 # Opt-in Rules (disabled by default)
 
 * [acronyms](#acronyms)
+* [blankLineAfterImports](#blankLineAfterImports)
 * [blankLinesBetweenImports](#blankLinesBetweenImports)
 * [blockComments](#blockComments)
 * [isEmpty](#isEmpty)
@@ -188,6 +193,26 @@ and precondition(false, ...) to preconditionFailure(...).
 ```diff
 - precondition(false, "message", 2, 1)
 + preconditionFailure("message", 2, 1)
+```
+
+</details>
+<br/>
+
+## blankLineAfterImports
+
+Insert blank line after import statements.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  import A
+  import B
+  @testable import D
++
+  class Foo {
+    // foo
+  }
 ```
 
 </details>
@@ -571,6 +596,10 @@ Option | Description
 Converts types used for hosting only static members into enums (an empty enum is
 the canonical way to create a namespace in Swift as it can't be instantiated).
 
+Option | Description
+--- | ---
+`--enumnamespaces` | Change type to enum: "always" (default) or "structs-only"
+
 ## extensionAccessControl
 
 Configure the placement of an extension's access control keyword.
@@ -622,6 +651,52 @@ Use specified source file header template for all files.
 Option | Description
 --- | ---
 `--header` | Header comments: "strip", "ignore", or the text you wish use
+
+## genericExtensions
+
+When extending generic types, use angle brackets (`extension Array<Foo>`)
+instead of generic type constraints (`extension Array where Element == Foo`).
+
+Option | Description
+--- | ---
+`--generictypes` | Additional generic type definitions used by `genericExtensions`
+A semicolon-separated list of generic types and their generic
+parameters. For example:
+"LinkedList<Element>;Reducer<State, Action, Environment>"
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- extension Array where Element == Foo {}
+- extension Optional where Wrapped == Foo {}
+- extension Dictionary where Key == Foo, Value == Bar {}
+- extension Collection where Element == Foo {}
++ extension Array<Foo> {}
++ extension Optional<Foo> {}
++ extension Dictionary<Key, Value> {}
++ extension Collection<Foo> {}
+
+// With `typeSugar` also enabled:
+- extension Array where Element == Foo {}
+- extension Optional where Wrapped == Foo {}
+- extension Dictionary where Key == Foo, Value == Bar {}
++ extension [Foo] {}
++ extension Foo? {}
++ extension [Key: Value] {}
+
+// Also supports user-defined types!
+- extension LinkedList where Element == Foo {}
+- extension Reducer where
+-     State == FooState,
+-     Action == FooAction,
+-     Environment == FooEnvironment {}
++ extension LinkedList<Foo> {}
++ extension Reducer<FooState, FooAction, FooEnvironment> {}
+```
+
+</details>
+<br/>
 
 ## hoistPatternLet
 
@@ -876,6 +951,46 @@ Option | Description
 ```diff
 - let big = 123456.123
 + let big = 123_456.123
+```
+
+</details>
+<br/>
+
+## opaqueGenericParameters
+
+Use opaque generic parameters (`some Protocol`) instead of generic parameters
+with constraints (`T where T: Protocol`, etc) where equivalent. Also supports
+primary associated types for common standard library types, so definitions like
+`T where T: Collection, T.Element == Foo` are upated to `some Collection<Foo>`.
+
+Option | Description
+--- | ---
+`--someAny` | Use `some Any` types: "true" (default) or "false"
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- func handle<T: Fooable>(_ value: T) {
++ func handle(_ value: some Fooable) {
+      print(value)
+  }
+
+- func handle<T>(_ value: T) where T: Fooable, T: Barable {
++ func handle(_ value: some Fooable & Barable) {
+      print(value)
+  }
+
+- func handle<T: Collection>(_ value: T) where T.Element == Foo {
++ func handle(_ value: some Collection<Foo>) {
+      print(value)
+  }
+
+// With `--someAny enabled` (the default)
+- func handle<T>(_ value: T) {
++ func handle(_ value: some Any) {
+      print(value)
+  }
 ```
 
 </details>
@@ -1197,6 +1312,28 @@ Remove redundant `@objc` annotations.
 ```diff
 - @objc @NSManaged private var foo: String?
 + @NSManaged private var foo: String?
+```
+
+</details>
+<br/>
+
+## redundantOptionalBinding
+
+Removes redundant identifiers in optional binding conditions.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- if let foo = foo {
++ if let foo {
+      print(foo)
+  }
+
+- guard let self = self else {
++ guard let self else {
+      return
+  }
 ```
 
 </details>
@@ -2213,6 +2350,10 @@ Wrap the opening brace of multiline statements.
 
 </details>
 <br/>
+
+## wrapSingleLineComments
+
+Wraps single line `//` comments that don't fit specified `--maxwidth` option.
 
 ## wrapSwitchCases
 

@@ -10,13 +10,13 @@ import Foundation
 
 extension FormatRule {
     var examples: String? {
-        return examplesByRuleName[name]
+        examplesByRuleName[name]
     }
 }
 
 extension _FormatRules {
     var examplesByName: [String: String] {
-        return examplesByRuleName
+        examplesByRuleName
     }
 }
 
@@ -131,6 +131,18 @@ private struct Examples {
     -
       @testable import D
       import E
+    ```
+    """
+
+    let blankLineAfterImports = """
+    ```diff
+      import A
+      import B
+      @testable import D
+    +
+      class Foo {
+        // foo
+      }
     ```
     """
 
@@ -1380,6 +1392,75 @@ private struct Examples {
               Foo()
           }
       }
+    ```
+    """
+
+    let redundantOptionalBinding = """
+    ```diff
+    - if let foo = foo {
+    + if let foo {
+          print(foo)
+      }
+
+    - guard let self = self else {
+    + guard let self else {
+          return
+      }
+    ```
+    """
+
+    let opaqueGenericParameters = """
+    ```diff
+    - func handle<T: Fooable>(_ value: T) {
+    + func handle(_ value: some Fooable) {
+          print(value)
+      }
+
+    - func handle<T>(_ value: T) where T: Fooable, T: Barable {
+    + func handle(_ value: some Fooable & Barable) {
+          print(value)
+      }
+
+    - func handle<T: Collection>(_ value: T) where T.Element == Foo {
+    + func handle(_ value: some Collection<Foo>) {
+          print(value)
+      }
+
+    // With `--someAny enabled` (the default)
+    - func handle<T>(_ value: T) {
+    + func handle(_ value: some Any) {
+          print(value)
+      }
+    ```
+    """
+
+    let genericExtensions = """
+    ```diff
+    - extension Array where Element == Foo {}
+    - extension Optional where Wrapped == Foo {}
+    - extension Dictionary where Key == Foo, Value == Bar {}
+    - extension Collection where Element == Foo {}
+    + extension Array<Foo> {}
+    + extension Optional<Foo> {}
+    + extension Dictionary<Key, Value> {}
+    + extension Collection<Foo> {}
+
+    // With `typeSugar` also enabled:
+    - extension Array where Element == Foo {}
+    - extension Optional where Wrapped == Foo {}
+    - extension Dictionary where Key == Foo, Value == Bar {}
+    + extension [Foo] {}
+    + extension Foo? {}
+    + extension [Key: Value] {}
+
+    // Also supports user-defined types!
+    - extension LinkedList where Element == Foo {}
+    - extension Reducer where
+    -     State == FooState,
+    -     Action == FooAction,
+    -     Environment == FooEnvironment {}
+    + extension LinkedList<Foo> {}
+    + extension Reducer<FooState, FooAction, FooEnvironment> {}
     ```
     """
 }

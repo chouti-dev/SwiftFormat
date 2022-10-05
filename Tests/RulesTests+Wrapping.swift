@@ -995,6 +995,31 @@ class WrappingTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.wrap, options: options)
     }
 
+    func testNoWrapBeforeFirstArgumentInSingleLineStringInterpolation() {
+        let input = """
+        "a very long string literal with \\(interpolation) inside"
+        """
+        let options = FormatOptions(maxWidth: 40)
+        testFormatting(for: input, rule: FormatRules.wrap, options: options)
+    }
+
+    func testWrapBeforeFirstArgumentInMultineStringInterpolation() {
+        let input = """
+        \"""
+        a very long string literal with \\(interpolation) inside
+        \"""
+        """
+        let output = """
+        \"""
+        a very long string literal with \\(
+            interpolation
+        ) inside
+        \"""
+        """
+        let options = FormatOptions(maxWidth: 40)
+        testFormatting(for: input, output, rule: FormatRules.wrap, options: options)
+    }
+
     // ternary expressions
 
     func testWrapSimpleTernaryOperator() {
@@ -3926,5 +3951,38 @@ class WrappingTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.wrapSwitchCases)
+    }
+
+    func testWrapSingleLineComments() {
+        let input = """
+        // a b cde fgh
+        """
+        let output = """
+        // a b
+        // cde
+        // fgh
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
+                       options: FormatOptions(maxWidth: 6))
+    }
+
+    func testWrapSingleLineCommentsIndentation() {
+        let input = """
+        func f() {
+            // a b cde fgh
+            let x = 1
+        }
+        """
+        let output = """
+        func f() {
+            // a b cde
+            // fgh
+            let x = 1
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
+                       options: FormatOptions(maxWidth: 13))
     }
 }

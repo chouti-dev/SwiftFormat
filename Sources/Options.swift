@@ -169,7 +169,7 @@ public struct Version: RawRepresentable, Comparable, ExpressibleByStringLiteral,
     }
 
     public static func < (lhs: Version, rhs: Version) -> Bool {
-        return lhs.rawValue.compare(
+        lhs.rawValue.compare(
             rhs.rawValue,
             options: .numeric,
             locale: Locale(identifier: "en_US")
@@ -177,7 +177,7 @@ public struct Version: RawRepresentable, Comparable, ExpressibleByStringLiteral,
     }
 
     public var description: String {
-        return rawValue
+        rawValue
     }
 }
 
@@ -231,7 +231,7 @@ public struct FileInfo: Equatable, CustomStringConvertible {
     var creationDate: Date?
 
     var fileName: String? {
-        return filePath.map { URL(fileURLWithPath: $0).lastPathComponent }
+        filePath.map { URL(fileURLWithPath: $0).lastPathComponent }
     }
 
     public init(filePath: String? = nil, creationDate: Date? = nil) {
@@ -240,7 +240,7 @@ public struct FileInfo: Equatable, CustomStringConvertible {
     }
 
     public var description: String {
-        return "\(fileName ?? "");\(creationDate.map { "\($0)" } ?? "")"
+        "\(fileName ?? "");\(creationDate.map { "\($0)" } ?? "")"
     }
 }
 
@@ -282,7 +282,7 @@ public enum Grouping: Equatable, RawRepresentable, CustomStringConvertible {
     }
 
     public var description: String {
-        return rawValue
+        rawValue
     }
 }
 
@@ -324,6 +324,12 @@ public enum MarkMode: String, CaseIterable {
     case always
     case never
     case ifNotEmpty = "if-not-empty"
+}
+
+/// Whether to convert types to enum
+public enum EnumNamespacesMode: String, CaseIterable {
+    case always
+    case structsOnly = "structs-only"
 }
 
 /// Configuration options for formatting. These aren't actually used by the
@@ -403,7 +409,10 @@ public struct FormatOptions: CustomStringConvertible {
     public var acronyms: Set<String>
     public var indentStrings: Bool
     public var closureVoidReturn: ClosureVoidReturn
+    public var enumNamespaces: EnumNamespacesMode
     public var removeStartOrEndBlankLinesFromTypes: Bool
+    public var genericTypes: String
+    public var useSomeAny: Bool
 
     // Deprecated
     public var indentComments: Bool
@@ -413,6 +422,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var ignoreConflictMarkers: Bool
     public var swiftVersion: Version
     public var fileInfo: FileInfo
+    public var timeout: TimeInterval
 
     // Enabled rules
     var enabledRules: Set<String> = []
@@ -494,12 +504,16 @@ public struct FormatOptions: CustomStringConvertible {
                 acronyms: Set<String> = ["ID", "URL", "UUID"],
                 indentStrings: Bool = false,
                 closureVoidReturn: ClosureVoidReturn = .remove,
+                enumNamespaces: EnumNamespacesMode = .always,
                 removeStartOrEndBlankLinesFromTypes: Bool = true,
+                genericTypes: String = "",
+                useSomeAny: Bool = true,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
                 swiftVersion: Version = .undefined,
-                fileInfo: FileInfo = FileInfo())
+                fileInfo: FileInfo = FileInfo(),
+                timeout: TimeInterval = 1)
     {
         self.lineAfterMarks = lineAfterMarks
         self.indent = indent
@@ -576,16 +590,20 @@ public struct FormatOptions: CustomStringConvertible {
         self.acronyms = acronyms
         self.indentStrings = indentStrings
         self.closureVoidReturn = closureVoidReturn
+        self.enumNamespaces = enumNamespaces
         self.removeStartOrEndBlankLinesFromTypes = removeStartOrEndBlankLinesFromTypes
+        self.genericTypes = genericTypes
+        self.useSomeAny = useSomeAny
         // Doesn't really belong here, but hard to put elsewhere
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers
         self.swiftVersion = swiftVersion
         self.fileInfo = fileInfo
+        self.timeout = timeout
     }
 
     public var useTabs: Bool {
-        return indent.first == "\t"
+        indent.first == "\t"
     }
 
     public var requiresFileInfo: Bool {
@@ -596,8 +614,9 @@ public struct FormatOptions: CustomStringConvertible {
     public var allOptions: [String: Any] {
         let pairs = Mirror(reflecting: self).children.map { ($0!, $1) }
         var options = Dictionary(pairs, uniquingKeysWith: { $1 })
-        options["fileInfo"] = nil // Special case
-        options["enabledRules"] = nil // Special case
+        for key in ["fileInfo", "enabledRules", "timeout"] { // Special cases
+            options[key] = nil
+        }
         return options
     }
 
@@ -676,6 +695,6 @@ public struct Options {
     }
 
     public func shouldSkipFile(_ inputURL: URL) -> Bool {
-        return fileOptions?.shouldSkipFile(inputURL) ?? false
+        fileOptions?.shouldSkipFile(inputURL) ?? false
     }
 }

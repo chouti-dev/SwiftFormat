@@ -44,7 +44,7 @@ public final class FormatRule: Equatable, Comparable {
     let deprecationMessage: String?
 
     var isDeprecated: Bool {
-        return deprecationMessage != nil
+        deprecationMessage != nil
     }
 
     fileprivate init(help: String,
@@ -73,11 +73,11 @@ public final class FormatRule: Equatable, Comparable {
     }
 
     public static func == (lhs: FormatRule, rhs: FormatRule) -> Bool {
-        return lhs === rhs
+        lhs === rhs
     }
 
     public static func < (lhs: FormatRule, rhs: FormatRule) -> Bool {
-        return lhs.index < rhs.index
+        lhs.index < rhs.index
     }
 }
 
@@ -127,25 +127,25 @@ private let _defaultRules = allRules(except: _disabledByDefault)
 
 public extension _FormatRules {
     /// A Dictionary of rules by name
-    var byName: [String: FormatRule] { return rulesByName }
+    var byName: [String: FormatRule] { rulesByName }
 
     /// All rules
-    var all: [FormatRule] { return _allRules }
+    var all: [FormatRule] { _allRules }
 
     /// Default active rules
-    var `default`: [FormatRule] { return _defaultRules }
+    var `default`: [FormatRule] { _defaultRules }
 
     /// Rules that are disabled by default
-    var disabledByDefault: [String] { return _disabledByDefault }
+    var disabledByDefault: [String] { _disabledByDefault }
 
     /// Just the specified rules
     func named(_ names: [String]) -> [FormatRule] {
-        return Array(names.sorted().compactMap { rulesByName[$0] })
+        Array(names.sorted().compactMap { rulesByName[$0] })
     }
 
     /// All rules except those specified
     func all(except rules: [String]) -> [FormatRule] {
-        return allRules(except: rules)
+        allRules(except: rules)
     }
 }
 
@@ -796,7 +796,8 @@ public struct _FormatRules {
         help: """
         Converts types used for hosting only static members into enums (an empty enum is
         the canonical way to create a namespace in Swift as it can't be instantiated).
-        """
+        """,
+        options: ["enumnamespaces"]
     ) { formatter in
         func rangeHostsOnlyStaticMembersAtTopLevel(_ range: Range<Int>) -> Bool {
             // exit for empty declarations
@@ -859,7 +860,10 @@ public struct _FormatRules {
             return false
         }
 
-        formatter.forEachToken(where: { [.keyword("class"), .keyword("struct")].contains($0) }) { i, _ in
+        formatter.forEachToken(where: { [
+            .keyword("class"),
+            .keyword("struct"),
+        ].contains($0) }) { i, token in
             guard formatter.last(.keyword, before: i) != .keyword("import"),
                   // exit if class is a type modifier
                   let next = formatter.next(.nonSpaceOrCommentOrLinebreak, after: i),
@@ -876,7 +880,12 @@ public struct _FormatRules {
             else {
                 return
             }
-
+            switch formatter.options.enumNamespaces {
+            case .structsOnly where token == .keyword("struct"), .always:
+                break
+            case .structsOnly:
+                return
+            }
             let range = braceIndex + 1 ..< endIndex
             if rangeHostsOnlyStaticMembersAtTopLevel(range),
                !rangeContainsTypeInit(name, in: range), !rangeContainsSelfAssignment(range)
@@ -1041,6 +1050,39 @@ public struct _FormatRules {
             }
 
             formatter.replaceTokens(in: endOfLine ..< nextImportIndex, with: formatter.linebreakToken(for: currentImportIndex + 1))
+        }
+    }
+
+    /// Insert blank line after import statements
+    public let blankLineAfterImports = FormatRule(
+        help: """
+        Insert blank line after import statements.
+        """,
+        disabledByDefault: true,
+        sharedOptions: ["linebreaks"]
+    ) { formatter in
+        formatter.forEach(.keyword("import")) { currentImportIndex, _ in
+            guard let endOfLine = formatter.index(of: .linebreak, after: currentImportIndex),
+                  var nextIndex = formatter.index(of: .nonSpace, after: endOfLine)
+            else {
+                return
+            }
+            if formatter.tokens[nextIndex] == .startOfScope("#if") {
+                var keyword = "#if"
+                while keyword == "#if",
+                      let index = formatter.index(of: .keyword, after: nextIndex)
+                {
+                    nextIndex = index
+                    keyword = formatter.tokens[nextIndex].string
+                }
+            }
+            switch formatter.tokens[nextIndex] {
+            case .linebreak, .keyword("import"), .keyword("@testable"),
+                 .keyword("#else"), .keyword("#elseif"), .endOfScope("#endif"):
+                break
+            default:
+                formatter.insertLinebreak(at: endOfLine)
+            }
         }
     }
 
@@ -2547,7 +2589,7 @@ public struct _FormatRules {
                 {
                     return
                 }
-                if let index = formatter.tokens[i + 1 ..< closingIndex].index(of: .identifier("_")),
+                if let index = formatter.tokens[i + 1 ..< closingIndex].firstIndex(of: .identifier("_")),
                    formatter.next(.nonSpaceOrComment, after: index)?.isIdentifier == true
                 {
                     return
@@ -3700,7 +3742,7 @@ public struct _FormatRules {
             func pushLocals() {
                 if isDeclaration, isConditional {
                     for name in tempLocals {
-                        if let index = argNames.index(of: name),
+                        if let index = argNames.firstIndex(of: name),
                            !locals.contains(name)
                         {
                             argNames.remove(at: index)
@@ -3732,7 +3774,7 @@ public struct _FormatRules {
                     isConditional = formatter.isConditionalStatement(at: i)
                 case .identifier:
                     let name = token.unescaped()
-                    guard let index = argNames.index(of: name), !locals.contains(name) else {
+                    guard let index = argNames.firstIndex(of: name), !locals.contains(name) else {
                         break
                     }
                     if formatter.last(.nonSpaceOrCommentOrLinebreak, before: i)?.isOperator(".") == false,
@@ -4317,6 +4359,62 @@ public struct _FormatRules {
         }
     }
 
+    /// Wraps single-line comments that exceed given `FormatOptions.maxWidth` setting.
+    public let wrapSingleLineComments = FormatRule(
+        help: "Wraps single line `//` comments that don't fit specified `--maxwidth` option.",
+        sharedOptions: ["maxwidth", "indent", "tabwidth", "assetliterals"]
+    ) { formatter in
+        let delimiterLength = "//".count
+        var maxWidth = formatter.options.maxWidth
+        guard maxWidth > 3 else {
+            return
+        }
+
+        formatter.forEach(.startOfScope("//")) { i, _ in
+            // Check that unwrapping wouldn't exceed line length
+            let startOfLine = formatter.startOfLine(at: i)
+            let endOfLine = formatter.endOfLine(at: i)
+            guard formatter.lineLength(from: startOfLine, upTo: endOfLine) > maxWidth else {
+                return
+            }
+
+            guard let startIndex = formatter.index(of: .nonSpace, after: i),
+                  case var .commentBody(comment) = formatter.tokens[startIndex],
+                  !comment.isCommentDirective
+            else {
+                return
+            }
+
+            let prefix = formatter.tokens[startOfLine ..< startIndex]
+            let prefixLength = formatter.lineLength(upTo: startIndex)
+            var length = prefixLength
+            var words = comment.components(separatedBy: " ")
+            var tokens = [Token]()
+            guard case var .linebreak(linebreak, lineNumber) = formatter
+                .linebreakToken(for: startIndex)
+            else {
+                assertionFailure()
+                return
+            }
+            while !words.isEmpty {
+                if !tokens.isEmpty {
+                    tokens.append(.linebreak(linebreak, lineNumber))
+                    tokens += prefix
+                    lineNumber += 1
+                }
+                comment = words.removeFirst()
+                while let next = words.first, length + next.count < maxWidth {
+                    comment += " \(next)"
+                    length += next.count + 1
+                    words.removeFirst()
+                }
+                tokens.append(.commentBody(comment))
+                length = prefixLength
+            }
+            formatter.replaceTokens(in: startIndex ..< endOfLine, with: tokens)
+        }
+    }
+
     /// Writes one switch case per line
     public let wrapSwitchCases = FormatRule(
         help: "Writes one switch case per line.",
@@ -4597,7 +4695,7 @@ public struct _FormatRules {
                         body.hasPrefix("swift-tools-version")
                     {
                         return
-                    } else if body.isFormattingDirective {
+                    } else if body.isCommentDirective {
                         break
                     }
                 }
@@ -4606,7 +4704,7 @@ public struct _FormatRules {
                     switch formatter.token(at: index + 1) ?? .space("") {
                     case .startOfScope("//"):
                         if case let .commentBody(body)? = formatter.next(.nonSpace, after: index + 1),
-                           body.isFormattingDirective
+                           body.isCommentDirective
                         {
                             break
                         }
@@ -4626,7 +4724,7 @@ public struct _FormatRules {
                     formatter.processCommentBody(body, at: startIndex)
                     if !formatter.isEnabled || (body.hasPrefix("*") && !body.hasPrefix("**")) {
                         return
-                    } else if body.isFormattingDirective {
+                    } else if body.isCommentDirective {
                         break
                     }
                 }
@@ -5656,7 +5754,7 @@ public struct _FormatRules {
 
         formatter.forEachToken { i, token in
             guard case let .operator(op, .infix) = token,
-                  let opIndex = ["==", "!=", "<", "<=", ">", ">="].index(of: op),
+                  let opIndex = ["==", "!=", "<", "<=", ">", ">="].firstIndex(of: op),
                   let prevIndex = formatter.index(of: .nonSpace, before: i),
                   isConstant(at: prevIndex), let startIndex = startOfValue(at: prevIndex),
                   !isOperator(at: formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: startIndex)),
@@ -5889,8 +5987,8 @@ public struct _FormatRules {
             // place it on the extension itself.
             case .onExtension:
                 if extensionVisibility == nil,
-                   let delimiterIndex = declaration.openTokens.index(of: .delimiter(":")),
-                   declaration.openTokens.index(of: .keyword("where")).map({ $0 > delimiterIndex }) ?? true
+                   let delimiterIndex = declaration.openTokens.firstIndex(of: .delimiter(":")),
+                   declaration.openTokens.firstIndex(of: .keyword("where")).map({ $0 > delimiterIndex }) ?? true
                 {
                     // Extension adds protocol conformance so can't have visibility modifier
                     return declaration
@@ -5995,12 +6093,13 @@ public struct _FormatRules {
         for (index, declaration) in declarations.enumerated() {
             guard case let .type(kind, open, body, close) = declaration else { continue }
 
-            guard let typeName = declaration.name else {
+            guard var typeName = declaration.name else {
                 continue
             }
 
             let markMode: MarkMode
             let commentTemplate: String
+            let isGroupedExtension: Bool
             switch declaration.keyword {
             case "extension":
                 markMode = formatter.options.markExtensions
@@ -6015,8 +6114,7 @@ public struct _FormatRules {
                 //
                 let isGroupedWithExtendingType: Bool
                 if let indexOfExtendingType = declarations[..<index].lastIndex(where: {
-                    $0.name == typeName && ["class", "actor", "enum", "protocol", "struct",
-                                            "typealias"].contains($0.keyword)
+                    $0.name == typeName && $0.definesType
                 }) {
                     let declarationsBetweenTypeAndExtension = declarations[indexOfExtendingType + 1 ..< index]
                     isGroupedWithExtendingType = declarationsBetweenTypeAndExtension.allSatisfy {
@@ -6037,12 +6135,15 @@ public struct _FormatRules {
 
                 if isGroupedWithExtendingType {
                     commentTemplate = "// \(formatter.options.groupedExtensionMarkComment)"
+                    isGroupedExtension = true
                 } else {
                     commentTemplate = "// \(formatter.options.extensionMarkComment)"
+                    isGroupedExtension = false
                 }
             default:
                 markMode = formatter.options.markTypes
                 commentTemplate = "// \(formatter.options.typeMarkComment)"
+                isGroupedExtension = false
             }
 
             switch markMode {
@@ -6063,14 +6164,13 @@ public struct _FormatRules {
                     $0.string == declaration.keyword
                 }) else { return openingTokens }
 
-                let conformanceNames: String?
-                if declaration.keyword == "extension" {
+                // If this declaration is extension, check if it has any conformances
+                var conformanceNames: String?
+                if
+                    declaration.keyword == "extension",
+                    var conformanceSearchIndex = openingFormatter.index(of: .delimiter(":"), after: keywordIndex)
+                {
                     var conformances = [String]()
-
-                    guard var conformanceSearchIndex = openingFormatter.index(
-                        of: .delimiter(":"),
-                        after: keywordIndex
-                    ) else { return openingFormatter.tokens }
 
                     let endOfConformances = openingFormatter.index(of: .keyword("where"), after: keywordIndex)
                         ?? openingFormatter.index(of: .startOfScope("{"), after: keywordIndex)
@@ -6088,18 +6188,67 @@ public struct _FormatRules {
                         conformanceSearchIndex += 1
                     }
 
-                    guard !conformances.isEmpty else {
-                        return openingFormatter.tokens
+                    if !conformances.isEmpty {
+                        conformanceNames = conformances.joined(separator: ", ")
                     }
-
-                    conformanceNames = conformances.joined(separator: ", ")
-                } else {
-                    conformanceNames = nil
                 }
 
-                let expectedComment = commentTemplate
-                    .replacingOccurrences(of: "%t", with: typeName)
-                    .replacingOccurrences(of: "%c", with: conformanceNames ?? "")
+                // Build the types expected mark comment by replacing `%t`s with the type name
+                // and `%c`s with the list of conformances added in the extension (if applicable)
+                var markForType: String?
+
+                if !commentTemplate.contains("%c") {
+                    markForType = commentTemplate.replacingOccurrences(of: "%t", with: typeName)
+                } else if commentTemplate.contains("%c"), let conformanceNames = conformanceNames {
+                    markForType = commentTemplate
+                        .replacingOccurrences(of: "%t", with: typeName)
+                        .replacingOccurrences(of: "%c", with: conformanceNames)
+                }
+
+                // If this is an extension without any conformances, but contains exactly
+                // one body declaration (a type), we can mark the extension with the nested type's name
+                // (e.g. `// MARK: Foo.Bar`).
+                if
+                    declaration.keyword == "extension",
+                    conformanceNames == nil
+                {
+                    // Find all of the nested extensions, so we can form the fully qualified
+                    // name of the inner-most type (e.g. `Foo.Bar.Baaz.Quux`).
+                    var extensions = [declaration]
+
+                    while
+                        let innerExtension = extensions.last,
+                        let extensionBody = innerExtension.body,
+                        extensionBody.count == 1,
+                        extensionBody[0].keyword == "extension"
+                    {
+                        extensions.append(extensionBody[0])
+                    }
+
+                    let innermostExtension = extensions.last!
+                    let extensionNames = extensions.compactMap { $0.name }.joined(separator: ".")
+
+                    if let extensionBody = innermostExtension.body,
+                       extensionBody.count == 1,
+                       let nestedType = extensionBody.first,
+                       nestedType.definesType,
+                       let nestedTypeName = nestedType.name
+                    {
+                        let fullyQualifiedName = "\(extensionNames).\(nestedTypeName)"
+
+                        if isGroupedExtension {
+                            markForType = "// \(formatter.options.groupedExtensionMarkComment)"
+                                .replacingOccurrences(of: "%c", with: fullyQualifiedName)
+                        } else {
+                            markForType = "// \(formatter.options.typeMarkComment)"
+                                .replacingOccurrences(of: "%t", with: fullyQualifiedName)
+                        }
+                    }
+                }
+
+                guard let expectedComment = markForType else {
+                    return openingFormatter.tokens
+                }
 
                 // Remove any lines that have the same prefix as the comment template
                 //  - We can't really do exact matches here like we do for `organizeDeclaration`
@@ -6107,7 +6256,7 @@ public struct _FormatRules {
                 //    that a user could use the the type name (orphaned renames, etc.)
                 var commentPrefixes = Set(["// MARK: ", "// MARK: - "])
 
-                if let typeNameSymbolIndex = commentTemplate.index(of: "%") {
+                if let typeNameSymbolIndex = commentTemplate.firstIndex(of: "%") {
                     commentPrefixes.insert(String(commentTemplate.prefix(upTo: typeNameSymbolIndex)))
                 }
 
@@ -6729,6 +6878,363 @@ public struct _FormatRules {
                     formatter.removeToken(at: returnIndex)
                 }
             }
+        }
+    }
+
+    public let redundantOptionalBinding = FormatRule(
+        help: "Removes redundant identifiers in optional binding conditions.",
+        // We can convert `if let foo = self.foo` to just `if let foo`,
+        // but only if `redundantSelf` can first remove the `self.`.
+        orderAfter: ["redundantSelf"]
+    ) { formatter in
+        formatter.forEachToken { i, token in
+            // `if let foo` conditions were added in Swift 5.7 (SE-0345)
+            if formatter.options.swiftVersion >= "5.7",
+
+               [.keyword("let"), .keyword("var")].contains(token),
+               formatter.isConditionalStatement(at: i),
+
+               let identiferIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: i),
+               let identifier = formatter.token(at: identiferIndex),
+
+               let equalsIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: identiferIndex, if: {
+                   $0 == .operator("=", .infix)
+               }),
+
+               let nextIdentifierIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: equalsIndex, if: {
+                   $0 == identifier
+               }),
+
+               let nextToken = formatter.next(.nonSpaceOrCommentOrLinebreak, after: nextIdentifierIndex),
+               [.startOfScope("{"), .delimiter(","), .keyword("else")].contains(nextToken)
+            {
+                formatter.removeTokens(in: identiferIndex + 1 ... nextIdentifierIndex)
+            }
+        }
+    }
+
+    public let opaqueGenericParameters = FormatRule(
+        help: """
+        Use opaque generic parameters (`some Protocol`) instead of generic parameters
+        with constraints (`T where T: Protocol`, etc) where equivalent. Also supports
+        primary associated types for common standard library types, so definitions like
+        `T where T: Collection, T.Element == Foo` are upated to `some Collection<Foo>`.
+        """,
+        options: ["someAny"]
+    ) { formatter in
+        formatter.forEach(.keyword("func")) { funcIndex, _ in
+            guard
+                // Opaque generic parameter syntax is only supported in Swift 5.7+
+                formatter.options.swiftVersion >= "5.7",
+                // Validate that this is a generic method using angle bracket syntax,
+                // and find the indices for all of the key tokens
+                let paramListStartIndex = formatter.index(of: .startOfScope("("), after: funcIndex),
+                let paramListEndIndex = formatter.endOfScope(at: paramListStartIndex),
+                let genericSignatureStartIndex = formatter.index(of: .startOfScope("<"), after: funcIndex),
+                let genericSignatureEndIndex = formatter.endOfScope(at: genericSignatureStartIndex),
+                genericSignatureStartIndex < paramListStartIndex,
+                genericSignatureEndIndex < paramListStartIndex,
+                let openBraceIndex = formatter.index(of: .startOfScope("{"), after: paramListEndIndex),
+                let closeBraceIndex = formatter.endOfScope(at: openBraceIndex)
+            else { return }
+
+            var genericTypes = [Formatter.GenericType]()
+
+            // Parse the generics in the angle brackets (e.g. `<T, U: Fooable>`)
+            formatter.parseGenericTypes(
+                from: genericSignatureStartIndex,
+                to: genericSignatureEndIndex,
+                into: &genericTypes
+            )
+
+            // Parse additional conformances and constraints after the `where` keyword if present
+            // (e.g. `where Foo: Fooable, Foo.Bar: Barable, Foo.Baaz == Baazable`)
+            var whereTokenIndex: Int?
+            if let whereIndex = formatter.index(of: .keyword("where"), after: paramListEndIndex),
+               whereIndex < openBraceIndex
+            {
+                whereTokenIndex = whereIndex
+                formatter.parseGenericTypes(from: whereIndex, to: openBraceIndex, into: &genericTypes)
+            }
+
+            // Parse the return type if present
+            var returnTypeTokens: [Token]?
+            if let returnIndex = formatter.index(of: .operator("->", .infix), after: paramListEndIndex),
+               returnIndex < openBraceIndex
+            {
+                let returnTypeRange = (returnIndex + 1) ..< (whereTokenIndex ?? openBraceIndex)
+                returnTypeTokens = Array(formatter.tokens[returnTypeRange])
+            }
+
+            let genericParameterListRange = (genericSignatureStartIndex + 1) ..< genericSignatureEndIndex
+            let genericParameterListTokens = formatter.tokens[genericParameterListRange]
+
+            let parameterListRange = (paramListStartIndex + 1) ..< paramListEndIndex
+            let parameterListTokens = formatter.tokens[parameterListRange]
+
+            let bodyRange = (openBraceIndex + 1) ..< closeBraceIndex
+            let bodyTokens = formatter.tokens[bodyRange]
+
+            for genericType in genericTypes {
+                // If the generic type doesn't occur in the generic parameter list (<...>),
+                // then we inherited it from the generic context and can't replace the type
+                // with an opaque parameter.
+                if !genericParameterListTokens.contains(where: { $0.string == genericType.name }) {
+                    genericType.eligbleToRemove = false
+                    continue
+                }
+
+                // If the generic type occurs multiple times in the parameter list,
+                // it isn't eligible to be removed. For example `(T, T) where T: Foo`
+                // requires the two params to be the same underlying type, but
+                // `(some Foo, some Foo)` does not.
+                let countInParameterList = parameterListTokens.filter { $0.string == genericType.name }.count
+                if countInParameterList > 1 {
+                    genericType.eligbleToRemove = false
+                    continue
+                }
+
+                // If the generic type occurs in the body of the function, then it can't be removed
+                if bodyTokens.contains(where: { $0.string == genericType.name }) {
+                    genericType.eligbleToRemove = false
+                    continue
+                }
+
+                // If the generic type is used in a constraint of any other generic type, then the type
+                // cant be removed without breaking that other type
+                let otherGenericTypes = genericTypes.filter { $0.name != genericType.name }
+                let otherTypeConformances = otherGenericTypes.flatMap { $0.conformances }
+                for otherTypeConformance in otherTypeConformances {
+                    let conformanceTokens = formatter.tokens[otherTypeConformance.sourceRange]
+                    if conformanceTokens.contains(where: { $0.string == genericType.name }) {
+                        genericType.eligbleToRemove = false
+                    }
+                }
+
+                // In some weird cases you can also have a generic constraint that references a generic
+                // type from the parent context with the same name. We can't change these, since it
+                // can cause the build to break
+                for conformance in genericType.conformances {
+                    if tokenize(conformance.name).contains(where: { $0.string == genericType.name }) {
+                        genericType.eligbleToRemove = false
+                    }
+                }
+
+                // A generic used as a return type is different from an opaque result type (SE-244).
+                // For example in `-> T where T: Fooable`, the generic type is caller-specified,
+                // but with `-> some Fooable` the generic type is specified by the function implementation.
+                // Because those represent different concepts, we can't convert between them,
+                // so have to mark the generic type as ineligible if it appears in the return type.
+                if let returnTypeTokens = returnTypeTokens,
+                   returnTypeTokens.contains(where: { $0.string == genericType.name })
+                {
+                    genericType.eligbleToRemove = false
+                    continue
+                }
+
+                // If the method that generates the opaque parameter syntax doesn't succeed,
+                // then this type is ineligible (because it used a generic constraint that
+                // can't be represented using this syntax).
+                if genericType.asOpaqueParameter(useSomeAny: formatter.options.useSomeAny) == nil {
+                    genericType.eligbleToRemove = false
+                    continue
+                }
+
+                // If the generic type is used as a closure type parameter, it can't be removed or the compiler
+                // will emit a "'some' cannot appear in parameter position in parameter type <closure type>" error
+                for tokenIndex in funcIndex ... closeBraceIndex {
+                    if
+                        // Check if this is the start of a closure
+                        formatter.tokens[tokenIndex] == .startOfScope("("),
+                        tokenIndex != paramListStartIndex,
+                        let endOfScope = formatter.endOfScope(at: tokenIndex),
+                        let tokenAfterParen = formatter.next(.nonSpaceOrCommentOrLinebreak, after: endOfScope),
+                        [.operator("->", .infix), .keyword("throws"), .identifier("async")].contains(tokenAfterParen),
+                        // Check if the closure type parameters contains this generic type
+                        formatter.tokens[tokenIndex ... endOfScope].contains(where: { $0.string == genericType.name })
+                    {
+                        genericType.eligbleToRemove = false
+                    }
+                }
+            }
+
+            let genericsEligibleToRemove = genericTypes.filter { $0.eligbleToRemove }
+            let sourceRangesToRemove = Set(genericsEligibleToRemove.flatMap { type in
+                [type.definitionSourceRange] + type.conformances.map { $0.sourceRange }
+            })
+
+            // We perform modifications to the function signature in reverse order
+            // so we don't invalidate any of the indices we've recorded. So first
+            // we remove components of the where clause.
+            if let whereIndex = formatter.index(of: .keyword("where"), after: paramListEndIndex),
+               whereIndex < openBraceIndex
+            {
+                let whereClauseSourceRanges = sourceRangesToRemove.filter { $0.lowerBound > whereIndex }
+                formatter.removeTokens(in: Array(whereClauseSourceRanges))
+
+                // if the where clause is completely empty now, we need to the where token as well
+                if let newOpenBraceIndex = formatter.index(of: .nonSpaceOrLinebreak, after: whereIndex),
+                   formatter.token(at: newOpenBraceIndex) == .startOfScope("{")
+                {
+                    formatter.removeTokens(in: whereIndex ..< newOpenBraceIndex)
+                }
+            }
+
+            // Replace all of the uses of generic types that are eligible to remove
+            // with the corresponding opaque parameter declaration
+            for index in parameterListRange.reversed() {
+                if
+                    let matchingGenericType = genericsEligibleToRemove.first(where: { $0.name == formatter.tokens[index].string }),
+                    var opaqueParameter = matchingGenericType.asOpaqueParameter(useSomeAny: formatter.options.useSomeAny)
+                {
+                    // If this instance of the type is followed by a `.` or `?` then we have to wrap the new type in parens
+                    // (e.g. changing `Foo.Type` to `some Any.Type` breaks the build, it needs to be `(some Any).Type`)
+                    if let nextToken = formatter.next(.nonSpaceOrCommentOrLinebreak, after: index),
+                       [.operator(".", .infix), .operator("?", .postfix)].contains(nextToken)
+                    {
+                        opaqueParameter.insert(.startOfScope("("), at: 0)
+                        opaqueParameter.append(.endOfScope(")"))
+                    }
+
+                    formatter.replaceToken(at: index, with: opaqueParameter)
+                }
+            }
+
+            // Remove types from the generic parameter list
+            let genericParameterListSourceRanges = sourceRangesToRemove.filter { $0.lowerBound < genericSignatureEndIndex }
+            formatter.removeTokens(in: Array(genericParameterListSourceRanges))
+
+            // If we left a dangling comma at the end of the generic parameter list, we need to clean it up
+            if let newGenericSignatureEndIndex = formatter.endOfScope(at: genericSignatureStartIndex),
+               let trailingCommaIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: newGenericSignatureEndIndex),
+               formatter.tokens[trailingCommaIndex] == .delimiter(",")
+            {
+                formatter.removeTokens(in: trailingCommaIndex ..< newGenericSignatureEndIndex)
+            }
+
+            // If we removed all of the generic types, we also have to remove the angle brackets
+            if let newGenericSignatureEndIndex = formatter.index(of: .nonSpaceOrLinebreak, after: genericSignatureStartIndex),
+               formatter.token(at: newGenericSignatureEndIndex) == .endOfScope(">")
+            {
+                formatter.removeTokens(in: genericSignatureStartIndex ... newGenericSignatureEndIndex)
+            }
+        }
+    }
+
+    public let genericExtensions = FormatRule(
+        help: """
+        When extending generic types, use angle brackets (`extension Array<Foo>`)
+        instead of generic type constraints (`extension Array where Element == Foo`).
+        """,
+        options: ["generictypes"]
+    ) { formatter in
+        formatter.forEach(.keyword("extension")) { extensionIndex, _ in
+            guard
+                // Angle brackets syntax in extensions is only supported in Swift 5.7+
+                formatter.options.swiftVersion >= "5.7",
+                let typeNameIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: extensionIndex),
+                let extendedType = formatter.token(at: typeNameIndex)?.string,
+                // If there's already an open angle bracket after the generic type name
+                // then the extension is already using the target syntax, so there's
+                // no work to do
+                formatter.next(.nonSpaceOrCommentOrLinebreak, after: typeNameIndex) != .startOfScope("<"),
+                let openBraceIndex = formatter.index(of: .startOfScope("{"), after: typeNameIndex),
+                let whereIndex = formatter.index(of: .keyword("where"), after: typeNameIndex),
+                whereIndex < openBraceIndex
+            else { return }
+
+            // Prepopulate a `Self` generic type, which is implicitly present in extension definitions
+            let selfType = Formatter.GenericType(
+                name: "Self",
+                definitionSourceRange: typeNameIndex ... typeNameIndex,
+                conformances: [
+                    Formatter.GenericType.GenericConformance(
+                        name: extendedType,
+                        typeName: "Self",
+                        type: .conceteType,
+                        sourceRange: typeNameIndex ... typeNameIndex
+                    ),
+                ]
+            )
+
+            var genericTypes = [selfType]
+
+            // Parse the generic constraints in the where clause
+            formatter.parseGenericTypes(
+                from: whereIndex,
+                to: openBraceIndex,
+                into: &genericTypes,
+                qualifyGenericTypeName: { genericTypeName in
+                    // In an extension all types implicitly refer to `Self`.
+                    // For example, `Element == Foo` is actually fully-qualified as
+                    // `Self.Element == Foo`. Using the fully-qualified `Self.Element` name
+                    // here makes it so the generic constraint is populated as a child
+                    // of `selfType`.
+                    if !genericTypeName.hasPrefix("Self.") {
+                        return "Self." + genericTypeName
+                    } else {
+                        return genericTypeName
+                    }
+                }
+            )
+
+            var knownGenericTypes: [(name: String, genericTypes: [String])] = [
+                (name: "Collection", genericTypes: ["Element"]),
+                (name: "Sequence", genericTypes: ["Element"]),
+                (name: "Array", genericTypes: ["Element"]),
+                (name: "Set", genericTypes: ["Element"]),
+                (name: "Dictionary", genericTypes: ["Key", "Value"]),
+                (name: "Optional", genericTypes: ["Wrapped"]),
+            ]
+
+            // Users can provide additional generic types via the `generictypes` option
+            for userProvidedType in formatter.options.genericTypes.components(separatedBy: ";") {
+                guard let openAngleBracket = userProvidedType.firstIndex(of: "<"),
+                      let closeAngleBracket = userProvidedType.firstIndex(of: ">")
+                else { continue }
+
+                let typeName = String(userProvidedType[..<openAngleBracket])
+                let genericParameters = String(userProvidedType[userProvidedType.index(after: openAngleBracket) ..< closeAngleBracket])
+                    .components(separatedBy: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+                knownGenericTypes.append((
+                    name: typeName,
+                    genericTypes: genericParameters
+                ))
+            }
+
+            guard let requiredGenericTypes = knownGenericTypes.first(where: { $0.name == extendedType })?.genericTypes else {
+                return
+            }
+
+            // Verify that a concrete type was provided for each of the generic subtypes
+            // of the type being extended
+            let providedGenericTypes = requiredGenericTypes.compactMap { requiredTypeName in
+                selfType.conformances.first(where: { conformance in
+                    conformance.type == .conceteType && conformance.typeName == "Self.\(requiredTypeName)"
+                })
+            }
+
+            guard providedGenericTypes.count == requiredGenericTypes.count else {
+                return
+            }
+
+            // Remove the now-unnecessary generic constraints from the where clause
+            let sourceRangesToRemove = providedGenericTypes.map { $0.sourceRange }
+            formatter.removeTokens(in: sourceRangesToRemove)
+
+            // if the where clause is completely empty now, we need to the where token as well
+            if let newOpenBraceIndex = formatter.index(of: .nonSpaceOrLinebreak, after: whereIndex),
+               formatter.token(at: newOpenBraceIndex) == .startOfScope("{")
+            {
+                formatter.removeTokens(in: whereIndex ..< newOpenBraceIndex)
+            }
+
+            // Replace the extension typename with the fully-qualified generic angle bracket syntax
+            let genericSubtypes = providedGenericTypes.map { $0.name }.joined(separator: ", ")
+            let fullGenericType = "\(extendedType)<\(genericSubtypes)>"
+            formatter.replaceToken(at: typeNameIndex, with: tokenize(fullGenericType))
         }
     }
 }

@@ -52,17 +52,17 @@ class OptionDescriptor {
     private(set) var type: ArgumentType
 
     var isDeprecated: Bool {
-        return deprecationMessage != nil
+        deprecationMessage != nil
     }
 
     var isRenamed: Bool {
-        return isDeprecated && Descriptors.all.contains(where: {
+        isDeprecated && Descriptors.all.contains(where: {
             $0.propertyName == propertyName && $0.argumentName != argumentName
         })
     }
 
     var defaultArgument: String {
-        return fromOptions(FormatOptions.default)
+        fromOptions(FormatOptions.default)
     }
 
     func validateArgument(_ arg: String) -> Bool {
@@ -140,7 +140,7 @@ class OptionDescriptor {
                      help: String,
                      deprecationMessage: String? = nil,
                      keyPath: WritableKeyPath<FormatOptions, String>,
-                     options: DictionaryLiteral<String, String>)
+                     options: KeyValuePairs<String, String>)
     {
         let map: [String: String] = Dictionary(options.map { ($0, $1) }, uniquingKeysWith: { $1 })
         let keys = Array(map.keys).sorted()
@@ -319,11 +319,11 @@ private let _formattingDescriptors: [OptionDescriptor] = {
 
 extension _Descriptors {
     var formatting: [OptionDescriptor] {
-        return _formattingDescriptors
+        _formattingDescriptors
     }
 
     var `internal`: [OptionDescriptor] {
-        return [
+        [
             experimentalRules,
             fragment,
             ignoreConflictMarkers,
@@ -332,11 +332,11 @@ extension _Descriptors {
     }
 
     /// An Array of all descriptors
-    var all: [OptionDescriptor] { return _allDescriptors }
+    var all: [OptionDescriptor] { _allDescriptors }
 
     /// A Dictionary of descriptors by name
     var byName: [String: OptionDescriptor] {
-        return _descriptorsByName
+        _descriptorsByName
     }
 }
 
@@ -869,6 +869,12 @@ struct _Descriptors {
         help: "Closure void returns: \"remove\" (default) or \"preserve\"",
         keyPath: \.closureVoidReturn
     )
+    let enumNamespaces = OptionDescriptor(
+        argumentName: "enumnamespaces",
+        displayName: "Convert namespaces types to enum",
+        help: "Change type to enum: \"always\" (default) or \"structs-only\"",
+        keyPath: \.enumNamespaces
+    )
     let removeStartOrEndBlankLinesFromTypes = OptionDescriptor(
         argumentName: "typeblanklines",
         displayName: "Remove blank lines from types",
@@ -876,6 +882,27 @@ struct _Descriptors {
         keyPath: \.removeStartOrEndBlankLinesFromTypes,
         trueValues: ["remove"],
         falseValues: ["preserve"]
+    )
+    let genericTypes = OptionDescriptor(
+        argumentName: "generictypes",
+        displayName: "Additional generic types",
+        help: """
+        Additional generic type definitions used by `genericExtensions`
+        A semicolon-separated list of generic types and their generic
+        parameters. For example:
+        "LinkedList<Element>;Reducer<State, Action, Environment>"
+        """,
+        keyPath: \.genericTypes,
+        fromArgument: { $0 },
+        toArgument: { $0 }
+    )
+    let useSomeAny = OptionDescriptor(
+        argumentName: "someAny",
+        displayName: "Use `some Any`",
+        help: "Use `some Any` types: \"true\" (default) or \"false\"",
+        keyPath: \.useSomeAny,
+        trueValues: ["true", "enabled"],
+        falseValues: ["false", "disabled"]
     )
 
     // MARK: - Internal

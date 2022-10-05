@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 51;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -84,7 +84,7 @@
 		90C4B6E01DA4B059009EB000 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 90C4B6DF1DA4B059009EB000 /* Cocoa.framework */; };
 		90C4B6E51DA4B059009EB000 /* SourceEditorExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C4B6E41DA4B059009EB000 /* SourceEditorExtension.swift */; };
 		90C4B6E71DA4B059009EB000 /* FormatSelectionCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C4B6E61DA4B059009EB000 /* FormatSelectionCommand.swift */; };
-		90C4B6EB1DA4B059009EB000 /* SwiftFormat.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 90C4B6DD1DA4B059009EB000 /* SwiftFormat.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		90C4B6EB1DA4B059009EB000 /* SwiftFormat.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 90C4B6DD1DA4B059009EB000 /* SwiftFormat.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		90F16AF81DA5EB4600EB4EA1 /* FormatFileCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F16AF71DA5EB4600EB4EA1 /* FormatFileCommand.swift */; };
 		90F16AFB1DA5ED9A00EB4EA1 /* CommandErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F16AFA1DA5ED9A00EB4EA1 /* CommandErrors.swift */; };
 		A3DF48252620E03600F45A5F /* JSONReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3DF48242620E03600F45A5F /* JSONReporter.swift */; };
@@ -152,15 +152,15 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		90C4B6EF1DA4B059009EB000 /* Embed App Extensions */ = {
+		90C4B6EF1DA4B059009EB000 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				90C4B6EB1DA4B059009EB000 /* SwiftFormat.appex in Embed App Extensions */,
+				90C4B6EB1DA4B059009EB000 /* SwiftFormat.appex in Embed Foundation Extensions */,
 			);
-			name = "Embed App Extensions";
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -582,7 +582,7 @@
 				90C4B6C61DA4B04A009EB000 /* Sources */,
 				90C4B6C71DA4B04A009EB000 /* Frameworks */,
 				90C4B6C81DA4B04A009EB000 /* Resources */,
-				90C4B6EF1DA4B059009EB000 /* Embed App Extensions */,
+				90C4B6EF1DA4B059009EB000 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
@@ -619,7 +619,7 @@
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 0810;
-				LastUpgradeCheck = 1240;
+				LastUpgradeCheck = 1400;
 				ORGANIZATIONNAME = "Nick Lockwood";
 				TargetAttributes = {
 					015AF2B61DC6A538008F0A8C = {
@@ -628,12 +628,12 @@
 					01A0EAA31D5DB4CF00A0A8E3 = {
 						CreatedOnToolsVersion = 7.3;
 						DevelopmentTeam = 8VQKF583ED;
-						LastSwiftMigration = 0900;
+						LastSwiftMigration = "";
 					};
 					01A0EAAD1D5DB4D000A0A8E3 = {
 						CreatedOnToolsVersion = 7.3;
 						DevelopmentTeam = 8VQKF583ED;
-						LastSwiftMigration = 0900;
+						LastSwiftMigration = "";
 					};
 					01A0EAC91D5DB5F500A0A8E3 = {
 						CreatedOnToolsVersion = 7.3;
@@ -721,6 +721,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		0142F06D1D72B4A6007D66CC /* Format Code */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -913,6 +914,7 @@
 			buildSettings = {
 				CLANG_ENABLE_CODE_COVERAGE = NO;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				ENABLE_TESTABILITY = YES;
 				INFOPLIST_FILE = Tests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -932,6 +934,7 @@
 			buildSettings = {
 				CLANG_ENABLE_CODE_COVERAGE = NO;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				ENABLE_TESTABILITY = YES;
 				INFOPLIST_FILE = Tests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -977,6 +980,7 @@
 				CODE_SIGN_IDENTITY = "";
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 8VQKF583ED;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -995,13 +999,13 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.12;
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
-				SWIFT_VERSION = 4.2;
+				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -1039,6 +1043,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 8VQKF583ED;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -1051,13 +1056,13 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.12;
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
-				SWIFT_VERSION = 4.2;
+				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
@@ -1068,6 +1073,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
@@ -1080,7 +1086,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.49.18;
+				MARKETING_VERSION = 0.50.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.charcoaldesign.SwiftFormat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -1096,6 +1102,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
@@ -1108,7 +1115,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.49.18;
+				MARKETING_VERSION = 0.50.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.charcoaldesign.SwiftFormat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -1120,6 +1127,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = Tests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1137,6 +1145,7 @@
 			buildSettings = {
 				CLANG_ENABLE_CODE_COVERAGE = NO;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = Tests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1156,6 +1165,7 @@
 				CLANG_ENABLE_CODE_COVERAGE = NO;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				PRODUCT_MODULE_NAME = "$(PRODUCT_NAME:c99extidentifier)Tool";
@@ -1172,6 +1182,7 @@
 				CLANG_ENABLE_CODE_COVERAGE = NO;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 8VQKF583ED;
 				ENABLE_HARDENED_RUNTIME = YES;
 				PRODUCT_MODULE_NAME = "$(PRODUCT_NAME:c99extidentifier)Tool";
@@ -1196,6 +1207,7 @@
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = EditorExtension/Application/Info.plist;
@@ -1204,7 +1216,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.49.18;
+				MARKETING_VERSION = 0.50.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.charcoaldesign.SwiftFormat-for-Xcode";
 				PRODUCT_NAME = "SwiftFormat for Xcode";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1226,6 +1238,7 @@
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = EditorExtension/Application/Info.plist;
@@ -1234,7 +1247,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.49.18;
+				MARKETING_VERSION = 0.50.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.charcoaldesign.SwiftFormat-for-Xcode";
 				PRODUCT_NAME = "SwiftFormat for Xcode";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1262,7 +1275,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.49.18;
+				MARKETING_VERSION = 0.50.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.charcoaldesign.SwiftFormat-for-Xcode.SourceEditorExtension";
 				PRODUCT_NAME = SwiftFormat;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1292,7 +1305,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.49.18;
+				MARKETING_VERSION = 0.50.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.charcoaldesign.SwiftFormat-for-Xcode.SourceEditorExtension";
 				PRODUCT_NAME = SwiftFormat;
 				PROVISIONING_PROFILE_SPECIFIER = "";
