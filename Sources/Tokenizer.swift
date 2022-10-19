@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.50.0
+//  Version 0.50.2
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -1505,7 +1505,7 @@ public func tokenize(_ source: String) -> [Token] {
                    prevNonSpaceToken.isOperator(ofType: .infix) || [
                        .startOfScope("("), .startOfScope("["),
                        .delimiter(":"), .delimiter(","),
-                   ].contains(prevToken)
+                   ].contains(prevNonSpaceToken)
                 {
                     tokens[i] = .startOfScope("/")
                 }

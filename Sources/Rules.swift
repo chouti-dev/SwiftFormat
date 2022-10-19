@@ -1078,6 +1078,7 @@ public struct _FormatRules {
             }
             switch formatter.tokens[nextIndex] {
             case .linebreak, .keyword("import"), .keyword("@testable"),
+                 .keyword("@_exported"), .keyword("@_implementationOnly"),
                  .keyword("#else"), .keyword("#elseif"), .endOfScope("#endif"):
                 break
             default:
@@ -4359,10 +4360,10 @@ public struct _FormatRules {
         }
     }
 
-    /// Wraps single-line comments that exceed given `FormatOptions.maxWidth` setting.
+    /// Wrap single-line comments that exceed given `FormatOptions.maxWidth` setting.
     public let wrapSingleLineComments = FormatRule(
-        help: "Wraps single line `//` comments that don't fit specified `--maxwidth` option.",
-        sharedOptions: ["maxwidth", "indent", "tabwidth", "assetliterals"]
+        help: "Wrap single line `//` comments that exceed the specified `--maxwidth`.",
+        sharedOptions: ["maxwidth", "indent", "tabwidth", "assetliterals", "linebreaks"]
     ) { formatter in
         let delimiterLength = "//".count
         var maxWidth = formatter.options.maxWidth
@@ -4385,33 +4386,24 @@ public struct _FormatRules {
                 return
             }
 
-            let prefix = formatter.tokens[startOfLine ..< startIndex]
-            let prefixLength = formatter.lineLength(upTo: startIndex)
-            var length = prefixLength
             var words = comment.components(separatedBy: " ")
-            var tokens = [Token]()
-            guard case var .linebreak(linebreak, lineNumber) = formatter
-                .linebreakToken(for: startIndex)
-            else {
-                assertionFailure()
-                return
+            comment = words.removeFirst()
+            var length = formatter.lineLength(upTo: startIndex) + comment.count
+            while let next = words.first, length + next.count < maxWidth {
+                comment += " \(next)"
+                length += next.count + 1
+                words.removeFirst()
             }
-            while !words.isEmpty {
-                if !tokens.isEmpty {
-                    tokens.append(.linebreak(linebreak, lineNumber))
-                    tokens += prefix
-                    lineNumber += 1
-                }
-                comment = words.removeFirst()
-                while let next = words.first, length + next.count < maxWidth {
-                    comment += " \(next)"
-                    length += next.count + 1
-                    words.removeFirst()
-                }
-                tokens.append(.commentBody(comment))
-                length = prefixLength
+            var prefix = formatter.tokens[i ..< startIndex]
+            if let token = formatter.token(at: startOfLine), case .space = token {
+                prefix.insert(token, at: prefix.startIndex)
             }
-            formatter.replaceTokens(in: startIndex ..< endOfLine, with: tokens)
+            let commentPrefix = ["/ ", "/"].first(where: comment.hasPrefix) ?? ""
+            formatter.replaceTokens(in: startIndex ..< endOfLine, with: [
+                .commentBody(comment), formatter.linebreakToken(for: startIndex),
+            ] + prefix + [
+                .commentBody(commentPrefix + words.joined(separator: " ")),
+            ])
         }
     }
 
@@ -4919,6 +4911,7 @@ public struct _FormatRules {
                 return ranges.sorted { $0.module.count < $1.module.count }
             }
             // Group @testable imports at the top or bottom
+            // TODO: need more general solution for handling other import attributes
             return ranges.sorted {
                 // If both have a @testable keyword, or neither has one, just sort alphabetically
                 guard $0.isTestable != $1.isTestable else {
@@ -4959,7 +4952,7 @@ public struct _FormatRules {
                     continue
                 }
                 let range2 = importRanges[j]
-                if !range.isTestable || range2.isTestable {
+                if Set(range.attributes).isSubset(of: range2.attributes) {
                     formatter.removeTokens(in: range.range)
                     continue
                 }
@@ -5071,10 +5064,10 @@ public struct _FormatRules {
                     {
                         // Check if this would cause ambiguity for chevrons
                         var tokens = Array(formatter.tokens[i ... endIndex])
-                        tokens[index] = .delimiter(",")
+                        tokens[index - i] = .delimiter(",")
                         tokens.append(.endOfScope("}"))
                         let reparsed = tokenize(sourceCode(for: tokens))
-                        if reparsed[chevronIndex] == .startOfScope("<") {
+                        if reparsed[chevronIndex - i] == .startOfScope("<") {
                             return
                         }
                     }
@@ -6918,7 +6911,7 @@ public struct _FormatRules {
         Use opaque generic parameters (`some Protocol`) instead of generic parameters
         with constraints (`T where T: Protocol`, etc) where equivalent. Also supports
         primary associated types for common standard library types, so definitions like
-        `T where T: Collection, T.Element == Foo` are upated to `some Collection<Foo>`.
+        `T where T: Collection, T.Element == Foo` are updated to `some Collection<Foo>`.
         """,
         options: ["someAny"]
     ) { formatter in
@@ -6960,7 +6953,7 @@ public struct _FormatRules {
             // Parse the return type if present
             var returnTypeTokens: [Token]?
             if let returnIndex = formatter.index(of: .operator("->", .infix), after: paramListEndIndex),
-               returnIndex < openBraceIndex
+               returnIndex < openBraceIndex, returnIndex < whereTokenIndex ?? openBraceIndex
             {
                 let returnTypeRange = (returnIndex + 1) ..< (whereTokenIndex ?? openBraceIndex)
                 returnTypeTokens = Array(formatter.tokens[returnTypeRange])
@@ -6980,7 +6973,7 @@ public struct _FormatRules {
                 // then we inherited it from the generic context and can't replace the type
                 // with an opaque parameter.
                 if !genericParameterListTokens.contains(where: { $0.string == genericType.name }) {
-                    genericType.eligbleToRemove = false
+                    genericType.eligibleToRemove = false
                     continue
                 }
 
@@ -6990,24 +6983,24 @@ public struct _FormatRules {
                 // `(some Foo, some Foo)` does not.
                 let countInParameterList = parameterListTokens.filter { $0.string == genericType.name }.count
                 if countInParameterList > 1 {
-                    genericType.eligbleToRemove = false
+                    genericType.eligibleToRemove = false
                     continue
                 }
 
                 // If the generic type occurs in the body of the function, then it can't be removed
                 if bodyTokens.contains(where: { $0.string == genericType.name }) {
-                    genericType.eligbleToRemove = false
+                    genericType.eligibleToRemove = false
                     continue
                 }
 
                 // If the generic type is used in a constraint of any other generic type, then the type
-                // cant be removed without breaking that other type
+                // can't be removed without breaking that other type
                 let otherGenericTypes = genericTypes.filter { $0.name != genericType.name }
                 let otherTypeConformances = otherGenericTypes.flatMap { $0.conformances }
                 for otherTypeConformance in otherTypeConformances {
                     let conformanceTokens = formatter.tokens[otherTypeConformance.sourceRange]
                     if conformanceTokens.contains(where: { $0.string == genericType.name }) {
-                        genericType.eligbleToRemove = false
+                        genericType.eligibleToRemove = false
                     }
                 }
 
@@ -7016,7 +7009,7 @@ public struct _FormatRules {
                 // can cause the build to break
                 for conformance in genericType.conformances {
                     if tokenize(conformance.name).contains(where: { $0.string == genericType.name }) {
-                        genericType.eligbleToRemove = false
+                        genericType.eligibleToRemove = false
                     }
                 }
 
@@ -7028,7 +7021,7 @@ public struct _FormatRules {
                 if let returnTypeTokens = returnTypeTokens,
                    returnTypeTokens.contains(where: { $0.string == genericType.name })
                 {
-                    genericType.eligbleToRemove = false
+                    genericType.eligibleToRemove = false
                     continue
                 }
 
@@ -7036,7 +7029,7 @@ public struct _FormatRules {
                 // then this type is ineligible (because it used a generic constraint that
                 // can't be represented using this syntax).
                 if genericType.asOpaqueParameter(useSomeAny: formatter.options.useSomeAny) == nil {
-                    genericType.eligbleToRemove = false
+                    genericType.eligibleToRemove = false
                     continue
                 }
 
@@ -7053,12 +7046,39 @@ public struct _FormatRules {
                         // Check if the closure type parameters contains this generic type
                         formatter.tokens[tokenIndex ... endOfScope].contains(where: { $0.string == genericType.name })
                     {
-                        genericType.eligbleToRemove = false
+                        genericType.eligibleToRemove = false
+                    }
+                }
+
+                // Extract the comma-separated list of function parameters,
+                // so we can check conditions on the individual parameters
+                let parameterListTokenIndices = (paramListStartIndex + 1) ..< paramListEndIndex
+
+                // Split the parameter list at each comma that's directly within the paren list scope
+                let parameters = parameterListTokenIndices
+                    .split(whereSeparator: { index in
+                        let token = formatter.tokens[index]
+                        return token == .delimiter(",")
+                            && formatter.endOfScope(at: index) == paramListEndIndex
+                    })
+                    .map { parameterIndices in
+                        parameterIndices.map { index in
+                            formatter.tokens[index]
+                        }
+                    }
+
+                for parameterTokens in parameters {
+                    // Variadic parameters don't support opaque generic syntax, so we have to check
+                    // if any use cases of this type in the parameter list are variadic
+                    if parameterTokens.contains(.operator("...", .postfix)),
+                       parameterTokens.contains(.identifier(genericType.name))
+                    {
+                        genericType.eligibleToRemove = false
                     }
                 }
             }
 
-            let genericsEligibleToRemove = genericTypes.filter { $0.eligbleToRemove }
+            let genericsEligibleToRemove = genericTypes.filter { $0.eligibleToRemove }
             let sourceRangesToRemove = Set(genericsEligibleToRemove.flatMap { type in
                 [type.definitionSourceRange] + type.conformances.map { $0.sourceRange }
             })
@@ -7151,7 +7171,7 @@ public struct _FormatRules {
                     Formatter.GenericType.GenericConformance(
                         name: extendedType,
                         typeName: "Self",
-                        type: .conceteType,
+                        type: .concreteType,
                         sourceRange: typeNameIndex ... typeNameIndex
                     ),
                 ]
@@ -7212,7 +7232,7 @@ public struct _FormatRules {
             // of the type being extended
             let providedGenericTypes = requiredGenericTypes.compactMap { requiredTypeName in
                 selfType.conformances.first(where: { conformance in
-                    conformance.type == .conceteType && conformance.typeName == "Self.\(requiredTypeName)"
+                    conformance.type == .concreteType && conformance.typeName == "Self.\(requiredTypeName)"
                 })
             }
 

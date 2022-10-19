@@ -3953,7 +3953,9 @@ class WrappingTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.wrapSwitchCases)
     }
 
-    func testWrapSingleLineComments() {
+    // MARK: wrapSingleLineComments
+
+    func testWrapSingleLineComment() {
         let input = """
         // a b cde fgh
         """
@@ -3967,7 +3969,21 @@ class WrappingTests: RulesTests {
                        options: FormatOptions(maxWidth: 6))
     }
 
-    func testWrapSingleLineCommentsIndentation() {
+    func testWrapDocComment() {
+        let input = """
+        /// a b cde fgh
+        """
+        let output = """
+        /// a b
+        /// cde
+        /// fgh
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
+                       options: FormatOptions(maxWidth: 7))
+    }
+
+    func testWrapSingleLineCommentWithIndent() {
         let input = """
         func f() {
             // a b cde fgh
@@ -3983,6 +3999,24 @@ class WrappingTests: RulesTests {
         """
 
         testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
-                       options: FormatOptions(maxWidth: 13))
+                       options: FormatOptions(maxWidth: 14))
+    }
+
+    func testWrapSingleLineCommentAfterCode() {
+        let input = """
+        func f() {
+            foo.bar() // this comment is much much much too long
+        }
+        """
+        let output = """
+        func f() {
+            foo.bar() // this comment
+            // is much much much too
+            // long
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
+                       options: FormatOptions(maxWidth: 29), exclude: ["wrap"])
     }
 }

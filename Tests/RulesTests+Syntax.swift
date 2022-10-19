@@ -1577,6 +1577,24 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.andOperator)
     }
 
+    func testAndOperatorCrash() {
+        let input = """
+        DragGesture().onChanged { gesture in
+            if gesture.translation.width < 50 && gesture.translation.height > 50 {
+                offset = gesture.translation
+            }
+        }
+        """
+        let output = """
+        DragGesture().onChanged { gesture in
+            if gesture.translation.width < 50, gesture.translation.height > 50 {
+                offset = gesture.translation
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.andOperator)
+    }
+
     func testNoReplaceAndInViewBuilder() {
         let input = """
         SomeView {
@@ -2748,6 +2766,23 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
     }
 
+    func testOpaqueGenericParameterWithAssociatedTypeConstraint() {
+        let input = """
+        func foo<T: Collection<Foo>>(_: T) {}
+        func bar<T>(_: T) where T: Collection<Foo> {}
+        func baaz<T>(_: T) where T == any Collection<Foo> {}
+        """
+
+        let output = """
+        func foo(_: some Collection<Foo>) {}
+        func bar(_: some Collection<Foo>) {}
+        func baaz(_: any Collection<Foo>) {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
     func testGenericTypeUsedInMultipleParameters() {
         let input = """
         func foo<T: Fooable>(_ first: T, second: T) {
@@ -2809,6 +2844,141 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
     }
 
+    func testGenericTypeWithClosureInWhereClauseDoesntCrash() {
+        let input = """
+        struct Foo<U> {
+            func bar<V>(_ value: V) where U == @Sendable (V) -> Int {}
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericExtensionSameTypeConstraint() {
+        let input = """
+        func foo<U>(_ u: U) where U == String {
+            print(u)
+        }
+        """
+
+        let output = """
+        func foo(_ u: String) {
+            print(u)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericExtensionSameTypeGenericConstraint() {
+        let input = """
+        func foo<U, V>(_ u: U, _ v: V) where U == V {
+            print(u, v)
+        }
+
+        func foo<U, V>(_ u: U, _ v: V) where V == U {
+            print(u, v)
+        }
+        """
+
+        let output = """
+        func foo<V>(_ u: V, _ v: V) {
+            print(u, v)
+        }
+
+        func foo<U>(_ u: U, _ v: U) {
+            print(u, v)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testIssue1269() {
+        let input = """
+        func bar<V, R>(
+            _ value: V,
+            _ work: () -> R
+        ) -> R
+            where Value == @Sendable () -> V,
+            V: Sendable
+        {
+            work()
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testVariadicParameterNotConvertedToOpaqueGeneric() {
+        let input = """
+        func variadic<T>(_ t: T...) {
+            print(t)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testNonGenericVariadicParametersDoesntPreventUsingOpaqueGenerics() {
+        let input = """
+        func variadic<U>(t: Any..., u: U, v: Any...) {
+            print(t, u, v)
+        }
+        """
+
+        let output = """
+        func variadic(t: Any..., u: some Any, v: Any...) {
+            print(t, u, v)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testIssue1275() {
+        let input = """
+        func loggedKeypath<T: CustomStringConvertible>(
+            by _: KeyPath<T, Element>...,
+            actionKeyword _: UserActionKeyword,
+            identifier _: String
+        ) {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testIssue1278() {
+        let input = """
+        public struct Foo<Value> {
+            public func withValue<V, R>(
+                _: V,
+                operation _: () throws -> R
+            ) rethrows -> R
+                where Value == @Sendable () -> V,
+                V: Sendable
+            {}
+
+            public func withValue<V, R>(
+                _: V,
+                operation _: () async throws -> R
+            ) async rethrows -> R
+                where Value == () -> V
+            {}
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
     // MARK: - genericExtensions
 
     func testGenericExtensionNotModifiedBeforeSwift5_7() {
@@ -2837,6 +3007,14 @@ class SyntaxTests: RulesTests {
     func testUpdatesArrayGenericExtensionToAngleBracketSyntaxWithSelf() {
         let input = "extension Array where Self.Element == Foo {}"
         let output = "extension Array<Foo> {}"
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options, exclude: ["typeSugar"])
+    }
+
+    func testUpdatesArrayWithGenericElement() {
+        let input = "extension Array where Element == Foo<Bar> {}"
+        let output = "extension Array<Foo<Bar>> {}"
 
         let options = FormatOptions(swiftVersion: "5.7")
         testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options, exclude: ["typeSugar"])
@@ -2917,5 +3095,160 @@ class SyntaxTests: RulesTests {
             swiftVersion: "5.7"
         )
         testFormatting(for: input, output, rule: FormatRules.genericExtensions, options: options)
+    }
+
+    func testOpaqueGenericParametersRuleSuccessfullyTerminatesInSampleCode() {
+        let input = """
+        class Service {
+            public func run() {}
+            private let foo: Foo<Void, Void>
+            private func a() -> Eventual<Void> {}
+            private func b() -> Eventual<Void> {}
+            private func c() -> Eventual<Void> {}
+            private func d() -> Eventual<Void> {}
+            private func e() -> Eventual<Void> {}
+            private func f() -> Eventual<Void> {}
+            private func g() -> Eventual<Void> {}
+            private func h() -> Eventual<Void> {}
+            private func i() {}
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericParameterUsedInConstraintOfOtherTypeNotChanged() {
+        let input = """
+        func combineResults<ASuccess, AFailure, BSuccess, BFailure>(
+            _: Potential<ASuccess, AFailure>,
+            _: Potential<BSuccess, BFailure>
+        ) -> Potential<Success, Never> where
+            Success == (Result<ASuccess, AFailure>, Result<BSuccess, BFailure>),
+            Failure == Never
+        {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericParameterInheritedFromContextNotRemoved() {
+        let input = """
+        func assign<Target>(
+            on _: DispatchQueue,
+            to _: AssignTarget<Target>,
+            at _: ReferenceWritableKeyPath<Target, Value>
+        ) where Value: Equatable {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericParameterUsedInBodyNotRemoved() {
+        let input = """
+        func foo<T>(_ value: T) {
+            typealias TTT = T
+            let casted = value as TTT
+            print(casted)
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericParameterUsedAsClosureParameterNotRemoved() {
+        let input = """
+        func foo<Foo>(_: (Foo) -> Void) {}
+        func bar<Foo>(_: (Foo) throws -> Void) {}
+        func baaz<Foo>(_: (Foo) async -> Void) {}
+        func quux<Foo>(_: (Foo) async throws -> Void) {}
+        func qaax<Foo>(_: ([Foo]) -> Void) {}
+        func qaax<Foo>(_: ((Foo, Bar)) -> Void) {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testFinalGenericParamRemovedProperlyWithoutHangingComma() {
+        let input = """
+        func foo<Bar, Baaz>(
+            bar _: (Bar) -> Void,
+            baaz _: Baaz
+        ) {}
+        """
+
+        let output = """
+        func foo<Bar>(
+            bar _: (Bar) -> Void,
+            baaz _: some Any
+        ) {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testAddsParensAroundTypeIfNecessary() {
+        let input = """
+        func foo<Foo>(_: Foo.Type) {}
+        func bar<Foo>(_: Foo?) {}
+        """
+
+        let output = """
+        func foo(_: (some Any).Type) {}
+        func bar(_: (some Any)?) {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testHandlesSingleExactTypeGenericConstraint() {
+        let input = """
+        func foo<T>(with _: T) -> Foo where T == Dependencies {}
+        """
+
+        let output = """
+        func foo(with _: Dependencies) -> Foo {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testGenericConstraintThatIsGeneric() {
+        let input = """
+        class Foo<Bar, Baaz> {}
+        func foo<T: Foo<String, String>>(_: T) {}
+        class Bar<Baaz> {}
+        func bar<T: Bar<String>>(_: T) {}
+        """
+
+        let output = """
+        class Foo<Bar, Baaz> {}
+        func foo(_: some Foo<String, String>) {}
+        class Bar<Baaz> {}
+        func bar(_: some Bar<String>) {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: FormatRules.opaqueGenericParameters, options: options)
+    }
+
+    func testDoesntChangeTypeWithConstraintThatReferencesItself() {
+        // This is a weird one but in the actual code this comes from `ViewModelContext` is both defined
+        // on the parent type of this declaration (where it has additional important constraints),
+        // and again in the method itself. Changing this to an opaque parameter breaks the build, because
+        // it loses the generic constraints applied by the parent type.
+        let input = """
+        func makeSections<ViewModelContext: RoutingBehaviors<ViewModelContext.Dependencies>>(_: ViewModelContext) {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: FormatRules.opaqueGenericParameters, options: options)
     }
 }
