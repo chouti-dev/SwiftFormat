@@ -4372,7 +4372,6 @@ public struct _FormatRules {
         }
 
         formatter.forEach(.startOfScope("//")) { i, _ in
-            // Check that unwrapping wouldn't exceed line length
             let startOfLine = formatter.startOfLine(at: i)
             let endOfLine = formatter.endOfLine(at: i)
             guard formatter.lineLength(from: startOfLine, upTo: endOfLine) > maxWidth else {
@@ -4388,17 +4387,25 @@ public struct _FormatRules {
 
             var words = comment.components(separatedBy: " ")
             comment = words.removeFirst()
-            var length = formatter.lineLength(upTo: startIndex) + comment.count
-            while let next = words.first, length + next.count < maxWidth {
+            let commentPrefix = comment == "/" ? "/ " : comment.hasPrefix("/") ? "/" : ""
+            let prefixLength = formatter.lineLength(upTo: startIndex)
+            var length = prefixLength + comment.count
+            while length <= maxWidth, let next = words.first,
+                  length + next.count < maxWidth ||
+                  // Don't wrap if next word won't fit on a line by itself anyway
+                  prefixLength + commentPrefix.count + next.count > maxWidth
+            {
                 comment += " \(next)"
                 length += next.count + 1
                 words.removeFirst()
+            }
+            if words.isEmpty || comment == commentPrefix {
+                return
             }
             var prefix = formatter.tokens[i ..< startIndex]
             if let token = formatter.token(at: startOfLine), case .space = token {
                 prefix.insert(token, at: prefix.startIndex)
             }
-            let commentPrefix = ["/ ", "/"].first(where: comment.hasPrefix) ?? ""
             formatter.replaceTokens(in: startIndex ..< endOfLine, with: [
                 .commentBody(comment), formatter.linebreakToken(for: startIndex),
             ] + prefix + [
@@ -5581,7 +5588,7 @@ public struct _FormatRules {
                       $0 == .startOfScope("{")
                   }), let typeIndex = formatter.index(of: .keyword, before: scopeIndex, if: {
                       ["class", "actor", "struct", "enum", "extension"].contains($0.string)
-                  }), let nameIndex = formatter.index(of: .identifier, after: typeIndex),
+                  }), let nameIndex = formatter.index(of: .identifier, in: typeIndex ..< scopeIndex),
                   formatter.next(.nonSpaceOrCommentOrLinebreak, after: nameIndex)?.isOperator(".") == false,
                   case let .identifier(typeName) = formatter.tokens[nameIndex],
                   let endIndex = formatter.index(of: .endOfScope, after: scopeIndex),
@@ -6915,15 +6922,17 @@ public struct _FormatRules {
         """,
         options: ["someAny"]
     ) { formatter in
-        formatter.forEach(.keyword("func")) { funcIndex, _ in
+        formatter.forEach(.keyword) { keywordIndex, keyword in
             guard
+                // Apply this rule to any function-like declaration
+                ["func", "init", "subscript"].contains(keyword.string),
                 // Opaque generic parameter syntax is only supported in Swift 5.7+
                 formatter.options.swiftVersion >= "5.7",
                 // Validate that this is a generic method using angle bracket syntax,
                 // and find the indices for all of the key tokens
-                let paramListStartIndex = formatter.index(of: .startOfScope("("), after: funcIndex),
+                let paramListStartIndex = formatter.index(of: .startOfScope("("), after: keywordIndex),
                 let paramListEndIndex = formatter.endOfScope(at: paramListStartIndex),
-                let genericSignatureStartIndex = formatter.index(of: .startOfScope("<"), after: funcIndex),
+                let genericSignatureStartIndex = formatter.index(of: .startOfScope("<"), after: keywordIndex),
                 let genericSignatureEndIndex = formatter.endOfScope(at: genericSignatureStartIndex),
                 genericSignatureStartIndex < paramListStartIndex,
                 genericSignatureEndIndex < paramListStartIndex,
@@ -7035,7 +7044,7 @@ public struct _FormatRules {
 
                 // If the generic type is used as a closure type parameter, it can't be removed or the compiler
                 // will emit a "'some' cannot appear in parameter position in parameter type <closure type>" error
-                for tokenIndex in funcIndex ... closeBraceIndex {
+                for tokenIndex in keywordIndex ... closeBraceIndex {
                     if
                         // Check if this is the start of a closure
                         formatter.tokens[tokenIndex] == .startOfScope("("),
