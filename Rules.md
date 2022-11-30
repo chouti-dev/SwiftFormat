@@ -82,6 +82,7 @@
 * [blankLineAfterImports](#blankLineAfterImports)
 * [blankLinesBetweenImports](#blankLinesBetweenImports)
 * [blockComments](#blockComments)
+* [docComments](#docComments)
 * [isEmpty](#isEmpty)
 * [markTypes](#markTypes)
 * [organizeDeclarations](#organizeDeclarations)
@@ -484,6 +485,29 @@ Replace consecutive spaces with a single space.
 </details>
 <br/>
 
+## docComments
+
+Use doc comments for comments preceding declarations.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- // A placeholder type used to demonstrate syntax rules
++ /// A placeholder type used to demonstrate syntax rules
+  class Foo {
+-     // This function doesn't really do anything
++     /// This function doesn't really do anything
+      func bar() {
+-         /// TODO: implement Foo.bar() algorithm
++         // TODO: implement Foo.bar() algorithm
+      }
+  }
+```
+
+</details>
+<br/>
+
 ## duplicateImports
 
 Remove duplicate import statements.
@@ -659,10 +683,7 @@ instead of generic type constraints (`extension Array where Element == Foo`).
 
 Option | Description
 --- | ---
-`--generictypes` | Additional generic type definitions used by `genericExtensions`
-A semicolon-separated list of generic types and their generic
-parameters. For example:
-"LinkedList<Element>;Reducer<State, Action, Environment>"
+`--generictypes` | Semicolon-delimited list of generic types and type parameters
 
 <details>
 <summary>Examples</summary>
@@ -1591,7 +1612,7 @@ and declarations between // swiftformat:sort:begin and
 -         barConfiguration: Bar)
 +     case barFeature
 +     case fooFeature
-+     case upsellA
++     case upsellA(
 +         fooConfiguration: Foo,
 +         barConfiguration: Bar)
 +     case upsellB
@@ -1607,7 +1628,7 @@ and declarations between // swiftformat:sort:begin and
 -         barConfiguration: Bar)
 +     case barFeature
 +     case fooFeature
-+     case upsellA
++     case upsellA(
 +         fooConfiguration: Foo,
 +         barConfiguration: Bar)
 +     case upsellB

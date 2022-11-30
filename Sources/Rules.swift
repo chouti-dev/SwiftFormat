@@ -2837,20 +2837,8 @@ public struct _FormatRules {
                 }
             }
             // Crude check for Result Builder
-            var i = i
-            while let startIndex = formatter.index(of: .startOfScope("{"), before: i) {
-                guard let prevIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak,
-                                                      before: startIndex)
-                else {
-                    break
-                }
-                if case let .identifier(name) = formatter.tokens[prevIndex],
-                   let firstChar = name.first.map(String.init),
-                   firstChar == firstChar.uppercased()
-                {
-                    return
-                }
-                i = prevIndex
+            if formatter.isInResultBuilder(at: i) {
+                return
             }
             formatter.removeTokens(in: prevIndex ..< nextNonSpaceIndex)
         }
@@ -3107,21 +3095,24 @@ public struct _FormatRules {
                 [.endOfScope("case"), .endOfScope("default")].contains(formatter.tokens[index - 1])
             if explicitSelf == .remove {
                 // Check if scope actually includes self before we waste a bunch of time
-                var scopeCount = 0
+                var scopeStack: [Token] = []
                 loop: for i in index ..< formatter.tokens.count {
-                    switch formatter.tokens[i] {
+                    let token = formatter.tokens[i]
+                    switch token {
                     case .identifier("self"):
                         break loop // Contains self
-                    case .startOfScope("{") where isWhereClause && scopeCount == 0:
+                    case .startOfScope("{") where isWhereClause && scopeStack.isEmpty:
                         return // Does not contain self
-                    case .startOfScope("{"), .startOfScope(":"):
-                        scopeCount += 1
-                    case .endOfScope("}"), .endOfScope("case"), .endOfScope("default"):
-                        if scopeCount == 0 || (scopeCount == 1 && isCaseClause) {
+                    case .startOfScope("{"), .startOfScope("("),
+                         .startOfScope("["), .startOfScope(":"):
+                        scopeStack.append(token)
+                    case .endOfScope("}"), .endOfScope(")"), .endOfScope("]"),
+                         .endOfScope("case"), .endOfScope("default"):
+                        if scopeStack.isEmpty || (scopeStack == [.startOfScope(":")] && isCaseClause) {
                             index = i + 1
                             return // Does not contain self
                         }
-                        scopeCount -= 1
+                        _ = scopeStack.popLast()
                     default:
                         break
                     }
@@ -3149,7 +3140,7 @@ public struct _FormatRules {
                             return formatter.fatalError("Expected while", at: i)
                         }
                         i = nextIndex
-                    case .keyword("if"), .keyword("while"):
+                    case .keyword("if"), .keyword("for"), .keyword("while"):
                         if explicitSelf == .insert {
                             break
                         }
@@ -3417,7 +3408,7 @@ public struct _FormatRules {
                                 membersByType: &membersByType, classMembersByType: &classMembersByType,
                                 usingDynamicLookup: usingDynamicLookup, isTypeRoot: false, isInit: isInit)
                     continue
-                case .startOfScope("{") where isWhereClause:
+                case .startOfScope("{") where isWhereClause && scopeStack.count == 1:
                     return
                 case .startOfScope("{") where lastKeyword == "switch":
                     lastKeyword = ""
@@ -4473,6 +4464,20 @@ public struct _FormatRules {
             }
         }
 
+        let hasLocalVoid: Bool = {
+            for (i, token) in formatter.tokens.enumerated() where token == .identifier("Void") {
+                if let prevToken = formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) {
+                    switch prevToken {
+                    case .keyword("typealias"), .keyword("struct"), .keyword("class"), .keyword("enum"):
+                        return true
+                    default:
+                        break
+                    }
+                }
+            }
+            return false
+        }()
+
         formatter.forEach(.identifier("Void")) { i, _ in
             if let nextIndex = formatter.index(of: .nonSpaceOrLinebreak, after: i, if: {
                 $0 == .endOfScope(")")
@@ -4493,7 +4498,7 @@ public struct _FormatRules {
                     .nonSpaceOrLinebreak,
                     before: prevIndex
                 )?.isIdentifier == true {
-                    if !formatter.options.useVoid {
+                    if !formatter.options.useVoid, !hasLocalVoid {
                         // Convert to parens
                         formatter.replaceToken(at: i, with: .endOfScope(")"))
                         formatter.insert(.startOfScope("("), at: i)
@@ -4515,15 +4520,13 @@ public struct _FormatRules {
                 .operator(".", .infix)
             {
                 return
-            } else {
-                if formatter.next(.nonSpace, after: i) == .startOfScope("(") {
+            } else if formatter.next(.nonSpace, after: i) == .startOfScope("(") {
+                if !hasLocalVoid {
                     formatter.removeToken(at: i)
-                    return
                 }
-                if !formatter.options.useVoid || isArgumentToken(at: i) {
-                    // Convert to parens
-                    formatter.replaceToken(at: i, with: [.startOfScope("("), .endOfScope(")")])
-                }
+            } else if !formatter.options.useVoid || isArgumentToken(at: i), !hasLocalVoid {
+                // Convert to parens
+                formatter.replaceToken(at: i, with: [.startOfScope("("), .endOfScope(")")])
             }
         }
         guard formatter.options.useVoid else {
@@ -4537,9 +4540,12 @@ public struct _FormatRules {
                 return
             }
             if formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) == .operator("->", .infix) {
-                formatter.replaceTokens(in: i ... endIndex, with: .identifier("Void"))
+                if !hasLocalVoid {
+                    formatter.replaceTokens(in: i ... endIndex, with: .identifier("Void"))
+                }
             } else if prevToken == .startOfScope("<") ||
-                (prevToken == .delimiter(",") && formatter.currentScope(at: i) == .startOfScope("<"))
+                (prevToken == .delimiter(",") && formatter.currentScope(at: i) == .startOfScope("<")),
+                !hasLocalVoid
             {
                 formatter.replaceTokens(in: i ... endIndex, with: .identifier("Void"))
             }
@@ -4785,10 +4791,14 @@ public struct _FormatRules {
         let headerLinebreaks = headerTokens.reduce(0) { result, token -> Int in
             result + (token.isLinebreak ? 1 : 0)
         }
-        headerTokens += [
-            .linebreak(formatter.options.linebreak, headerLinebreaks + 1),
-            .linebreak(formatter.options.linebreak, headerLinebreaks + 2),
-        ]
+        if lastHeaderTokenIndex < formatter.tokens.count - 1 {
+            headerTokens.append(.linebreak(formatter.options.linebreak, headerLinebreaks + 1))
+            if lastHeaderTokenIndex < formatter.tokens.count - 2,
+               !formatter.tokens[lastHeaderTokenIndex + 2].isLinebreak
+            {
+                headerTokens.append(.linebreak(formatter.options.linebreak, headerLinebreaks + 2))
+            }
+        }
         if let index = formatter.index(of: .nonSpace, after: lastHeaderTokenIndex, if: {
             $0.isLinebreak
         }) {
@@ -5041,16 +5051,8 @@ public struct _FormatRules {
             guard var endIndex = formatter.index(of: .startOfScope("{"), after: i) else {
                 return
             }
-            if formatter.options.swiftVersion < "5.3" {
-                // Crude check for Result Builder
-                if let nextToken = formatter.next(.nonSpaceOrCommentOrLinebreak, after: endIndex),
-                   case let .identifier(name) = nextToken, let firstChar = name.first.map(String.init),
-                   firstChar == firstChar.uppercased()
-                {
-                    return
-                } else if formatter.isInViewBuilder(at: i) {
-                    return
-                }
+            if formatter.options.swiftVersion < "5.3", formatter.isInResultBuilder(at: i) {
+                return
             }
             var index = i + 1
             var chevronIndex: Int?
@@ -7264,6 +7266,127 @@ public struct _FormatRules {
             let genericSubtypes = providedGenericTypes.map { $0.name }.joined(separator: ", ")
             let fullGenericType = "\(extendedType)<\(genericSubtypes)>"
             formatter.replaceToken(at: typeNameIndex, with: tokenize(fullGenericType))
+        }
+    }
+
+    public let docComments = FormatRule(
+        help: "Use doc comments for comments preceding declarations.",
+        disabledByDefault: true,
+        orderAfter: ["fileHeader"]
+    ) { formatter in
+        formatter.forEach(.startOfScope) { index, token in
+            guard
+                ["//", "/*"].contains(token.string),
+                let endOfComment = formatter.endOfScope(at: index)
+            else { return }
+
+            let shouldBeDocComment: Bool = {
+                guard let nextDeclarationIndex = formatter.index(
+                    after: endOfComment,
+                    where: { token in
+                        // Check if this token defines a declaration that supports doc comments
+                        token.isDeclarationTypeKeyword(excluding: ["import"])
+                    }
+                ) else { return false }
+
+                // Only use doc comments on declarations in type bodies, or top-level declarations
+                if let startOfEnclosingScope = formatter.index(of: .startOfScope("{"), before: index) {
+                    guard let scopeKeyword = formatter.lastSignificantKeyword(at: startOfEnclosingScope, excluding: ["where"]) else {
+                        return false
+                    }
+
+                    if !["class", "struct", "enum", "actor", "protocol", "extension"].contains(scopeKeyword) {
+                        return false
+                    }
+                }
+
+                // If there aren't any blank lines between the comment and declaration,
+                // this comment is associated with that declaration
+                let trailingTokens = formatter.tokens[(endOfComment - 1) ... nextDeclarationIndex]
+                let lines = trailingTokens.split(omittingEmptySubsequences: false, whereSeparator: \.isLinebreak)
+                let blankLineBeforeDeclaration = lines.contains(where: { line in
+                    line.isEmpty || line.allSatisfy(\.isSpace)
+                })
+
+                if blankLineBeforeDeclaration {
+                    return false
+                }
+
+                // Check if this is a special type of comment that isn't documentation
+                if
+                    let commentBodyIndex = formatter.index(after: index, where: { token in
+                        if case .commentBody = token { return true }
+                        else { return false }
+                    }),
+                    commentBodyIndex < endOfComment,
+                    let commentBodyToken = formatter.token(at: commentBodyIndex)
+                {
+                    let commentBody = commentBodyToken.string.trimmingCharacters(in: .whitespaces)
+
+                    // Don't modify directive comments like `// MARK: Section title`
+                    // or `// swiftformat:disable rule`, since those tools expect
+                    // regular comments and not doc comments.
+                    for knownTag in ["mark", "swiftformat", "sourcery", "swiftlint"]
+                        where commentBody.lowercased().hasPrefix(knownTag + ":")
+                    {
+                        return false
+                    }
+                }
+
+                // Only comments at the start of a line can be doc comments
+                if let previousToken = formatter.index(of: .nonSpaceOrLinebreak, before: index) {
+                    let commentLine = formatter.startOfLine(at: index)
+                    let previousTokenLine = formatter.startOfLine(at: previousToken)
+
+                    if commentLine == previousTokenLine {
+                        return false
+                    }
+                }
+
+                return true
+            }()
+
+            // Doc comment tokens like `///` and `/**` aren't parsed as a
+            // single `.startOfScope` token -- they're parsed as:
+            // `.startOfScope("//"), .commentBody("/ ...")` or
+            // `.startOfScope("/*"), .commentBody("* ...")`
+            let startOfDocCommentBody: String
+            switch token.string {
+            case "//":
+                startOfDocCommentBody = "/"
+            case "/*":
+                startOfDocCommentBody = "*"
+            default:
+                return
+            }
+
+            if
+                let commentBody = formatter.token(at: index + 1),
+                case .commentBody = commentBody
+            {
+                if shouldBeDocComment, !commentBody.string.hasPrefix(startOfDocCommentBody) {
+                    let updatedCommentBody = "\(startOfDocCommentBody)\(commentBody.string)"
+                    formatter.replaceToken(at: index + 1, with: .commentBody(updatedCommentBody))
+                } else if !shouldBeDocComment, commentBody.string.hasPrefix(startOfDocCommentBody) {
+                    let prefix = commentBody.string.prefix(while: { String($0) == startOfDocCommentBody })
+
+                    // Do nothing if this is a unusual comment like `//////////////////`
+                    // or `/****************`. We can't just remove one of the tokens, because
+                    // that would make this rule have a different output each time, but we
+                    // shouldn't remove all of them since that would be unexpected.
+                    if prefix.count > 1 {
+                        return
+                    }
+
+                    formatter.replaceToken(
+                        at: index + 1,
+                        with: .commentBody(String(commentBody.string.dropFirst()))
+                    )
+                }
+
+            } else if shouldBeDocComment {
+                formatter.insert(.commentBody(startOfDocCommentBody), at: index + 1)
+            }
         }
     }
 }

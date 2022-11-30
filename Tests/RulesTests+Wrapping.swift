@@ -1210,6 +1210,19 @@ class WrappingTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.wrap, options: options)
     }
 
+    func testErrorNotReportedOnBlankLineAfterWrap() throws {
+        let input = """
+        [
+            abagdiasiudbaisndoanosdasdasdasdasdnaosnooanso(),
+
+            bar(),
+        ]
+        """
+        let options = FormatOptions(truncateBlankLines: false, maxWidth: 40)
+        let changes = try lint(input, rules: [FormatRules.wrap, FormatRules.indent], options: options)
+        XCTAssertEqual(changes, [.init(line: 2, rule: FormatRules.wrap, filePath: nil)])
+    }
+
     // MARK: - wrapArguments
 
     func testIndentFirstElementWhenApplyingWrap() {
@@ -4017,7 +4030,7 @@ class WrappingTests: RulesTests {
         """
 
         testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
-                       options: FormatOptions(maxWidth: 7))
+                       options: FormatOptions(maxWidth: 7), exclude: ["docComments"])
     }
 
     func testWrapDocLineCommentWithNoLeadingSpace() {
@@ -4032,7 +4045,7 @@ class WrappingTests: RulesTests {
 
         testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
                        options: FormatOptions(maxWidth: 6),
-                       exclude: ["spaceInsideComments"])
+                       exclude: ["spaceInsideComments", "docComments"])
     }
 
     func testWrapSingleLineCommentWithIndent() {
@@ -4051,7 +4064,7 @@ class WrappingTests: RulesTests {
         """
 
         testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
-                       options: FormatOptions(maxWidth: 14))
+                       options: FormatOptions(maxWidth: 14), exclude: ["docComments"])
     }
 
     func testWrapSingleLineCommentAfterCode() {
@@ -4078,7 +4091,7 @@ class WrappingTests: RulesTests {
         """
 
         testFormatting(for: input, rule: FormatRules.wrapSingleLineComments,
-                       options: FormatOptions(maxWidth: 100))
+                       options: FormatOptions(maxWidth: 100), exclude: ["docComments"])
     }
 
     func testWrapDocCommentWithLongURL2() {
@@ -4100,6 +4113,6 @@ class WrappingTests: RulesTests {
         """
 
         testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
-                       options: FormatOptions(maxWidth: 40))
+                       options: FormatOptions(maxWidth: 40), exclude: ["docComments"])
     }
 }

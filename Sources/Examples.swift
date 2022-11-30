@@ -1366,7 +1366,7 @@ private struct Examples {
     -         barConfiguration: Bar)
     +     case barFeature
     +     case fooFeature
-    +     case upsellA
+    +     case upsellA(
     +         fooConfiguration: Foo,
     +         barConfiguration: Bar)
     +     case upsellB
@@ -1382,7 +1382,7 @@ private struct Examples {
     -         barConfiguration: Bar)
     +     case barFeature
     +     case fooFeature
-    +     case upsellA
+    +     case upsellA(
     +         fooConfiguration: Foo,
     +         barConfiguration: Bar)
     +     case upsellB
@@ -1461,6 +1461,21 @@ private struct Examples {
     -     Environment == FooEnvironment {}
     + extension LinkedList<Foo> {}
     + extension Reducer<FooState, FooAction, FooEnvironment> {}
+    ```
+    """
+
+    let docComments = """
+    ```diff
+    - // A placeholder type used to demonstrate syntax rules
+    + /// A placeholder type used to demonstrate syntax rules
+      class Foo {
+    -     // This function doesn't really do anything
+    +     /// This function doesn't really do anything
+          func bar() {
+    -         /// TODO: implement Foo.bar() algorithm
+    +         // TODO: implement Foo.bar() algorithm
+          }
+      }
     ```
     """
 }

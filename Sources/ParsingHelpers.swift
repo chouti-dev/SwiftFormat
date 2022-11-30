@@ -979,17 +979,17 @@ extension Formatter {
         return false
     }
 
-    /// Detect if code is inside a ViewBuilder
-    func isInViewBuilder(at i: Int) -> Bool {
+    /// Crude check to detect if code is inside a Result Builder
+    /// Note: this will produce false positives for any init that takes a closure
+    func isInResultBuilder(at i: Int) -> Bool {
         var i = i
         while let startIndex = index(of: .startOfScope("{"), before: i) {
-            guard let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: startIndex) else {
+            guard let prevIndex = index(before: startIndex, where: {
+                !$0.isSpaceOrCommentOrLinebreak && !$0.isEndOfScope
+            }) else {
                 return false
             }
-            if tokens[prevIndex] == .identifier("View"),
-               let prevToken = last(.nonSpaceOrCommentOrLinebreak, before: prevIndex),
-               [.delimiter(":"), .identifier("some")].contains(prevToken)
-            {
+            if case let .identifier(name) = tokens[prevIndex], name.first?.isUppercase == true {
                 return true
             }
             i = prevIndex
@@ -1919,14 +1919,31 @@ extension Token {
     ///  - Notable exceptions are `class func` and symbol imports (like `import class Module.Type`)
     ///    which will include two of these keywords.
     var isDeclarationTypeKeyword: Bool {
+        isDeclarationTypeKeyword(excluding: [])
+    }
+
+    /// Whether or not this token "defines" the specific type of declaration
+    ///  - A valid declaration will usually include exactly one of these keywords in its outermost scope.
+    ///  - Notable exceptions are `class func` and symbol imports (like `import class Module.Type`)
+    ///    which will include two of these keywords.
+    func isDeclarationTypeKeyword(excluding keywordsToExclude: [String]) -> Bool {
         guard case let .keyword(keyword) = self else {
             return false
         }
+
         // All of the keywords that map to individual Declaration grammars
         // https://docs.swift.org/swift-book/ReferenceManual/Declarations.html#grammar_declaration
-        return ["import", "let", "var", "typealias", "func", "enum", "case",
-                "struct", "class", "actor", "protocol", "init", "deinit",
-                "extension", "subscript", "operator", "precedencegroup"].contains(keyword)
+        var declarationTypeKeywords = Set<String>([
+            "import", "let", "var", "typealias", "func", "enum", "case",
+            "struct", "class", "actor", "protocol", "init", "deinit",
+            "extension", "subscript", "operator", "precedencegroup",
+        ])
+
+        for keywordToExclude in keywordsToExclude {
+            declarationTypeKeywords.remove(keywordToExclude)
+        }
+
+        return declarationTypeKeywords.contains(keyword)
     }
 
     var isModifierKeyword: Bool {
