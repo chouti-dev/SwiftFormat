@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.50.5
+//  Version 0.50.6
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -812,12 +812,8 @@ private extension UnicodeScalarView {
         var start = self
         if var tail = readCharacter(where: isHead) {
             switch tail {
-            case "?", "!", "\\":
+            case "/" where !["*", "/"].contains(first), "?", "!", "\\":
                 return .operator(String(tail), .none)
-            case "/":
-                if first == "\\" {
-                    return .operator("/", .none)
-                }
             default:
                 start = self
             }
