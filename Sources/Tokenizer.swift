@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.50.6
+//  Version 0.50.7
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -1498,9 +1498,14 @@ public func tokenize(_ source: String) -> [Token] {
                     break
                 }
                 if token == .operator("/", .none),
-                   prevNonSpaceToken.isOperator(ofType: .infix) || [
+                   prevNonSpaceToken.isOperator(ofType: .infix) || (
+                       prevNonSpaceToken.isUnwrapOperator &&
+                           prevNonSpaceIndex > 0 &&
+                           tokens[prevNonSpaceIndex - 1] == .keyword("try")
+                   ) || [
                        .startOfScope("("), .startOfScope("["),
                        .delimiter(":"), .delimiter(","),
+                       .keyword("try"), .keyword("await"),
                    ].contains(prevNonSpaceToken)
                 {
                     tokens[i] = .startOfScope("/")

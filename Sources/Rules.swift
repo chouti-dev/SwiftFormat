@@ -1426,7 +1426,8 @@ public struct _FormatRules {
                     }
                     let start = formatter.startOfLine(at: i)
                     // Align indent with previous value
-                    indentCount = 1
+                    indentCount = indentCounts.last ?? 0
+                    indentCounts[indentCounts.count - 1] = 1
                     indent = formatter.spaceEquivalentToTokens(from: start, upTo: nextIndex)
                 default:
                     let stringIndent = stringBodyIndent(at: i)
@@ -2689,7 +2690,7 @@ public struct _FormatRules {
                       formatter.index(in: i + 1 ..< closingIndex, where: {
                           switch $0 {
                           case .operator(_, .infix), .identifier("any"), .identifier("some"),
-                               .keyword("as"), .keyword("is"), .keyword("try"):
+                               .keyword("as"), .keyword("is"), .keyword("try"), .keyword("await"):
                               switch prevToken {
                               // TODO: add option to always strip parens in this case (or only for boolean operators?)
                               case .operator("=", .infix) where $0 == .operator("->", .infix):
