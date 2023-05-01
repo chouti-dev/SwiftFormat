@@ -37,6 +37,7 @@ extension Options {
     init(_ args: [String: String], in directory: String) throws {
         fileOptions = try fileOptionsFor(args, in: directory)
         formatOptions = try formatOptionsFor(args)
+        configURL = args["config"].map { expandPath($0, in: directory) }
         let lint = args.keys.contains("lint")
         self.lint = lint
         rules = try rulesFor(args, lint: lint)
@@ -49,6 +50,7 @@ extension Options {
         if let fileInfo = formatOptions?.fileInfo {
             newOptions.formatOptions?.fileInfo = fileInfo
         }
+        newOptions.configURL = configURL
         self = newOptions
     }
 }
@@ -653,6 +655,7 @@ let commandLineArguments = [
     "stdinpath",
     "scriptinput",
     "config",
+    "baseconfig",
     "inferoptions",
     "linerange",
     "output",
@@ -662,6 +665,7 @@ let commandLineArguments = [
     "lenient",
     "verbose",
     "quiet",
+    "reporter",
     "report",
     // Misc
     "help",

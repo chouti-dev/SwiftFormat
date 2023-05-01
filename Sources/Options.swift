@@ -77,6 +77,12 @@ public enum WrapMode: String, CaseIterable {
     }
 }
 
+/// Wrap enum cases
+public enum WrapEnumCases: String, CaseIterable {
+    case always
+    case withValues = "with-values"
+}
+
 /// Argument type for stripping
 public enum ArgumentStrippingMode: String, CaseIterable {
     case unnamedOnly = "unnamed-only"
@@ -108,6 +114,16 @@ public enum ExtensionACLPlacement: String, CaseIterable {
 public enum WrapReturnType: String, CaseIterable {
     case ifMultiline = "if-multiline"
     case preserve
+}
+
+/// Wrapping behavior for effects (`async`, `throws`)
+public enum WrapEffects: String, CaseIterable {
+    case preserve
+    /// `async` and `throws` are wrapped to the line after the closing paren
+    /// if the function spans multiple lines
+    case ifMultiline = "if-multiline"
+    /// `async` and `throws` are never wrapped, and are always included on the same line as the closing paren
+    case never
 }
 
 /// Annotation which should be kept when removing a redundant type
@@ -354,6 +370,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var wrapParameters: WrapMode
     public var wrapCollections: WrapMode
     public var wrapTypealiases: WrapMode
+    public var wrapEnumCases: WrapEnumCases
     public var closingParenOnSameLine: Bool
     public var wrapReturnType: WrapReturnType
     public var wrapConditions: WrapMode
@@ -372,6 +389,8 @@ public struct FormatOptions: CustomStringConvertible {
     public var guardElsePosition: ElsePosition
     public var explicitSelf: SelfMode
     public var selfRequired: Set<String>
+    public var throwCapturing: Set<String>
+    public var asyncCapturing: Set<String>
     public var experimentalRules: Bool
     public var importGrouping: ImportGrouping
     public var trailingClosures: Set<String>
@@ -413,6 +432,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var removeStartOrEndBlankLinesFromTypes: Bool
     public var genericTypes: String
     public var useSomeAny: Bool
+    public var wrapEffects: WrapEffects
 
     // Deprecated
     public var indentComments: Bool
@@ -449,6 +469,7 @@ public struct FormatOptions: CustomStringConvertible {
                 wrapParameters: WrapMode = .default,
                 wrapCollections: WrapMode = .preserve,
                 wrapTypealiases: WrapMode = .preserve,
+                wrapEnumCases: WrapEnumCases = .always,
                 closingParenOnSameLine: Bool = false,
                 wrapReturnType: WrapReturnType = .preserve,
                 wrapConditions: WrapMode = .preserve,
@@ -467,6 +488,8 @@ public struct FormatOptions: CustomStringConvertible {
                 guardElsePosition: ElsePosition = .auto,
                 explicitSelf: SelfMode = .remove,
                 selfRequired: Set<String> = [],
+                throwCapturing: Set<String> = [],
+                asyncCapturing: Set<String> = [],
                 experimentalRules: Bool = false,
                 importGrouping: ImportGrouping = .alpha,
                 trailingClosures: Set<String> = [],
@@ -508,6 +531,7 @@ public struct FormatOptions: CustomStringConvertible {
                 removeStartOrEndBlankLinesFromTypes: Bool = true,
                 genericTypes: String = "",
                 useSomeAny: Bool = true,
+                wrapEffects: WrapEffects = .preserve,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
@@ -535,6 +559,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.wrapParameters = wrapParameters
         self.wrapCollections = wrapCollections
         self.wrapTypealiases = wrapTypealiases
+        self.wrapEnumCases = wrapEnumCases
         self.closingParenOnSameLine = closingParenOnSameLine
         self.wrapReturnType = wrapReturnType
         self.wrapConditions = wrapConditions
@@ -553,6 +578,8 @@ public struct FormatOptions: CustomStringConvertible {
         self.guardElsePosition = guardElsePosition
         self.explicitSelf = explicitSelf
         self.selfRequired = selfRequired
+        self.throwCapturing = throwCapturing
+        self.asyncCapturing = asyncCapturing
         self.experimentalRules = experimentalRules
         self.importGrouping = importGrouping
         self.trailingClosures = trailingClosures
@@ -594,6 +621,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.removeStartOrEndBlankLinesFromTypes = removeStartOrEndBlankLinesFromTypes
         self.genericTypes = genericTypes
         self.useSomeAny = useSomeAny
+        self.wrapEffects = wrapEffects
         // Doesn't really belong here, but hard to put elsewhere
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers
@@ -674,23 +702,27 @@ public struct Options {
     public var fileOptions: FileOptions?
     public var formatOptions: FormatOptions?
     public var rules: Set<String>?
+    public var configURL: URL?
     public var lint: Bool
 
     public static let `default` = Options(
         fileOptions: .default,
         formatOptions: .default,
         rules: Set(FormatRules.byName.keys).subtracting(FormatRules.disabledByDefault),
+        configURL: nil,
         lint: false
     )
 
     public init(fileOptions: FileOptions? = nil,
                 formatOptions: FormatOptions? = nil,
                 rules: Set<String>? = nil,
+                configURL: URL? = nil,
                 lint: Bool = false)
     {
         self.fileOptions = fileOptions
         self.formatOptions = formatOptions
         self.rules = rules
+        self.configURL = configURL
         self.lint = lint
     }
 

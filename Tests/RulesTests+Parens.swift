@@ -230,6 +230,28 @@ class ParensTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
+    func testRedundantParensInReturnRemoved() {
+        let input = "return (true)"
+        let output = "return true"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    func testRedundantParensInMultilineReturnRemovedCleanly() {
+        let input = """
+        return (
+            foo
+                .bar
+        )
+        """
+        let output = """
+        return
+            foo
+                .bar
+
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
     // around conditions
 
     func testRedundantParensRemovedInIf() {
@@ -943,5 +965,17 @@ class ParensTests: RulesTests {
         let input = "a ... (-b)"
         let output = "a ... -b"
         testFormatting(for: input, output, rule: FormatRules.redundantParens)
+    }
+
+    // around ternaries
+
+    func testParensNotRemovedAroundTernaryCondition() {
+        let input = "let a = (b == c) ? d : e"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRequiredParensNotRemovedAroundTernaryAssignment() {
+        let input = "a ? (b = c) : (b = d)"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 }

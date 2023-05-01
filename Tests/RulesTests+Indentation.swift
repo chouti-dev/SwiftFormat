@@ -91,6 +91,61 @@ class IndentTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 
+    func testIndentPreservedForNestedWrappedParameters2() {
+        let input = """
+        let loginResponse = LoginResponse(status: .success(.init(accessToken: session,
+                                                                 status: .enabled),
+                                                           invoicingURL: .invoicing,
+                                                           paymentFormURL: .paymentForm))
+        """
+        let options = FormatOptions(wrapParameters: .preserve)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentPreservedForNestedWrappedParameters3() {
+        let input = """
+        let loginResponse = LoginResponse(
+            status: .success(.init(accessToken: session,
+                                   status: .enabled),
+                             invoicingURL: .invoicing,
+                             paymentFormURL: .paymentForm)
+        )
+        """
+        let options = FormatOptions(wrapParameters: .preserve)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentTrailingClosureInParensContainingUnwrappedArguments() {
+        let input = """
+        let foo = bar(baz {
+            quux(foo, bar)
+        })
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentTrailingClosureInParensContainingWrappedArguments() {
+        let input = """
+        let foo = bar(baz {
+            quux(foo,
+                 bar)
+        })
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
+    func testIndentTrailingClosureInParensContainingWrappedArguments2() {
+        let input = """
+        let foo = bar(baz {
+            quux(
+                foo,
+                bar
+            )
+        })
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
     func testIndentImbalancedNestedClosingParens() {
         let input = """
         Foo(bar:
@@ -1490,7 +1545,7 @@ class IndentTests: RulesTests {
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
         testFormatting(for: input, rule: FormatRules.indent, options: options,
-                       exclude: ["wrapConditionalBodies"])
+                       exclude: ["wrapConditionalBodies", "wrapMultilineStatementBraces"])
     }
 
     func testDoubleIndentTrailingClosureBody() {
@@ -1521,7 +1576,8 @@ class IndentTests: RulesTests {
         }
         """
         let options = FormatOptions(wrapArguments: .disabled, closingParenOnSameLine: true)
-        testFormatting(for: input, rule: FormatRules.indent, options: options)
+        testFormatting(for: input, rule: FormatRules.indent, options: options,
+                       exclude: ["wrapMultilineStatementBraces"])
     }
 
     func testNoDoubleIndentTrailingClosureBodyIfLineStartsWithClosingBrace() {
@@ -2421,7 +2477,7 @@ class IndentTests: RulesTests {
         XCTAssertEqual(
             loggingService.assertions,
             """
-            My long mutli-line assertion.
+            My long multi-line assertion.
             This error was not recoverable.
             """
         )
@@ -2433,13 +2489,13 @@ class IndentTests: RulesTests {
     func testIndentMultilineStringInMethodCall() {
         let input = #"""
         XCTAssertEqual(loggingService.assertions, """
-        My long mutli-line assertion.
+        My long multi-line assertion.
         This error was not recoverable.
         """)
         """#
         let output = #"""
         XCTAssertEqual(loggingService.assertions, """
-            My long mutli-line assertion.
+            My long multi-line assertion.
             This error was not recoverable.
             """)
         """#
@@ -2523,6 +2579,62 @@ class IndentTests: RulesTests {
         """#
         let options = FormatOptions(indent: "  ", indentStrings: false)
         testFormatting(for: input, output, rule: FormatRules.indent, options: options)
+    }
+
+    func testIndentUnderIndentedMultilineStringPreservesBlankLineIndent() {
+        let input = #"""
+        class Main {
+            func main() {
+                print("""
+            That've been not indented at all.
+            \#n\#  
+            After SwiftFormat it causes a compiler error in the line above.
+            """)
+            }
+        }
+        """#
+        let output = #"""
+        class Main {
+            func main() {
+                print("""
+                That've been not indented at all.
+                \#n\#
+                After SwiftFormat it causes a compiler error in the line above.
+                """)
+            }
+        }
+        """#
+        let options = FormatOptions(truncateBlankLines: false)
+        testFormatting(for: input, output, rule: FormatRules.indent,
+                       options: options)
+    }
+
+    func testIndentUnderIndentedMultilineStringDoesntAddIndent() {
+        let input = #"""
+        class Main {
+            func main() {
+                print("""
+            That've been not indented at all.
+
+            After SwiftFormat it causes a compiler error in the line above.
+            """)
+            }
+        }
+        """#
+        let output = #"""
+        class Main {
+            func main() {
+                print("""
+                That've been not indented at all.
+
+                After SwiftFormat it causes a compiler error in the line above.
+                """)
+            }
+        }
+        """#
+        let options = FormatOptions(truncateBlankLines: false)
+        testFormatting(for: input, output, rule: FormatRules.indent,
+                       options: options)
     }
 
     // indent multiline raw strings
@@ -2790,6 +2902,23 @@ class IndentTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.indent)
     }
 
+    func testNoIndentDotExpressionInsideIfdef() {
+        let input = """
+        let current: Platform = {
+            #if os(macOS)
+                .mac
+            #elseif os(Linux)
+                .linux
+            #elseif os(Windows)
+                .windows
+            #else
+                fatalError("Unknown OS not supported")
+            #endif
+        }()
+        """
+        testFormatting(for: input, rule: FormatRules.indent)
+    }
+
     // indent #if/#else/#elseif/#endif (mode: noindent)
 
     func testIfEndifNoIndenting() {
@@ -2947,6 +3076,22 @@ class IndentTests: RulesTests {
                     .font(.headline)
                 #endif
             }
+        }
+        """
+        let options = FormatOptions(ifdefIndent: .noIndent)
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
+    }
+
+    func testNoIndentDotInitInsideIfdef() {
+        let input = """
+        func myFunc() -> String {
+            #if DEBUG
+            .init("foo")
+            #elseif PROD
+            .init("bar")
+            #else
+            .init("baz")
+            #endif
         }
         """
         let options = FormatOptions(ifdefIndent: .noIndent)

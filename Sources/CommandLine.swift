@@ -82,15 +82,15 @@ private func printWarnings(_ errors: [Error]) -> Bool {
         if ![".", "?", "!"].contains(errorMessage.last ?? " ") {
             errorMessage += "."
         }
-        guard let error = error as? FormatError else {
-            continue
-        }
         let isError: Bool
-        switch error {
-        case let .writing(string):
+        switch error as? FormatError {
+        case let .writing(string)?:
             isError = !string.contains(" cache ")
-        case .parsing, .reading, .options:
+        case .parsing?, .reading?, .options?:
             isError = true
+        case nil:
+            isError = true
+            errorMessage = error.localizedDescription
         }
         if isError {
             containsError = true
@@ -184,6 +184,7 @@ func printHelp(as type: CLI.OutputType) {
     --stdinpath        Path to stdin source file (used for generating header)
     --scriptinput      Read Xcode SCRIPT_INPUT_FILE* environment variables as files
     --config           Path to a configuration file containing rules and options
+    --baseconfig       Like --config, but local .swiftformat files aren't ignored
     --inferoptions     Instead of formatting input, use it to infer format options
     --output           Output path for formatted file(s) (defaults to input path)
     --exclude          Comma-delimited list of ignored paths (supports glob syntax)
@@ -198,6 +199,7 @@ func printHelp(as type: CLI.OutputType) {
     --dryrun           Run in "dry" mode (without actually changing any files)
     --lint             Return an error for unformatted input, and list violations
     --report           Path to a file where --lint output should be written
+    --reporter         Report format: \(Reporters.help)
     --lenient          Suppress errors for unformatted code in --lint mode
     --verbose          Display detailed formatting output and warnings/errors
     --quiet            Disables non-critical output messages and warnings
@@ -250,6 +252,54 @@ private func serializeOptions(_ options: Options, to outputURL: URL?) throws {
     }
 }
 
+private func readConfigArg(
+    _ name: String,
+    with args: inout [String: String],
+    in directory: String
+) throws -> URL? {
+    guard let url = try args[name].map({
+        try parsePath($0, for: "--\(name)", in: directory)
+    }) else {
+        return nil
+    }
+    if args[name] == "" {
+        throw FormatError.options("--\(name) argument expects a value")
+    }
+    if !FileManager.default.fileExists(atPath: url.path) {
+        throw FormatError.reading("Specified config file does not exist: \(url.path)")
+    }
+    let data: Data
+    do {
+        data = try Data(contentsOf: url)
+    } catch {
+        throw FormatError.reading("Failed to read config file at \(url.path), \(error)")
+    }
+    var config = try parseConfigFile(data)
+    // Ensure exclude paths in config file are treated as relative to the file itself
+    // TODO: find a better way/place to do this
+    let directory = url.deletingLastPathComponent().path
+    if let exclude = config["exclude"] {
+        let excluded = expandGlobs(exclude, in: directory)
+        if excluded.isEmpty {
+            print("warning: --exclude value '\(exclude)' did not match any files in \(directory).", as: .warning)
+            config["exclude"] = nil
+        } else {
+            config["exclude"] = excluded.map { $0.description }.sorted().joined(separator: ",")
+        }
+    }
+    if let unexclude = config["unexclude"] {
+        let unexcluded = expandGlobs(unexclude, in: directory)
+        if unexcluded.isEmpty {
+            print("warning: --unexclude value '\(unexclude)' did not match any files in \(directory).", as: .warning)
+            config["unexclude"] = nil
+        } else {
+            config["unexclude"] = unexcluded.map { $0.description }.sorted().joined(separator: ",")
+        }
+    }
+    args = try mergeArguments(args, into: config)
+    return url
+}
+
 typealias OutputFlags = (
     filesWritten: Int,
     filesChecked: Int,
@@ -292,9 +342,33 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
             print("warning: \(warning)", as: .warning)
         }
 
-        // Report output
-        let reporter = args["report"].map {
-            JSONReporter(outputURL: URL(fileURLWithPath: $0))
+        // Reporter
+        var reporter: Reporter? = try args["reporter"].map { identifier in
+            guard let reporter = Reporters.reporter(
+                named: identifier,
+                environment: environment
+            ) else {
+                var message = "'\(identifier)' is not a valid reporter"
+                let names = Reporters.all.map { $0.name }
+                if let match = identifier.bestMatches(in: names).first {
+                    message += "(did you mean '\(match)'?)"
+                }
+                throw FormatError.options(message)
+            }
+            return reporter
+        }
+
+        // Report URL
+        let reportURL: URL? = try args["report"].map { arg in
+            let url = try parsePath(arg, for: "--output", in: directory)
+            if reporter == nil {
+                reporter = Reporters.reporter(for: url, environment: environment)
+                guard reporter != nil else {
+                    throw FormatError
+                        .options("--report requires --reporter to be specified")
+                }
+            }
+            return url
         }
 
         // Show help
@@ -334,43 +408,17 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
         } ?? false
 
         // Config file
-        if let configURL = try args["config"].map({ try parsePath($0, for: "--config", in: directory) }) {
-            if args["config"] == "" {
-                throw FormatError.options("--config argument expects a value")
-            }
-            if !FileManager.default.fileExists(atPath: configURL.path) {
-                throw FormatError.reading("Specified config file does not exist: \(configURL.path)")
-            }
-            let data: Data
-            do {
-                data = try Data(contentsOf: configURL)
-            } catch {
-                throw FormatError.reading("Failed to read config file at \(configURL.path), \(error)")
-            }
-            var config = try parseConfigFile(data)
-            // Ensure exclude paths in config file are treated as relative to the file itself
-            // TODO: find a better way/place to do this
-            let directory = configURL.deletingLastPathComponent().path
-            if let exclude = config["exclude"] {
-                let excluded = expandGlobs(exclude, in: directory)
-                if excluded.isEmpty {
-                    print("warning: --exclude value '\(exclude)' did not match any files in \(directory).", as: .warning)
-                    config["exclude"] = nil
-                } else {
-                    config["exclude"] = excluded.map { $0.description }.sorted().joined(separator: ",")
-                }
-            }
-            if let unexclude = config["unexclude"] {
-                let unexcluded = expandGlobs(unexclude, in: directory)
-                if unexcluded.isEmpty {
-                    print("warning: --unexclude value '\(unexclude)' did not match any files in \(directory).", as: .warning)
-                    config["unexclude"] = nil
-                } else {
-                    config["unexclude"] = unexcluded.map { $0.description }.sorted().joined(separator: ",")
-                }
-            }
-            args = try mergeArguments(args, into: config)
+        let configURL = try readConfigArg("config", with: &args, in: directory)
+
+        // FormatOption overrides
+        var overrides = [String: String]()
+        for key in formattingArguments + rulesArguments {
+            overrides[key] = args[key]
         }
+
+        // Base config
+        _ = try readConfigArg("baseconfig", with: &args, in: directory)
+        _ = try readConfigArg("config", with: &args, in: directory)
 
         // Options
         var options = try Options(args, in: directory)
@@ -392,12 +440,6 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
             }
             print("")
             return .ok
-        }
-
-        // FormatOption overrides
-        var overrides = [String: String]()
-        for key in formattingArguments + rulesArguments {
-            overrides[key] = args[key]
         }
 
         // Input path(s)
@@ -488,6 +530,10 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
             return try parsePath(arg, for: "--output", in: directory)
         }
 
+        guard !useStdout || (reporter == nil || reportURL != nil) else {
+            throw FormatError.options("--report file must be specified when --output is stdout")
+        }
+
         // Source range
         let lineRange = try args["linerange"].flatMap { arg -> ClosedRange<Int>? in
             if arg == "" {
@@ -509,7 +555,7 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
 
         // Infer options
         if args["inferoptions"] != nil {
-            guard args["config"] == nil else {
+            guard configURL == nil else {
                 throw FormatError.options("--inferoptions option can't be used along with a config file")
             }
             guard args["range"] == nil else {
@@ -731,8 +777,13 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
             print("warning: No eligible files found at \(inputPaths).", as: .warning)
         }
         if let reporter = reporter {
-            print("Writing report file to \(reporter.outputURL.path)")
-            try reporter.write()
+            let reporterOutput = try reporter.write()
+            if let reportURL = reportURL {
+                print("Writing report file to \(reportURL.path)")
+                try reporterOutput.write(to: reportURL, options: .atomic)
+            } else {
+                print(String(decoding: reporterOutput, as: UTF8.self), as: .raw)
+            }
         }
         print("SwiftFormat completed in \(time).", as: .success)
         return printResult(dryrun, lint, lenient, outputFlags)
@@ -838,7 +889,7 @@ func computeHash(_ source: String) -> String {
 }
 
 func applyRules(_ source: String, options: Options, lineRange: ClosedRange<Int>?,
-                verbose: Bool, lint: Bool, reporter: JSONReporter?) throws -> String
+                verbose: Bool, lint: Bool, reporter: Reporter?) throws -> String
 {
     // Parse source
     var tokens = tokenize(source)
@@ -893,7 +944,7 @@ func processInput(_ inputURLs: [URL],
                   dryrun: Bool,
                   lint: Bool,
                   cacheURL: URL?,
-                  reporter: JSONReporter?) -> (OutputFlags, [Error])
+                  reporter: Reporter?) -> (OutputFlags, [Error])
 {
     // Load cache
     let cacheDirectory = cacheURL?.deletingLastPathComponent().absoluteURL

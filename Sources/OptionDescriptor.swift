@@ -446,6 +446,12 @@ struct _Descriptors {
         help: "Wrap all arguments: \"before-first\", \"after-first\", \"preserve\"",
         keyPath: \.wrapArguments
     )
+    let wrapEnumCases = OptionDescriptor(
+        argumentName: "wrapenumcases",
+        displayName: "Wrap Enum Cases",
+        help: "Wrap enum cases: \"always\" (default) or \"with-values\"",
+        keyPath: \.wrapEnumCases
+    )
     let wrapParameters = OptionDescriptor(
         argumentName: "wrapparameters",
         displayName: "Wrap Parameters",
@@ -469,6 +475,12 @@ struct _Descriptors {
         displayName: "Wrap Return Type",
         help: "Wrap return type: \"if-multiline\", \"preserve\" (default)",
         keyPath: \.wrapReturnType
+    )
+    let wrapEffects = OptionDescriptor(
+        argumentName: "wrapeffects",
+        displayName: "Wrap Function Effects (throws, async)",
+        help: "Wrap effects: \"if-multiline\", \"never\", \"preserve\"",
+        keyPath: \.wrapEffects
     )
     let wrapConditions = OptionDescriptor(
         argumentName: "wrapconditions",
@@ -585,6 +597,18 @@ struct _Descriptors {
         displayName: "Self Required",
         help: "Comma-delimited list of functions with @autoclosure arguments",
         keyPath: \FormatOptions.selfRequired
+    )
+    let throwCapturing = OptionDescriptor(
+        argumentName: "throwcapturing",
+        displayName: "Throw Capturing",
+        help: "List of functions with throwing @autoclosure arguments",
+        keyPath: \FormatOptions.throwCapturing
+    )
+    let asyncCapturing = OptionDescriptor(
+        argumentName: "asynccapturing",
+        displayName: "Async Capturing",
+        help: "List of functions with async @autoclosure arguments",
+        keyPath: \FormatOptions.asyncCapturing
     )
     let importGrouping = OptionDescriptor(
         argumentName: "importgrouping",

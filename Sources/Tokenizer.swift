@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.50.7
+//  Version 0.51.7
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -68,7 +68,7 @@ public extension String {
         guard parts.count > 1 else {
             return false
         }
-        return !parts[0].contains(" ")
+        return !parts[0].contains(" ") && !parts[1].hasPrefix("//")
     }
 }
 
@@ -383,6 +383,13 @@ public extension Token {
     var isSpaceOrCommentOrLinebreak: Bool { isSpaceOrComment || isLinebreak }
     var isCommentOrLinebreak: Bool { isComment || isLinebreak }
 
+    var isSwitchCaseOrDefault: Bool {
+        if case let .endOfScope(string) = self {
+            return ["case", "default"].contains(string)
+        }
+        return false
+    }
+
     func isOperator(_ string: String) -> Bool {
         if case .operator(string, _) = self {
             return true
@@ -521,6 +528,12 @@ extension Token {
         default:
             return false
         }
+    }
+}
+
+extension Collection where Element == Token {
+    var string: String {
+        map { $0.string }.joined()
     }
 }
 
@@ -1472,8 +1485,34 @@ public func tokenize(_ source: String) -> [Token] {
         case ":", "=", "->":
             type = .infix
         case ".":
-            type = prevNonSpaceToken.isLvalue || prevNonSpaceToken.isAttribute ||
-                prevNonSpaceToken == .endOfScope("#endif") ? .infix : .prefix
+            var _type = OperatorType.prefix
+            var prevNonSpaceIndex = prevNonSpaceIndex
+            repeat {
+                let prevNonSpaceToken = tokens[prevNonSpaceIndex]
+                if prevNonSpaceToken.isLvalue {
+                    var lineStart = index(of: .linebreak, before: prevNonSpaceIndex) ?? 0
+                    lineStart = index(of: .nonSpaceOrComment, after: lineStart) ?? lineStart
+                    switch tokens[lineStart] {
+                    case .keyword("#elseif"), .keyword("#else"):
+                        lineStart = index(of: .startOfScope, before: lineStart) ?? lineStart
+                        fallthrough
+                    case .startOfScope("#if"):
+                        guard let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: lineStart) else {
+                            fallthrough
+                        }
+                        prevNonSpaceIndex = prevIndex
+                        continue
+                    default:
+                        _type = .infix
+                    }
+                } else if prevNonSpaceToken.isAttribute ||
+                    prevNonSpaceToken == .endOfScope("#endif")
+                {
+                    _type = .infix
+                }
+                break
+            } while true
+            type = _type
         case "?":
             if prevToken.isSpaceOrCommentOrLinebreak {
                 // ? is a ternary operator, treat it as the start of a scope
