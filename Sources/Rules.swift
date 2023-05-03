@@ -1197,9 +1197,17 @@ public struct _FormatRules {
                 else {
                     break
                 }
-                if let nextNonCommentIndex =
+                if var nextNonCommentIndex =
                     formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: i)
                 {
+                    while formatter.tokens[nextNonCommentIndex] == .startOfScope("#if"),
+                          let nextIndex = formatter.index(
+                              of: .nonSpaceOrCommentOrLinebreak,
+                              after: formatter.endOfLine(at: nextNonCommentIndex)
+                          )
+                    {
+                        nextNonCommentIndex = nextIndex
+                    }
                     switch formatter.tokens[nextNonCommentIndex] {
                     case .error, .endOfScope,
                          .operator(".", _), .delimiter(","), .delimiter(":"),
@@ -1962,10 +1970,23 @@ public struct _FormatRules {
                         }
                     }
                 default:
-                    if formatter.isLabel(at: nextNonSpaceIndex),
-                       formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) == .endOfScope("}")
+                    var lastIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: i) ?? i
+                    while formatter.token(at: lastIndex) == .endOfScope("#endif") ||
+                        formatter.currentScope(at: lastIndex) == .startOfScope("#if"),
+                        let index = formatter.index(of: .startOfScope("#if"), before: lastIndex)
                     {
-                        break
+                        lastIndex = formatter.index(
+                            of: .nonSpaceOrCommentOrLinebreak,
+                            before: index
+                        ) ?? index
+                    }
+                    let lastToken = formatter.tokens[lastIndex]
+                    if [.endOfScope("}"), .endOfScope(")")].contains(lastToken),
+                       lastIndex == formatter.startOfLine(at: lastIndex, excludingIndent: true),
+                       formatter.token(at: nextNonSpaceIndex) == .operator(".", .infix) ||
+                       (lastToken == .endOfScope("}") && formatter.isLabel(at: nextNonSpaceIndex))
+                    {
+                        indent = formatter.indentForLine(at: lastIndex)
                     }
                     formatter.insertSpaceIfEnabled(indent, at: i + 1)
                 }
@@ -3699,6 +3720,17 @@ public struct _FormatRules {
                         closureLocalNames.insert(name)
                     }
 
+                    // Functions defined inside closures with `[weak self]` captures can
+                    // only use implicit self once self has been unwrapped.
+                    //
+                    // When using `weak self` we add `self` to locals and will remove
+                    // it again if we encounter a `guard let self`.
+                    if formatter.options.swiftVersion >= "5.8",
+                       selfCapture == "weak self"
+                    {
+                        closureLocalNames.insert("self")
+                    }
+
                     /// Whether or not the closure at the current index permits implicit self.
                     ///
                     /// SE-0269 (in Swift 5.3) allows implicit self when:
@@ -3981,13 +4013,12 @@ public struct _FormatRules {
             // never use implicit self.
             //
             // When we encounter a `guard let self` in a `[weak self]` closure,
-            // we specifically avoid putting `self` in the list of locals since
-            // that disables implicit self. Now that we're moving into a function
-            // that doesn't support implicit self, we can re-insert `self` into
-            // the list of locals to disable implicit self again for this scope.
+            // we remove `self` from the list of locals since that disables
+            // implicit self. Now that we're moving into a function that doesn't
+            // support implicit self, we can re-insert `self` into the list of
+            // locals to disable implicit self again for this scope.
             if formatter.options.swiftVersion >= "5.8",
-               closureStack.last?.selfCapture == "weak self",
-               !localNames.contains("self")
+               closureStack.last?.selfCapture == "weak self"
             {
                 localNames.insert("self")
             }
@@ -4092,8 +4123,7 @@ public struct _FormatRules {
                     }
                 case .startOfScope("{"):
                     guard let endIndex = formatter.endOfScope(at: i) else {
-                        argNames.removeAll()
-                        return
+                        return formatter.fatalError("Expected }", at: i)
                     }
                     if formatter.isStartOfClosure(at: i) {
                         removeUsed(from: &argNames, with: &associatedData,
@@ -4114,11 +4144,12 @@ public struct _FormatRules {
                     i = endIndex
                 case .endOfScope("case"), .endOfScope("default"):
                     pushLocals()
-                    guard let colonIndex = formatter.index(of: .startOfScope(":"), after: i),
-                          let endIndex = formatter.endOfScope(at: colonIndex)
-                    else {
-                        argNames.removeAll()
-                        return
+                    guard let colonIndex = formatter.index(of: .startOfScope(":"), after: i) else {
+                        return formatter.fatalError("Expected :", at: i)
+                    }
+                    guard let endIndex = formatter.endOfScope(at: colonIndex) else {
+                        return formatter.fatalError("Expected end of case statement",
+                                                    at: colonIndex)
                     }
                     removeUsed(from: &argNames, with: &associatedData,
                                locals: locals, in: i + 1 ..< endIndex)
@@ -4438,6 +4469,11 @@ public struct _FormatRules {
                         }
                     case _ where token.isSpaceOrCommentOrLinebreak:
                         break
+                    case .startOfScope("["):
+                        guard let next = formatter.endOfScope(at: index) else {
+                            return formatter.fatalError("Expected ]", at: index)
+                        }
+                        index = next
                     default:
                         wasParenOrCommaOrLabel = false
                     }
@@ -5870,16 +5906,18 @@ public struct _FormatRules {
         }
         func isInitOverridden(for type: String, in range: CountableRange<Int>) -> Bool {
             for i in range {
-                guard case .keyword("init") = formatter.tokens[i],
-                      formatter.modifiersForDeclaration(at: i, contains: "override"),
-                      let scopeIndex = formatter.index(of: .startOfScope("{"), before: i),
-                      let colonIndex = formatter.index(of: .delimiter(":"), before: scopeIndex),
-                      formatter.next(.nonSpaceOrCommentOrLinebreak, in: colonIndex + 1 ..< scopeIndex)
-                      == .identifier(type)
-                else {
-                    continue
+                if case .keyword("init") = formatter.tokens[i],
+                   let scopeStart = formatter.index(of: .startOfScope("{"), after: i),
+                   formatter.index(of: .identifier("super"), after: scopeStart) != nil,
+                   let scopeIndex = formatter.index(of: .startOfScope("{"), before: i),
+                   let colonIndex = formatter.index(of: .delimiter(":"), before: scopeIndex),
+                   formatter.next(
+                       .nonSpaceOrCommentOrLinebreak,
+                       in: colonIndex + 1 ..< scopeIndex
+                   ) == .identifier(type)
+                {
+                    return true
                 }
-                return true
             }
             return false
         }

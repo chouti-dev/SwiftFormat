@@ -598,6 +598,23 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantFileprivate, options: options)
     }
 
+    func testFileprivateInitNotChangedToPrivateWhenAccessedFromSubclass() {
+        let input = """
+        public class Foo {
+            fileprivate init() {}
+        }
+
+        private class Bar: Foo {
+            init(something: String) {
+                print(something)
+                super.init()
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "4")
+        testFormatting(for: input, rule: FormatRules.redundantFileprivate, options: options)
+    }
+
     func testFileprivateInExtensionNotChangedToPrivateWhenAccessedFromExtensionOnSubclass() {
         let input = """
         class Foo: Bar {}
@@ -3902,7 +3919,24 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.8")
-        testFormatting(for: input, output, rule: FormatRules.redundantSelf, options: options, exclude: ["redundantOptionalBinding"])
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf,
+                       options: options, exclude: ["redundantOptionalBinding"])
+    }
+
+    func testWeakSelfNotRemovedIfNotUnwrapped() {
+        let input = """
+        class A {
+            weak var delegate: ADelegate?
+
+            func testFunction() {
+                DispatchQueue.main.async { [weak self] in
+                    self.flatMap { $0.delegate?.aDidSomething($0) }
+                }
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.8")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
     }
 
     func testClosureParameterListShadowingPropertyOnSelf() {
@@ -5985,7 +6019,8 @@ class RedundancyTests: RulesTests {
         }
         """
 
-        testFormatting(for: input, output, rule: FormatRules.redundantSelf, options: FormatOptions(swiftVersion: "5.8"))
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf,
+                       options: FormatOptions(swiftVersion: "5.8"))
     }
 
     // MARK: - semicolons
@@ -6879,6 +6914,24 @@ class RedundancyTests: RulesTests {
         """
         testFormatting(for: input, rule: FormatRules.unusedArguments,
                        exclude: ["trailingCommas"])
+    }
+
+    func testArgumentUsedAfterIfDefInsideSwitchBlock() {
+        let input = """
+        func test(string: String) {
+            let number = 5
+            switch number {
+            #if DEBUG
+                case 1:
+                    print("ONE")
+            #endif
+            default:
+                print("NOT ONE")
+            }
+            print(string)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 
     // functions (closure-only)
