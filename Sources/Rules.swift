@@ -1970,10 +1970,12 @@ public struct _FormatRules {
                         }
                     }
                 default:
-                    var lastIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: i) ?? i
+                    var lastIndex = lastNonSpaceOrLinebreakIndex > -1 ? lastNonSpaceOrLinebreakIndex : i
                     while formatter.token(at: lastIndex) == .endOfScope("#endif") ||
                         formatter.currentScope(at: lastIndex) == .startOfScope("#if"),
-                        let index = formatter.index(of: .startOfScope("#if"), before: lastIndex)
+                        let index = formatter.index(of: .startOfScope, before: lastIndex, if: {
+                            $0 == .startOfScope("#ifdef")
+                        })
                     {
                         lastIndex = formatter.index(
                             of: .nonSpaceOrCommentOrLinebreak,
@@ -5750,8 +5752,8 @@ public struct _FormatRules {
                     return
                 }
                 var typeTokens = formatter.tokens[typeStart ... typeEnd]
-                if formatter.index(of: .operator("&", .infix), in: typeStart ..< typeEnd) != nil ||
-                    formatter.index(of: .operator("->", .infix), in: typeStart ..< typeEnd) != nil
+                if [.operator("&", .infix), .operator("->", .infix),
+                    .identifier("some"), .identifier("any")].contains(where: typeTokens.contains)
                 {
                     typeTokens.insert(.startOfScope("("), at: typeTokens.startIndex)
                     typeTokens.append(.endOfScope(")"))

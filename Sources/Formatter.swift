@@ -2,7 +2,7 @@
 //  Formatter.swift
 //  SwiftFormat
 //
-//  Version 0.51.8
+//  Version 0.51.9
 //
 //  Created by Nick Lockwood on 12/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -56,6 +56,11 @@ public class Formatter: NSObject {
             disabledCount = 0
             disabledNext = 0
             ruleDisabled = false
+            wasNextDirective = false
+            if let options = tempOptions {
+                self.options = options
+                tempOptions = nil
+            }
         }
     }
 
@@ -142,12 +147,10 @@ public class Formatter: NSObject {
         if wasNextDirective {
             wasNextDirective = false
         } else {
+            disabledNext = 0
             if let options = tempOptions {
                 self.options = options
                 tempOptions = nil
-            }
-            if disabledNext != 0 {
-                disabledNext = 0
             }
         }
     }
