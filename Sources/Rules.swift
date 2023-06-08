@@ -1971,11 +1971,10 @@ public struct _FormatRules {
                     }
                 default:
                     var lastIndex = lastNonSpaceOrLinebreakIndex > -1 ? lastNonSpaceOrLinebreakIndex : i
-                    while formatter.token(at: lastIndex) == .endOfScope("#endif") ||
-                        formatter.currentScope(at: lastIndex) == .startOfScope("#if"),
-                        let index = formatter.index(of: .startOfScope, before: lastIndex, if: {
-                            $0 == .startOfScope("#ifdef")
-                        })
+                    while formatter.token(at: lastIndex) == .endOfScope("#endif"),
+                          let index = formatter.index(of: .startOfScope, before: lastIndex, if: {
+                              $0 == .startOfScope("#if")
+                          })
                     {
                         lastIndex = formatter.index(
                             of: .nonSpaceOrCommentOrLinebreak,
@@ -3993,22 +3992,11 @@ public struct _FormatRules {
                 }
                 index = formatter.index(of: .delimiter(","), after: index) ?? endIndex
             }
-            guard let bodyStartIndex = formatter.index(after: endIndex, where: {
-                switch $0 {
-                case .startOfScope("{"): // What we're looking for
-                    return true
-                case .keyword("throws"),
-                     .keyword("rethrows"),
-                     .keyword("where"),
-                     .keyword("is"):
-                    return false // Keep looking
-                case .keyword:
-                    return true // Not valid between end of arguments and start of body
-                default:
-                    return false // Keep looking
-                }
-            }), formatter.tokens[bodyStartIndex] == .startOfScope("{") else {
-                return
+            guard let bodyStartIndex = formatter.index(
+                of: .startOfScope("{"),
+                after: endIndex
+            ) else {
+                return // TODO: treat this as an error?
             }
 
             // Functions defined inside closures with `[weak self]` captures can
@@ -5232,11 +5220,7 @@ public struct _FormatRules {
                 for switchCase in switchCaseRanges.enumerated().reversed() {
                     let newTokens = Array(sortedTokens[switchCase.offset])
                     var newComments = Array(sortedComments[switchCase.offset])
-                    let oldCommentsRange = sorted[switchCaseRanges.count - switchCase.offset - 1].afterDelimiterRange
-
-                    let oldComments = formatter.tokens[oldCommentsRange]
-
-                    var shouldInsertBreakLine = sortedComments[switchCaseRanges.count - switchCase.offset - 1].first?.isLinebreak == true
+                    let oldComments = formatter.tokens[switchCaseRanges[switchCase.offset].afterDelimiterRange]
 
                     if newComments.last?.isLinebreak == oldComments.last?.isLinebreak {
                         formatter.replaceTokens(in: switchCaseRanges[switchCase.offset].afterDelimiterRange, with: newComments)
@@ -6163,7 +6147,7 @@ public struct _FormatRules {
             }
 
             // Skip modifiers
-            while keyword.isModifierKeyword {
+            while formatter.isModifier(at: keywordIndex) {
                 guard let nextIndex = formatter.index(of: .keyword, after: keywordIndex) else {
                     break
                 }
@@ -7572,24 +7556,10 @@ public struct _FormatRules {
                 }
 
                 // Check if this is a special type of comment that isn't documentation
-                if
-                    let commentBodyIndex = formatter.index(after: index, where: { token in
-                        if case .commentBody = token { return true }
-                        else { return false }
-                    }),
-                    commentBodyIndex < endOfComment,
-                    let commentBodyToken = formatter.token(at: commentBodyIndex)
+                if case let .commentBody(body)? = formatter.next(.nonSpace, after: index),
+                   body.isCommentDirective
                 {
-                    let commentBody = commentBodyToken.string.trimmingCharacters(in: .whitespaces)
-
-                    // Don't modify directive comments like `// MARK: Section title`
-                    // or `// swiftformat:disable rule`, since those tools expect
-                    // regular comments and not doc comments.
-                    for knownTag in ["mark", "swiftformat", "sourcery", "swiftlint"]
-                        where commentBody.lowercased().hasPrefix(knownTag + ":")
-                    {
-                        return false
-                    }
+                    return false
                 }
 
                 // Only comments at the start of a line can be doc comments

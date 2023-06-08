@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.51.9
+//  Version 0.51.11
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -1494,7 +1494,12 @@ public func tokenize(_ source: String) -> [Token] {
                     lineStart = index(of: .nonSpaceOrComment, after: lineStart) ?? lineStart
                     switch tokens[lineStart] {
                     case .keyword("#elseif"), .keyword("#else"):
-                        lineStart = index(of: .startOfScope, before: lineStart) ?? lineStart
+                        while let start = index(of: .startOfScope, before: lineStart) {
+                            lineStart = start
+                            if tokens[start] == .startOfScope("#if") {
+                                break
+                            }
+                        }
                         fallthrough
                     case .startOfScope("#if"):
                         guard let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: lineStart) else {
