@@ -269,6 +269,18 @@ class HoistingTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.hoistTry)
     }
 
+    func testNoHoistTryIntoPreviousLineEndingWithPostfixOperator() {
+        let input = """
+        let foo = bar!
+        (try baz(), quux()).foo()
+        """
+        let output = """
+        let foo = bar!
+        try (baz(), quux()).foo()
+        """
+        testFormatting(for: input, output, rule: FormatRules.hoistTry)
+    }
+
     func testNoHoistTryInCapturingFunction() {
         let input = "foo(try bar)"
         testFormatting(for: input, rule: FormatRules.hoistTry,
@@ -308,6 +320,41 @@ class HoistingTests: RulesTests {
             i: throwingExample()
         )
         """
+        testFormatting(for: input, output, rule: FormatRules.hoistTry)
+    }
+
+    func testHoistTryInsideOptionalFunction() {
+        let input = "foo?(try bar())"
+        let output = "try foo?(bar())"
+        testFormatting(for: input, output, rule: FormatRules.hoistTry)
+    }
+
+    func testNoHoistTryAfterOptionalTry() {
+        let input = "let foo = try? bar(try baz())"
+        testFormatting(for: input, rule: FormatRules.hoistTry)
+    }
+
+    func testHoistTryInsideOptionalSubscript() {
+        let input = "foo?[try bar()]"
+        let output = "try foo?[bar()]"
+        testFormatting(for: input, output, rule: FormatRules.hoistTry)
+    }
+
+    func testHoistTryAfterGenericType() {
+        let input = "let foo = Tree<T>.Foo(bar: try baz())"
+        let output = "let foo = try Tree<T>.Foo(bar: baz())"
+        testFormatting(for: input, output, rule: FormatRules.hoistTry)
+    }
+
+    func testHoistTryAfterArrayLiteral() {
+        let input = "if [.first, .second].contains(try foo()) {}"
+        let output = "if try [.first, .second].contains(foo()) {}"
+        testFormatting(for: input, output, rule: FormatRules.hoistTry)
+    }
+
+    func testHoistTryAfterSubscript() {
+        let input = "if foo[5].bar(try baz()) {}"
+        let output = "if try foo[5].bar(baz()) {}"
         testFormatting(for: input, output, rule: FormatRules.hoistTry)
     }
 

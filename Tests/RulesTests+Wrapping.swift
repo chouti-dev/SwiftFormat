@@ -2213,6 +2213,25 @@ class WrappingTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
     }
 
+    func testWrapProtocolFuncParametersBeforeFirst() {
+        let input = """
+        protocol Foo {
+            public func stringify<T>(_ value: T, label: String) -> (T, String)
+        }
+        """
+        let output = """
+        protocol Foo {
+            public func stringify<T>(
+                _ value: T,
+                label: String
+            ) -> (T, String)
+        }
+        """
+        let options = FormatOptions(wrapParameters: .beforeFirst, maxWidth: 30)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments,
+                       options: options)
+    }
+
     // MARK: afterFirst maxWidth : string interpolation
 
     func testNoWrapAfterFirstArgumentInStringInterpolation() {
@@ -2243,6 +2262,25 @@ class WrappingTests: RulesTests {
                                     wrapParameters: .afterFirst,
                                     maxWidth: 55)
         testFormatting(for: input, rule: FormatRules.wrapArguments, options: options)
+    }
+
+    // macros
+
+    func testWrapMacroParametersBeforeFirst() {
+        let input = """
+        @freestanding(expression)
+        public macro stringify<T>(_ value: T, label: String) -> (T, String)
+        """
+        let output = """
+        @freestanding(expression)
+        public macro stringify<T>(
+            _ value: T,
+            label: String
+        ) -> (T, String)
+        """
+        let options = FormatOptions(wrapParameters: .beforeFirst, maxWidth: 30)
+        testFormatting(for: input, output, rule: FormatRules.wrapArguments,
+                       options: options)
     }
 
     // MARK: - wrapArguments --wrapCollections

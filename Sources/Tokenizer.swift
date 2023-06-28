@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.51.11
+//  Version 0.51.12
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -47,7 +47,8 @@ private let swiftKeywords = Set([
     "fileprivate", "internal", "switch", "do", "catch", "enum", "struct", "throws",
     "throw", "typealias", "where", "break", "deinit", "subscript", "is", "while",
     "associatedtype", "inout", "continue", "operator", "repeat", "rethrows",
-    "default", "protocol", "defer", "await", /* Any, Self, self, super, nil, true, false */
+    "default", "protocol", "defer", "await", "consume", "discard",
+    /* Any, Self, self, super, nil, true, false */
 ])
 
 public extension String {
@@ -1601,6 +1602,13 @@ public func tokenize(_ source: String) -> [Token] {
     func processToken() {
         var count = tokens.count
         var token = tokens[count - 1]
+        if !token.isSpaceOrComment, !token.isIdentifier,
+           let prevIndex = index(of: .nonSpaceOrComment, before: count - 1),
+           case let .keyword(name) = tokens[prevIndex],
+           ["consume", "discard"].contains(name)
+        {
+            tokens[prevIndex] = .identifier(name)
+        }
         switch token {
         case let .keyword(name):
             if let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: count - 1),
@@ -1619,11 +1627,12 @@ public func tokenize(_ source: String) -> [Token] {
             }
         case .identifier:
             if let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: count - 1),
-               case .identifier("actor") = tokens[prevIndex],
+               case let .identifier(name) = tokens[prevIndex],
+               ["actor", "macro"].contains(name),
                case let prevPrevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: prevIndex),
                prevPrevIndex.map({ tokens[$0].isOperator(ofType: .infix) }) != true
             {
-                tokens[prevIndex] = .keyword("actor")
+                tokens[prevIndex] = .keyword(name)
                 processToken()
                 return
             }

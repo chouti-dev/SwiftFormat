@@ -139,6 +139,11 @@ public extension Formatter {
         last(.startOfScope, before: index)
     }
 
+    /// Returns the index of the starting token for the current scope
+    func startOfScope(at index: Int) -> Int? {
+        self.index(of: .startOfScope, before: index)
+    }
+
     /// Returns the index of the ending token for the current scope
     func endOfScope(at index: Int) -> Int? {
         // TODO: should this return the closing `}` for `switch { ...` instead of nested `case`?
@@ -586,8 +591,13 @@ extension Formatter {
                 }
                 return false
             case "class", "actor", "struct", "protocol", "enum", "extension",
-                 "func", "subscript", "throws", "rethrows", "async", "catch":
+                 "func", "subscript", "catch":
                 return false
+            case "throws", "rethrows", "async":
+                return next(
+                    .nonSpaceOrLinebreak,
+                    after: prevKeywordIndex
+                ) == .keyword("in")
             default:
                 return true
             }
@@ -1164,7 +1174,7 @@ extension Formatter {
             }
         default:
             if let funcIndex = index(of: .keyword, before: i, if: {
-                [.keyword("func"), .keyword("init"), .keyword("subscript")].contains($0)
+                [.keyword("func"), .keyword("init"), .keyword("subscript"), .keyword("macro")].contains($0)
             }), lastIndex(of: .endOfScope("}"), in: funcIndex ..< i) == nil {
                 // Is parameters at start of function
                 return true
@@ -2083,10 +2093,13 @@ extension _FormatRules {
     static let allModifiers = Set(defaultModifierOrder.flatMap { $0 })
 
     /// ACL modifiers
-    static let aclModifiers = ["private", "fileprivate", "internal", "public", "open"]
+    static let aclModifiers = ["private", "fileprivate", "internal", "package", "public", "open"]
 
     /// ACL setter modifiers
     static let aclSetterModifiers = aclModifiers.map { "\($0)(set)" }
+
+    /// Mutating modifiers
+    static let mutatingModifiers = ["borrowing", "consuming", "mutating", "nonmutating"]
 
     /// Ownership modifiers
     static let ownershipModifiers = ["weak", "unowned"]
@@ -2099,7 +2112,7 @@ extension _FormatRules {
         case "setteracl":
             return aclSetterModifiers
         case "mutators":
-            return ["mutating", "nonmutating"]
+            return mutatingModifiers
         case "typemethods":
             return [] // Not clear what this is for - legacy?
         case "owned":
@@ -2129,7 +2142,7 @@ extension _FormatRules {
         ["lazy"],
         ownershipModifiers,
         ["static", "class"],
-        ["mutating", "nonmutating"],
+        mutatingModifiers,
         ["prefix", "infix", "postfix"],
     ]
 

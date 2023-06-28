@@ -337,7 +337,7 @@ extension Formatter {
                 }
             }
 
-            if let effectIndex = index(after: endOfFunctionScope, where: { $0.string == "throws" || $0.string == "async" }),
+            if let effectIndex = index(after: endOfFunctionScope, where: { ["throws", "async"].contains($0.string) }),
                effectIndex < openBracket
             {
                 switch options.wrapEffects {
@@ -349,11 +349,10 @@ extension Formatter {
                         wrap(before: effectIndex)
 
                         // When wrapping the effect, we should also un-wrap any return type
-                        if
-                            let returnArrowIndex = index(of: .operator("->", .infix), after: endOfFunctionScope),
-                            returnArrowIndex < openBracket,
-                            let tokenBeforeArrowIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: returnArrowIndex),
-                            startOfLine(at: tokenBeforeArrowIndex) != startOfLine(at: returnArrowIndex)
+                        if let returnArrowIndex = index(of: .operator("->", .infix), after: endOfFunctionScope),
+                           returnArrowIndex < openBracket,
+                           let tokenBeforeArrowIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: returnArrowIndex),
+                           startOfLine(at: tokenBeforeArrowIndex) != startOfLine(at: returnArrowIndex)
                         {
                             replaceTokens(in: endOfLine(at: tokenBeforeArrowIndex) ..< returnArrowIndex, with: [.space(" ")])
                         }
@@ -421,13 +420,13 @@ extension Formatter {
                     if tokens[linebreakIndex].isLinebreak,
                        next(.nonSpace, after: linebreakIndex).map({ !$0.isLinebreak }) ?? false
                     {
-                        insertSpace(indent + options.indent, at: linebreakIndex + 1)
+                        endOfScope += insertSpace(indent + options.indent, at: linebreakIndex + 1)
                     } else if !allowGrouping || (maxWidth > 0 &&
                         lineLength(at: linebreakIndex) > maxWidth &&
                         lineLength(upTo: linebreakIndex) <= maxWidth)
                     {
                         insertLinebreak(at: linebreakIndex)
-                        insertSpace(indent + options.indent, at: linebreakIndex + 1)
+                        endOfScope += 1 + insertSpace(indent + options.indent, at: linebreakIndex + 1)
                     }
                 }
                 index = commaIndex
@@ -437,13 +436,14 @@ extension Formatter {
             if let nextIndex = self.index(of: .nonSpaceOrComment, after: i) {
                 if !tokens[nextIndex].isLinebreak {
                     insertLinebreak(at: nextIndex)
+                    endOfScope += 1
                 }
                 if nextIndex + 1 < endOfScope, next(.nonSpace, after: nextIndex)?.isLinebreak == false {
                     var indent = indent
                     if (self.index(of: .nonSpace, after: nextIndex) ?? 0) < endOfScope {
                         indent += options.indent
                     }
-                    insertSpace(indent, at: nextIndex + 1)
+                    endOfScope += insertSpace(indent, at: nextIndex + 1)
                 }
             }
 
@@ -658,7 +658,7 @@ extension Formatter {
                 if currentRule == FormatRules.wrap {
                     let nextWrapIndex = indexOfNextWrap() ?? endOfLine(at: i)
                     if nextWrapIndex > lastIndex,
-                       maxWidth < lineLength(from: max(lastIndex, 0), upTo: nextWrapIndex),
+                       maxWidth < lineLength(upTo: nextWrapIndex),
                        !willWrapAtStartOfReturnType(maxWidth: maxWidth)
                     {
                         wrapArgumentsWithoutPartialWrapping()
@@ -955,11 +955,12 @@ extension Formatter {
         inScopeAt scopeStart: Int,
         isEffectCapturingAt: (Int) -> Bool
     ) {
+        assert([.startOfScope("("), .startOfScope("[")].contains(tokens[scopeStart]))
         assert(["try", "await"].contains(keyword))
 
         func insertEffectKeyword(at index: Int) {
             var index = index
-            if tokens[index].isSpace {
+            while tokens[index].isSpaceOrLinebreak {
                 index += 1
             }
 
@@ -996,10 +997,10 @@ extension Formatter {
         }
 
         var insertIndex = scopeStart
-        loop: while let i = index(of: .nonSpaceOrLinebreak, before: insertIndex) {
+        loop: while let i = index(of: .nonSpace, before: insertIndex) {
             let prevToken = tokens[insertIndex]
             switch tokens[i] {
-            case .identifier where prevToken == .startOfScope("("):
+            case .identifier where [.startOfScope("("), .startOfScope("[")].contains(prevToken):
                 if isEffectCapturingAt(i) {
                     return
                 }
@@ -1012,11 +1013,34 @@ extension Formatter {
                  .startOfScope where tokens[i].isStringDelimiter,
                  .endOfScope where tokens[i].isStringDelimiter:
                 break
-            case .operator(_, .postfix), .identifier, .number, .endOfScope:
-                if !prevToken.isOperator(ofType: .infix),
-                   !prevToken.isOperator(ofType: .postfix)
-                {
+            case _ where tokens[i].isUnwrapOperator:
+                if last(.nonSpaceOrComment, before: i) == .keyword("try") {
+                    if keyword == "try" {
+                        // Can't merge try? and try
+                        return
+                    }
                     break loop
+                }
+                if prevToken != .startOfScope("("), prevToken != .startOfScope("[") {
+                    fallthrough
+                }
+            case .operator(_, .postfix), .identifier, .number, .endOfScope:
+                switch prevToken {
+                case .operator(_, .infix),
+                     .operator(_, .postfix),
+                     .startOfScope("<"):
+                    break
+                default:
+                    break loop
+                }
+                if tokens[i].isEndOfScope {
+                    insertIndex = startOfScope(at: i) ?? i
+                    continue
+                }
+            case .linebreak:
+                if prevToken.isOperator(ofType: .infix) {
+                    insertIndex = index(of: .nonSpaceOrLinebreak, before: i) ?? i
+                    continue
                 }
             default:
                 break loop
