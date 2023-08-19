@@ -1,5 +1,5 @@
 //
-//  OptionDescriptorTest.swift
+//  OptionDescriptorTests.swift
 //  SwiftFormatTests
 //
 //  Created by Vincent Bernier on 10-02-18.
@@ -201,6 +201,8 @@ class OptionDescriptorTests: XCTestCase {
         let descriptor = Descriptors.noSpaceOperators
         let validations: [FreeTextValidationExpectation] = [
             (input: "+", isValid: true),
+            (input: "*", isValid: true),
+            (input: "/", isValid: true),
             (input: "", isValid: true),
             (input: ":", isValid: true),
             (input: "foo", isValid: false),
@@ -221,6 +223,8 @@ class OptionDescriptorTests: XCTestCase {
         let descriptor = Descriptors.noWrapOperators
         let validations: [FreeTextValidationExpectation] = [
             (input: "+", isValid: true),
+            (input: "*", isValid: true),
+            (input: "/", isValid: true),
             (input: "", isValid: true),
             (input: ":", isValid: true),
             (input: "foo", isValid: false),

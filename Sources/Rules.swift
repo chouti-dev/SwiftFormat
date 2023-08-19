@@ -125,6 +125,7 @@ private func allRules(except rules: [String]) -> [FormatRule] {
 }
 
 private let _allRules = allRules(except: [])
+private let _deprecatedRules = _allRules.filter { $0.isDeprecated }.map { $0.name }
 private let _disabledByDefault = _allRules.filter { $0.disabledByDefault }.map { $0.name }
 private let _defaultRules = allRules(except: _disabledByDefault)
 
@@ -140,6 +141,9 @@ public extension _FormatRules {
 
     /// Rules that are disabled by default
     var disabledByDefault: [String] { _disabledByDefault }
+
+    /// Rules that are deprecated
+    var deprecated: [String] { _deprecatedRules }
 
     /// Just the specified rules
     func named(_ names: [String]) -> [FormatRule] {
@@ -177,6 +181,27 @@ extension _FormatRules {
 
 public struct _FormatRules {
     fileprivate init() {}
+
+    /// Replace the obsolete `@UIApplicationMain` and `@NSApplicationMain`
+    /// attributes with `@main` in Swift 5.3 and above, per SE-0383
+    public let applicationMain = FormatRule(
+        help: """
+        Replace obsolete @UIApplicationMain and @NSApplicationMain attributes
+        with @main for Swift 5.3 and above.
+        """
+    ) { formatter in
+        guard formatter.options.swiftVersion >= "5.3" else {
+            return
+        }
+        formatter.forEachToken(where: {
+            [
+                .keyword("@UIApplicationMain"),
+                .keyword("@NSApplicationMain"),
+            ].contains($0)
+        }) { i, _ in
+            formatter.replaceToken(at: i, with: .keyword("@main"))
+        }
+    }
 
     /// Implement the following rules with respect to the spacing around parens:
     /// * There is no space between an opening paren and the preceding identifier,
@@ -855,7 +880,7 @@ public struct _FormatRules {
     // Converts types used for hosting only static members into enums to avoid instantiation.
     public let enumNamespaces = FormatRule(
         help: """
-        Converts types used for hosting only static members into enums (an empty enum is
+        Convert types used for hosting only static members into enums (an empty enum is
         the canonical way to create a namespace in Swift as it can't be instantiated).
         """,
         options: ["enumnamespaces"]
@@ -1111,6 +1136,24 @@ public struct _FormatRules {
             }
 
             formatter.replaceTokens(in: endOfLine ..< nextImportIndex, with: formatter.linebreakToken(for: currentImportIndex + 1))
+        }
+    }
+
+    /// Remove blank lines between chained functions but keep the linebreaks
+    public let blankLinesBetweenChainedFunctions = FormatRule(
+        help: """
+        Remove blank lines between chained functions but keep the linebreaks.
+        """,
+        disabledByDefault: true
+    ) { formatter in
+        formatter.forEach(.operator(".", .infix)) { i, _ in
+            let endOfLine = formatter.endOfLine(at: i)
+            if let nextIndex = formatter.index(of: .nonSpaceOrLinebreak, after: endOfLine, if: {
+                $0 == .operator(".", .infix)
+            }) {
+                let startOfLine = formatter.startOfLine(at: nextIndex)
+                formatter.removeTokens(in: endOfLine + 1 ..< startOfLine)
+            }
         }
     }
 
@@ -2235,6 +2278,14 @@ public struct _FormatRules {
                 guard let prevIndex = formatter.index(of: .nonSpace, before: i) else {
                     return
                 }
+
+                let precededByBlankLine = formatter.tokens[prevIndex].isLinebreak
+                    && formatter.lastToken(before: prevIndex, where: { !$0.isSpaceOrComment })?.isLinebreak == true
+
+                if precededByBlankLine {
+                    return
+                }
+
                 let shouldWrap = formatter.options.allmanBraces || formatter.options.elseOnNextLine
                 if !shouldWrap, formatter.tokens[prevIndex].isLinebreak {
                     if let prevBraceIndex = formatter.index(of: .nonSpaceOrLinebreak, before: prevIndex, if: {
@@ -2263,80 +2314,11 @@ public struct _FormatRules {
         disabledByDefault: true,
         sharedOptions: ["linebreaks", "indent"]
     ) { formatter in
-        formatter.forEachToken { i, token in
-            guard ["if", "else"].contains(token.string) else {
-                return
+        formatter.forEachToken(where: { [.keyword("if"), .keyword("else")].contains($0) }) { i, _ in
+            guard let startIndex = formatter.index(of: .startOfScope("{"), after: i) else {
+                return formatter.fatalError("Expected {", at: i)
             }
-
-            guard var openBraceIndex = formatter.index(of: .startOfScope("{"), after: i) else {
-                return
-            }
-
-            // We need to make sure to move past any closures in the conditional
-            while formatter.isStartOfClosure(at: openBraceIndex) {
-                guard let endOfClosureIndex = formatter.index(of: .endOfScope("}"), after: openBraceIndex) else {
-                    return
-                }
-                guard let nextOpenBrace = formatter.index(of: .startOfScope("{"), after: endOfClosureIndex + 1) else {
-                    return
-                }
-                openBraceIndex = nextOpenBrace
-            }
-
-            guard var indexOfFirstTokenInNewScope = formatter.index(of: .nonSpaceOrComment, after: openBraceIndex) else {
-                // If there is only space or comments right after the opening brace we want to leave them alone
-                return
-            }
-
-            guard !formatter.tokens[indexOfFirstTokenInNewScope].isEndOfScope else {
-                // The scope is empty so just stop
-                return
-            }
-
-            guard !formatter.tokens[indexOfFirstTokenInNewScope].isLinebreak else {
-                // There is already a newline after the brace so we can just stop
-                return
-            }
-
-            formatter.insertLinebreak(at: indexOfFirstTokenInNewScope)
-
-            if formatter.tokens[indexOfFirstTokenInNewScope - 1].isSpace {
-                // We left behind a trailing space on the previous line so we should clean it up
-                formatter.removeToken(at: indexOfFirstTokenInNewScope - 1)
-                indexOfFirstTokenInNewScope -= 1
-            }
-
-            let movedTokenIndex = indexOfFirstTokenInNewScope + 1
-
-            // We want the token to be indented one level more than the conditional is
-            let indent = formatter.indentForLine(at: i) + formatter.options.indent
-            formatter.insertSpace(indent, at: movedTokenIndex)
-
-            guard var closingBraceIndex = formatter.index(of: .endOfScope("}"), after: movedTokenIndex) else {
-                return
-            }
-
-            let linebreakBeforeBrace = (movedTokenIndex ..< closingBraceIndex).contains(where: { formatter.tokens[$0].isLinebreak })
-
-            guard !linebreakBeforeBrace else {
-                // The closing brace is already on its own line so we don't need to do anything else
-                return
-            }
-
-            formatter.insertLinebreak(at: closingBraceIndex)
-
-            let lineBreakIndex = closingBraceIndex
-            closingBraceIndex += 1
-
-            let previousIndex = lineBreakIndex - 1
-            if formatter.tokens[previousIndex].isSpace {
-                // We left behind a trailing space on the previous line so we should clean it up
-                formatter.removeToken(at: previousIndex)
-                closingBraceIndex -= 1
-            }
-
-            // We want the closing brace at the same indentation level as conditional
-            formatter.insertSpace(formatter.indentForLine(at: i), at: closingBraceIndex)
+            formatter.wrapStatementBody(at: startIndex)
         }
     }
 
@@ -3080,62 +3062,21 @@ public struct _FormatRules {
     public let redundantReturn = FormatRule(
         help: "Remove unneeded `return` keyword."
     ) { formatter in
-        // Explicit returns are redundant in closures, functions, etc with a single statement body
-        formatter.forEach(.startOfScope("{")) { startOfScopeIndex, _ in
-            // Make sure this is a type of scope that supports implicit returns
-            if formatter.isConditionalStatement(at: startOfScopeIndex) ||
-                ["do", "else", "catch"].contains(formatter.lastSignificantKeyword(at: startOfScopeIndex))
-            {
-                return
-            }
-
-            // Closures always supported implicit returns, but other types of scopes
-            // only support implicit return in Swift 5.1+ (SE-0255)
-            if !formatter.isStartOfClosure(at: startOfScopeIndex) {
-                guard formatter.options.swiftVersion >= "5.1" else {
-                    return
-                }
-            }
-
-            // Make sure the body only has a single statement
-            guard
-                formatter.blockBodyHasSingleStatement(atStartOfScope: startOfScopeIndex)
-            else { return }
-
-            /// Removes return statements in the given single-statement scope
-            func removeReturn(atStartOfScope startOfScopeIndex: Int) {
-                // If this scope is a single-statement if or switch statement then we have to recursively
-                // remove the return from each branch of the if statement
-                let startOfBody = formatter.startOfBody(atStartOfScope: startOfScopeIndex)
-
-                if let firstTokenInBody = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: startOfBody),
-                   let conditionalBranches = formatter.conditionalBranches(at: firstTokenInBody)
-                {
-                    for branch in conditionalBranches {
-                        removeReturn(atStartOfScope: branch.startOfBranch)
-                    }
-                }
-
-                // Otherwise this is a simple case with a single return at the start of the scope
-                else if
-                    let endOfScopeIndex = formatter.endOfScope(at: startOfScopeIndex),
-                    let returnIndex = formatter.index(of: .keyword("return"), after: startOfScopeIndex),
-                    returnIndex < endOfScopeIndex,
-                    let tokenIndexAfterReturn = formatter.index(of: .nonSpaceOrLinebreak, after: returnIndex)
-                {
-                    formatter.removeTokens(in: returnIndex ..< tokenIndexAfterReturn)
-                }
-            }
-
-            removeReturn(atStartOfScope: startOfScopeIndex)
-        }
+        // indices of returns that are safe to remove
+        var returnIndices = [Int]()
 
         // Also handle redundant void returns in void functions, which can always be removed.
         //  - The following code is the original implementation of the `redundantReturn` rule
-        //    and is partially redundant with the above code so could be simplified in the future.
+        //    and is partially redundant with the below code so could be simplified in the future.
         formatter.forEach(.keyword("return")) { i, _ in
             guard let startIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: i) else {
                 return
+            }
+            defer {
+                // Check return wasn't removed already
+                if formatter.token(at: i) == .keyword("return") {
+                    returnIndices.append(i)
+                }
             }
             switch formatter.tokens[startIndex] {
             case .keyword("in"):
@@ -3215,6 +3156,63 @@ public struct _FormatRules {
                 formatter.removeToken(at: i)
             }
         }
+
+        // Explicit returns are redundant in closures, functions, etc with a single statement body
+        formatter.forEach(.startOfScope("{")) { startOfScopeIndex, _ in
+            // Closures always supported implicit returns, but other types of scopes
+            // only support implicit return in Swift 5.1+ (SE-0255)
+            if formatter.options.swiftVersion < "5.1", !formatter.isStartOfClosure(at: startOfScopeIndex) {
+                return
+            }
+
+            // Make sure this is a type of scope that supports implicit returns
+            if formatter.isConditionalStatement(at: startOfScopeIndex) ||
+                ["do", "else", "catch"].contains(formatter.lastSignificantKeyword(at: startOfScopeIndex))
+            {
+                return
+            }
+
+            // Make sure the body only has a single statement
+            guard formatter.blockBodyHasSingleStatement(atStartOfScope: startOfScopeIndex) else {
+                return
+            }
+
+            /// Removes return statements in the given single-statement scope
+            func removeReturn(atStartOfScope startOfScopeIndex: Int) {
+                // If this scope is a single-statement if or switch statement then we have to recursively
+                // remove the return from each branch of the if statement
+                let startOfBody = formatter.startOfBody(atStartOfScope: startOfScopeIndex)
+
+                if let firstTokenInBody = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: startOfBody),
+                   let conditionalBranches = formatter.conditionalBranches(at: firstTokenInBody)
+                {
+                    for branch in conditionalBranches.reversed() {
+                        removeReturn(atStartOfScope: branch.startOfBranch)
+                    }
+                }
+
+                // Otherwise this is a simple case with a single return at the start of the scope
+                else if let endOfScopeIndex = formatter.endOfScope(at: startOfScopeIndex),
+                        let returnIndex = formatter.index(of: .keyword("return"), after: startOfScopeIndex),
+                        returnIndices.contains(returnIndex),
+                        returnIndex < endOfScopeIndex,
+                        let nextIndex = formatter.index(of: .nonSpaceOrLinebreak, after: returnIndex),
+                        formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: returnIndex)! < endOfScopeIndex
+                {
+                    let range = returnIndex ..< nextIndex
+                    for (i, index) in returnIndices.enumerated().reversed() {
+                        if range.contains(index) {
+                            returnIndices.remove(at: i)
+                        } else if index > returnIndex {
+                            returnIndices[i] -= range.count
+                        }
+                    }
+                    formatter.removeTokens(in: range)
+                }
+            }
+
+            removeReturn(atStartOfScope: startOfScopeIndex)
+        }
     }
 
     /// Remove redundant backticks around non-keywords, or in places where keywords don't need escaping
@@ -3229,819 +3227,21 @@ public struct _FormatRules {
         }
     }
 
-    /// Remove redundant self keyword
-    // TODO: restructure this to use forEachToken to avoid exposing processCommentBody mechanism
+    /// Remove redundant Self keyword
+    public let redundantStaticSelf = FormatRule(
+        help: "Remove explicit `Self` where applicable."
+    ) { formatter in
+        formatter.addOrRemoveSelf(static: true)
+    }
+
+    /// Insert or remove redundant self keyword
     public let redundantSelf = FormatRule(
         help: "Insert/remove explicit `self` where applicable.",
         options: ["self", "selfrequired"]
     ) { formatter in
-        guard !formatter.options.fragment else { return }
-
-        func processBody(at index: inout Int,
-                         localNames: Set<String>,
-                         members: Set<String>,
-                         typeStack: inout [(name: String, keyword: String)],
-                         closureStack: inout [(allowsImplicitSelf: Bool, selfCapture: String?)],
-                         membersByType: inout [String: Set<String>],
-                         classMembersByType: inout [String: Set<String>],
-                         usingDynamicLookup: Bool,
-                         isTypeRoot: Bool,
-                         isInit: Bool)
-        {
-            var explicitSelf: SelfMode { formatter.options.explicitSelf }
-            let isWhereClause = index > 0 && formatter.tokens[index - 1] == .keyword("where")
-            assert(isWhereClause || formatter.currentScope(at: index).map { token -> Bool in
-                [.startOfScope("{"), .startOfScope(":"), .startOfScope("#if")].contains(token)
-            } ?? true)
-            let isCaseClause = !isWhereClause && index > 0 &&
-                formatter.tokens[index - 1].isSwitchCaseOrDefault
-            if explicitSelf == .remove {
-                // Check if scope actually includes self before we waste a bunch of time
-                var scopeStack: [Token] = []
-                loop: for i in index ..< formatter.tokens.count {
-                    let token = formatter.tokens[i]
-                    switch token {
-                    case .identifier("self"):
-                        break loop // Contains self
-                    case .startOfScope("{") where isWhereClause && scopeStack.isEmpty:
-                        return // Does not contain self
-                    case .startOfScope("{"), .startOfScope("("),
-                         .startOfScope("["), .startOfScope(":"):
-                        scopeStack.append(token)
-                    case .endOfScope("}"), .endOfScope(")"), .endOfScope("]"),
-                         .endOfScope("case"), .endOfScope("default"):
-                        if scopeStack.isEmpty || (scopeStack == [.startOfScope(":")] && isCaseClause) {
-                            index = i + 1
-                            return // Does not contain self
-                        }
-                        _ = scopeStack.popLast()
-                    default:
-                        break
-                    }
-                }
-            }
-            let inClosureDisallowingImplicitSelf = closureStack.last?.allowsImplicitSelf == false
-            /// Starting in Swift 5.8, self can be rebound using a `let self = self` unwrap condition
-            /// within a weak self closure. This is the only place where defining a property
-            /// named self affects the behavior of implicit self.
-            let scopeAllowsImplicitSelfRebinding = formatter.options.swiftVersion >= "5.8"
-                && closureStack.last?.selfCapture == "weak self"
-
-            // Gather members & local variables
-            let type = (isTypeRoot && typeStack.count == 1) ? typeStack.first : nil
-            var members = (type?.name).flatMap { membersByType[$0] } ?? members
-            var classMembers = (type?.name).flatMap { classMembersByType[$0] } ?? Set<String>()
-            var localNames = localNames
-            if !isTypeRoot || explicitSelf != .remove {
-                var i = index
-                var classOrStatic = false
-                outer: while let token = formatter.token(at: i) {
-                    switch token {
-                    case .keyword("import"):
-                        guard let nextIndex = formatter.index(of: .identifier, after: i) else {
-                            return formatter.fatalError("Expected identifier", at: i)
-                        }
-                        i = nextIndex
-                    case .keyword("class"), .keyword("static"):
-                        classOrStatic = true
-                    case .keyword("repeat"):
-                        guard let nextIndex = formatter.index(of: .keyword("while"), after: i) else {
-                            return formatter.fatalError("Expected while", at: i)
-                        }
-                        i = nextIndex
-                    case .keyword("if"), .keyword("for"), .keyword("while"):
-                        if explicitSelf == .insert {
-                            break
-                        }
-                        guard let nextIndex = formatter.index(of: .startOfScope("{"), after: i) else {
-                            return formatter.fatalError("Expected {", at: i)
-                        }
-                        i = nextIndex
-                        continue
-                    case .keyword("switch"):
-                        guard let nextIndex = formatter.index(of: .startOfScope("{"), after: i) else {
-                            return formatter.fatalError("Expected {", at: i)
-                        }
-                        guard var endIndex = formatter.index(of: .endOfScope, after: nextIndex) else {
-                            return formatter.fatalError("Expected }", at: i)
-                        }
-                        while formatter.tokens[endIndex] != .endOfScope("}") {
-                            guard let nextIndex = formatter.index(of: .startOfScope(":"), after: endIndex) else {
-                                return formatter.fatalError("Expected :", at: i)
-                            }
-                            guard let _endIndex = formatter.index(of: .endOfScope, after: nextIndex) else {
-                                return formatter.fatalError("Expected end of scope", at: i)
-                            }
-                            endIndex = _endIndex
-                        }
-                        i = endIndex
-                    case .keyword("var"), .keyword("let"):
-                        i += 1
-                        if isTypeRoot {
-                            if classOrStatic {
-                                formatter.processDeclaredVariables(at: &i, names: &classMembers)
-                                classOrStatic = false
-                            } else {
-                                formatter.processDeclaredVariables(at: &i, names: &members)
-                            }
-                        } else {
-                            let removeSelf = explicitSelf != .insert && !usingDynamicLookup && !inClosureDisallowingImplicitSelf
-                            let onlyLocal = formatter.options.swiftVersion < "5"
-
-                            formatter.processDeclaredVariables(at: &i, names: &localNames,
-                                                               removeSelf: removeSelf,
-                                                               onlyLocal: onlyLocal,
-                                                               scopeAllowsImplicitSelfRebinding: scopeAllowsImplicitSelfRebinding)
-                        }
-                    case .keyword("func"):
-                        guard let nameToken = formatter.next(.nonSpaceOrCommentOrLinebreak, after: i) else {
-                            break
-                        }
-                        if isTypeRoot {
-                            if classOrStatic {
-                                classMembers.insert(nameToken.unescaped())
-                                classOrStatic = false
-                            } else {
-                                members.insert(nameToken.unescaped())
-                            }
-                        } else {
-                            localNames.insert(nameToken.unescaped())
-                        }
-                    case .startOfScope("("), .startOfScope("#if"), .startOfScope(":"):
-                        break
-                    case .startOfScope("//"), .startOfScope("/*"):
-                        if case let .commentBody(comment)? = formatter.next(.nonSpace, after: i) {
-                            formatter.processCommentBody(comment, at: i)
-                            if token == .startOfScope("//") {
-                                formatter.processLinebreak()
-                            }
-                        }
-                        i = formatter.endOfScope(at: i) ?? (formatter.tokens.count - 1)
-                    case .startOfScope:
-                        classOrStatic = false
-                        i = formatter.endOfScope(at: i) ?? (formatter.tokens.count - 1)
-                    case .endOfScope("}"), .endOfScope("case"), .endOfScope("default"):
-                        break outer
-                    case .linebreak:
-                        formatter.processLinebreak()
-                    default:
-                        break
-                    }
-                    i += 1
-                }
-            }
-            if let type = type {
-                membersByType[type.name] = members
-                classMembersByType[type.name] = classMembers
-            }
-            // Remove or add `self`
-            var lastKeyword = ""
-            var lastKeywordIndex = 0
-            var classOrStatic = false
-            var scopeStack = [(
-                token: Token.space(""),
-                dynamicMemberTypes: Set<String>()
-            )]
-
-            while let token = formatter.token(at: index) {
-                switch token {
-                case .keyword("is"), .keyword("as"), .keyword("try"), .keyword("await"):
-                    break
-                case .keyword("init"), .keyword("subscript"),
-                     .keyword("func") where lastKeyword != "import":
-                    lastKeyword = ""
-                    if classOrStatic {
-                        processFunction(at: &index, localNames: localNames, members: classMembers,
-                                        typeStack: &typeStack, closureStack: &closureStack, membersByType: &membersByType,
-                                        classMembersByType: &classMembersByType,
-                                        usingDynamicLookup: usingDynamicLookup)
-                        classOrStatic = false
-                    } else {
-                        processFunction(at: &index, localNames: localNames, members: members,
-                                        typeStack: &typeStack, closureStack: &closureStack, membersByType: &membersByType,
-                                        classMembersByType: &classMembersByType,
-                                        usingDynamicLookup: usingDynamicLookup)
-                    }
-                    assert(formatter.token(at: index) != .endOfScope("}"))
-                    continue
-                case .keyword("static"):
-                    if !isTypeRoot {
-                        return formatter.fatalError("Unexpected static keyword", at: index)
-                    }
-                    classOrStatic = true
-                case .keyword("class") where
-                    formatter.next(.nonSpaceOrCommentOrLinebreak, after: index)?.isIdentifier == false:
-                    if formatter.last(.nonSpaceOrCommentOrLinebreak, before: index) != .delimiter(":") {
-                        if !isTypeRoot {
-                            return formatter.fatalError("Unexpected class keyword", at: index)
-                        }
-                        classOrStatic = true
-                    }
-                case .keyword("where") where lastKeyword == "protocol", .keyword("protocol"):
-                    if let startIndex = formatter.index(of: .startOfScope("{"), after: index),
-                       let endIndex = formatter.endOfScope(at: startIndex)
-                    {
-                        index = endIndex
-                    }
-                case .keyword("extension"), .keyword("struct"), .keyword("enum"), .keyword("class"), .keyword("actor"),
-                     .keyword("where") where ["extension", "struct", "enum", "class", "actor"].contains(lastKeyword):
-                    let keyword = formatter.tokens[index].string
-                    guard formatter.last(.nonSpaceOrCommentOrLinebreak, before: index) != .keyword("import") else {
-                        break
-                    }
-                    guard let scopeStart = formatter.index(of: .startOfScope("{"), after: index) else {
-                        return
-                    }
-                    guard let nameToken = formatter.next(.identifier, after: index),
-                          case let .identifier(name) = nameToken
-                    else {
-                        return
-                    }
-                    var usingDynamicLookup = formatter.modifiersForDeclaration(
-                        at: index,
-                        contains: "@dynamicMemberLookup"
-                    )
-                    if usingDynamicLookup {
-                        scopeStack[scopeStack.count - 1].dynamicMemberTypes.insert(name)
-                    } else if [token.string, lastKeyword].contains("extension"),
-                              scopeStack.last!.dynamicMemberTypes.contains(name)
-                    {
-                        usingDynamicLookup = true
-                    }
-                    index = scopeStart + 1
-                    typeStack.append((name: name, keyword: keyword))
-                    processBody(at: &index, localNames: ["init"], members: [], typeStack: &typeStack,
-                                closureStack: &closureStack, membersByType: &membersByType, classMembersByType: &classMembersByType,
-                                usingDynamicLookup: usingDynamicLookup, isTypeRoot: true, isInit: false)
-                    index -= 1
-                    typeStack.removeLast()
-                case .keyword("case") where ["if", "while", "guard", "for"].contains(lastKeyword):
-                    break
-                case .keyword("var"), .keyword("let"):
-                    index += 1
-                    switch lastKeyword {
-                    case "lazy" where formatter.options.swiftVersion < "4":
-                        loop: while let nextIndex =
-                            formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: index)
-                        {
-                            switch formatter.tokens[nextIndex] {
-                            case .keyword("as"), .keyword("is"), .keyword("try"), .keyword("await"):
-                                break
-                            case .keyword, .startOfScope("{"):
-                                break loop
-                            default:
-                                break
-                            }
-                            index = nextIndex
-                        }
-                        lastKeyword = ""
-                    case "if", "while", "guard", "for":
-                        assert(!isTypeRoot)
-                        // Guard is included because it's an error to reference guard vars in body
-                        var scopedNames = localNames
-                        formatter.processDeclaredVariables(
-                            at: &index, names: &scopedNames,
-                            removeSelf: explicitSelf != .insert && !inClosureDisallowingImplicitSelf,
-                            onlyLocal: false,
-                            scopeAllowsImplicitSelfRebinding: scopeAllowsImplicitSelfRebinding
-                        )
-                        while let scope = formatter.currentScope(at: index) ?? formatter.token(at: index),
-                              case let .startOfScope(name) = scope,
-                              ["[", "("].contains(name) || scope.isStringDelimiter,
-                              let endIndex = formatter.endOfScope(at: index)
-                        {
-                            // TODO: find less hacky workaround
-                            index = endIndex + 1
-                        }
-                        while scopeStack.last?.token == .startOfScope("(") {
-                            scopeStack.removeLast()
-                        }
-                        guard var startIndex = formatter.token(at: index) == .startOfScope("{") ?
-                            index : formatter.index(of: .startOfScope("{"), after: index)
-                        else {
-                            return formatter.fatalError("Expected {", at: index)
-                        }
-                        while formatter.isStartOfClosure(at: startIndex) {
-                            guard let i = formatter.index(of: .endOfScope("}"), after: startIndex) else {
-                                return formatter.fatalError("Expected }", at: startIndex)
-                            }
-                            guard let j = formatter.index(of: .startOfScope("{"), after: i) else {
-                                return formatter.fatalError("Expected {", at: i)
-                            }
-                            startIndex = j
-                        }
-                        index = startIndex + 1
-                        processBody(at: &index, localNames: scopedNames, members: members, typeStack: &typeStack,
-                                    closureStack: &closureStack, membersByType: &membersByType, classMembersByType: &classMembersByType,
-                                    usingDynamicLookup: usingDynamicLookup, isTypeRoot: false, isInit: isInit)
-                        index -= 1
-                        lastKeyword = ""
-                    default:
-                        lastKeyword = token.string
-                    }
-                    classOrStatic = false
-                case .keyword("where") where lastKeyword == "in",
-                     .startOfScope("{") where lastKeyword == "in" && !formatter.isStartOfClosure(at: index):
-                    lastKeyword = ""
-                    var localNames = localNames
-                    guard let keywordIndex = formatter.index(of: .keyword("in"), before: index),
-                          let prevKeywordIndex = formatter.index(of: .keyword("for"), before: keywordIndex)
-                    else {
-                        return formatter.fatalError("Expected for keyword", at: index)
-                    }
-                    for token in formatter.tokens[prevKeywordIndex + 1 ..< keywordIndex] {
-                        if case let .identifier(name) = token, name != "_" {
-                            localNames.insert(token.unescaped())
-                        }
-                    }
-                    index += 1
-                    processBody(at: &index, localNames: localNames, members: members, typeStack: &typeStack,
-                                closureStack: &closureStack, membersByType: &membersByType, classMembersByType: &classMembersByType,
-                                usingDynamicLookup: usingDynamicLookup, isTypeRoot: false, isInit: isInit)
-                    continue
-                case .keyword("while") where lastKeyword == "repeat":
-                    lastKeyword = ""
-                case let .keyword(name):
-                    lastKeyword = name
-                    lastKeywordIndex = index
-                case .startOfScope("//"), .startOfScope("/*"):
-                    if case let .commentBody(comment)? = formatter.next(.nonSpace, after: index) {
-                        formatter.processCommentBody(comment, at: index)
-                        if token == .startOfScope("//") {
-                            formatter.processLinebreak()
-                        }
-                    }
-                    index = formatter.endOfScope(at: index) ?? (formatter.tokens.count - 1)
-                case .startOfScope where token.isStringDelimiter, .startOfScope("#if"),
-                     .startOfScope("["), .startOfScope("("):
-                    scopeStack.append((token, []))
-                case .startOfScope(":"):
-                    lastKeyword = ""
-                case .startOfScope("{") where lastKeyword == "catch":
-                    lastKeyword = ""
-                    var localNames = localNames
-                    localNames.insert("error") // Implicit error argument
-                    index += 1
-                    processBody(at: &index, localNames: localNames, members: members, typeStack: &typeStack,
-                                closureStack: &closureStack, membersByType: &membersByType, classMembersByType: &classMembersByType,
-                                usingDynamicLookup: usingDynamicLookup, isTypeRoot: false, isInit: isInit)
-                    continue
-                case .startOfScope("{") where isWhereClause && scopeStack.count == 1:
-                    return
-                case .startOfScope("{") where lastKeyword == "switch":
-                    lastKeyword = ""
-                    index += 1
-                    loop: while let token = formatter.token(at: index) {
-                        index += 1
-                        switch token {
-                        case .endOfScope("case"), .endOfScope("default"):
-                            let localNames = localNames
-                            processBody(at: &index, localNames: localNames, members: members, typeStack: &typeStack, closureStack: &closureStack,
-                                        membersByType: &membersByType, classMembersByType: &classMembersByType,
-                                        usingDynamicLookup: usingDynamicLookup, isTypeRoot: false, isInit: isInit)
-                            index -= 1
-                        case .endOfScope("}"):
-                            break loop
-                        default:
-                            break
-                        }
-                    }
-                case .startOfScope("{") where ["for", "where", "if", "else", "while", "do"].contains(lastKeyword):
-                    if let scopeIndex = formatter.index(of: .startOfScope, before: index), scopeIndex > lastKeywordIndex {
-                        index = formatter.endOfScope(at: index) ?? (formatter.tokens.count - 1)
-                        break
-                    }
-                    lastKeyword = ""
-                    fallthrough
-                case .startOfScope("{") where lastKeyword == "repeat":
-                    index += 1
-                    processBody(at: &index, localNames: localNames, members: members, typeStack: &typeStack,
-                                closureStack: &closureStack, membersByType: &membersByType, classMembersByType: &classMembersByType,
-                                usingDynamicLookup: usingDynamicLookup, isTypeRoot: false, isInit: isInit)
-                    continue
-                case .startOfScope("{") where lastKeyword == "var":
-                    lastKeyword = ""
-                    if formatter.isStartOfClosure(at: index, in: scopeStack.last?.token) {
-                        fallthrough
-                    }
-                    var prevIndex = index - 1
-                    var name: String?
-                    while let token = formatter.token(at: prevIndex), token != .keyword("var") {
-                        if token.isLvalue, let nextToken = formatter.nextToken(after: prevIndex, where: {
-                            !$0.isSpaceOrCommentOrLinebreak && !$0.isStartOfScope
-                        }), nextToken.isRvalue, !nextToken.isOperator(".") {
-                            // It's a closure
-                            fallthrough
-                        }
-                        if case let .identifier(_name) = token {
-                            // Is the declared variable
-                            name = _name
-                        }
-                        prevIndex -= 1
-                    }
-                    if let name = name {
-                        processAccessors(["get", "set", "willSet", "didSet"], for: name,
-                                         at: &index, localNames: localNames, members: members,
-                                         typeStack: &typeStack, closureStack: &closureStack, membersByType: &membersByType,
-                                         classMembersByType: &classMembersByType,
-                                         usingDynamicLookup: usingDynamicLookup)
-                    }
-                    continue
-                case .startOfScope("{") where formatter.isStartOfClosure(at: index):
-                    let inIndex = formatter.index(of: .keyword, after: index, if: {
-                        $0 == .keyword("in")
-                    })
-
-                    // Parse the capture list and arguments list,
-                    // and record the type of `self` capture used in the closure
-                    var captureList: [Token]?
-                    var parameterList: [Token]?
-
-                    // Handle a capture list followed by an optional parameter list:
-                    // `{ [self, foo] bar in` or `{ [self, foo] in` etc.
-                    if let inIndex = inIndex,
-                       let captureListStartIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: index),
-                       formatter.tokens[captureListStartIndex] == .startOfScope("["),
-                       let captureListEndIndex = formatter.endOfScope(at: captureListStartIndex)
-                    {
-                        captureList = Array(formatter.tokens[(captureListStartIndex + 1) ..< captureListEndIndex])
-                        parameterList = Array(formatter.tokens[(captureListEndIndex + 1) ..< inIndex])
-                    }
-
-                    // Handle a parameter list if present without a capture list
-                    // e.g. `{ foo, bar in`
-                    else if let inIndex = inIndex,
-                            let firstTokenInClosure = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: index),
-                            formatter.isInClosureArguments(at: firstTokenInClosure)
-                    {
-                        parameterList = Array(formatter.tokens[firstTokenInClosure ..< inIndex])
-                    }
-
-                    var captureListEntries = (captureList ?? []).split(separator: .delimiter(","), omittingEmptySubsequences: true)
-                    let parameterListEntries = (parameterList ?? []).split(separator: .delimiter(","), omittingEmptySubsequences: true)
-
-                    let supportedSelfCaptures = Set([
-                        "self",
-                        "unowned self",
-                        "unowned(safe) self",
-                        "unowned(unsafe) self",
-                        "weak self",
-                    ])
-
-                    let captureEntryStrings = captureListEntries.map { captureListEntry in
-                        captureListEntry
-                            .map { $0.string }
-                            .joined()
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
-
-                    let selfCapture = captureEntryStrings.first(where: {
-                        supportedSelfCaptures.contains($0)
-                    })
-
-                    captureListEntries.removeAll(where: { captureListEntry in
-                        let text = captureListEntry
-                            .map { $0.string }
-                            .joined()
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                        return text == selfCapture
-                    })
-
-                    let localDefiningDeclarations = captureListEntries + parameterListEntries
-                    var closureLocalNames = localNames
-
-                    for tokens in localDefiningDeclarations {
-                        guard let localIdentifier = tokens.first(where: {
-                            $0.isIdentifier && !ownershipModifiers.contains($0.string)
-                        }), case let .identifier(name) = localIdentifier,
-                        name != "_"
-                        else {
-                            continue
-                        }
-                        closureLocalNames.insert(name)
-                    }
-
-                    // Functions defined inside closures with `[weak self]` captures can
-                    // only use implicit self once self has been unwrapped.
-                    //
-                    // When using `weak self` we add `self` to locals and will remove
-                    // it again if we encounter a `guard let self`.
-                    if formatter.options.swiftVersion >= "5.8",
-                       selfCapture == "weak self"
-                    {
-                        closureLocalNames.insert("self")
-                    }
-
-                    /// Whether or not the closure at the current index permits implicit self.
-                    ///
-                    /// SE-0269 (in Swift 5.3) allows implicit self when:
-                    ///  - the closure captures self explicitly using [self] or [unowned self]
-                    ///  - self is not a reference type
-                    ///
-                    /// SE-0365 (in Swift 5.8) additionally allows implicit self using
-                    /// [weak self] captures after self has been unwrapped.
-                    func closureAllowsImplicitSelf() -> Bool {
-                        guard formatter.options.swiftVersion >= "5.3" else {
-                            return false
-                        }
-
-                        // If self is a reference type, capturing it won't create a retain cycle,
-                        // so the compiler lets us use implicit self
-                        if let enclosingTypeKeyword = typeStack.last?.keyword,
-                           enclosingTypeKeyword == "struct" || enclosingTypeKeyword == "enum"
-                        {
-                            return true
-                        }
-
-                        guard let selfCapture = selfCapture else {
-                            return false
-                        }
-
-                        // If self is captured strongly, or using `unowned`, then the compiler
-                        // lets us use implicit self since it's already clear that this closure
-                        // captures self strongly
-                        if selfCapture == "self"
-                            || selfCapture == "unowned self"
-                            || selfCapture == "unowned(safe) self"
-                            || selfCapture == "unowned(unsafe) self"
-                        {
-                            return true
-                        }
-
-                        // This is also supported for `weak self` captures, but only
-                        // in Swift 5.8 or later
-                        if selfCapture == "weak self",
-                           formatter.options.swiftVersion >= "5.8"
-                        {
-                            return true
-                        }
-
-                        return false
-                    }
-
-                    closureStack.append((allowsImplicitSelf: closureAllowsImplicitSelf(), selfCapture: selfCapture))
-                    index = (inIndex ?? index) + 1
-                    processBody(at: &index, localNames: closureLocalNames, members: members, typeStack: &typeStack, closureStack: &closureStack,
-                                membersByType: &membersByType, classMembersByType: &classMembersByType,
-                                usingDynamicLookup: usingDynamicLookup, isTypeRoot: false, isInit: isInit)
-                    index -= 1
-                    closureStack.removeLast()
-                case .startOfScope:
-                    index = formatter.endOfScope(at: index) ?? (formatter.tokens.count - 1)
-                case .identifier("self"):
-                    guard formatter.isEnabled, explicitSelf != .insert, !isTypeRoot, !usingDynamicLookup,
-                          let dotIndex = formatter.index(of: .nonSpaceOrLinebreak, after: index, if: {
-                              $0 == .operator(".", .infix)
-                          }),
-                          let nextIndex = formatter.index(of: .nonSpaceOrLinebreak, after: dotIndex)
-                    else {
-                        break
-                    }
-                    if explicitSelf == .insert {
-                        break
-                    } else if explicitSelf == .initOnly, isInit {
-                        if formatter.next(.nonSpaceOrCommentOrLinebreak, after: nextIndex) == .operator("=", .infix) {
-                            break
-                        } else if let scopeEnd = formatter.index(of: .endOfScope(")"), after: nextIndex),
-                                  formatter.next(.nonSpaceOrCommentOrLinebreak, after: scopeEnd) == .operator("=", .infix)
-                        {
-                            break
-                        }
-                    }
-                    if let closure = closureStack.last, !closure.allowsImplicitSelf {
-                        break
-                    }
-                    _ = formatter.removeSelf(at: index, exclude: localNames)
-                case .identifier("type"): // Special case for type(of:)
-                    guard let parenIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: index, if: {
-                        $0 == .startOfScope("(")
-                    }), formatter.next(.nonSpaceOrCommentOrLinebreak, after: parenIndex) == .identifier("of") else {
-                        fallthrough
-                    }
-                case .identifier:
-                    guard formatter.isEnabled && !isTypeRoot else {
-                        break
-                    }
-                    if explicitSelf == .insert {
-                        // continue
-                    } else if explicitSelf == .initOnly, isInit {
-                        if formatter.next(.nonSpaceOrCommentOrLinebreak, after: index) == .operator("=", .infix) {
-                            // continue
-                        } else if let scopeEnd = formatter.index(of: .endOfScope(")"), after: index),
-                                  formatter.next(.nonSpaceOrCommentOrLinebreak, after: scopeEnd) == .operator("=", .infix)
-                        {
-                            // continue
-                        } else {
-                            if token.string == "lazy" {
-                                lastKeyword = "lazy"
-                                lastKeywordIndex = index
-                            }
-                            break
-                        }
-                    } else {
-                        if token.string == "lazy" {
-                            lastKeyword = "lazy"
-                            lastKeywordIndex = index
-                        }
-                        break
-                    }
-                    let isAssignment: Bool
-                    if ["for", "var", "let"].contains(lastKeyword),
-                       let prevToken = formatter.last(.nonSpaceOrCommentOrLinebreak, before: index)
-                    {
-                        switch prevToken {
-                        case .identifier, .number, .endOfScope,
-                             .operator where ![
-                                 .operator("=", .infix), .operator(".", .prefix)
-                             ].contains(prevToken):
-                            isAssignment = false
-                            lastKeyword = ""
-                        default:
-                            isAssignment = true
-                        }
-                    } else {
-                        isAssignment = false
-                    }
-                    if !isAssignment, token.string == "lazy" {
-                        lastKeyword = "lazy"
-                        lastKeywordIndex = index
-                    }
-                    let name = token.unescaped()
-                    guard members.contains(name), !localNames.contains(name), !isAssignment ||
-                        formatter.last(.nonSpaceOrCommentOrLinebreak, before: index) == .operator("=", .infix),
-                        formatter.next(.nonSpaceOrComment, after: index) != .delimiter(":")
-                    else {
-                        break
-                    }
-                    if let lastToken = formatter.last(.nonSpaceOrCommentOrLinebreak, before: index),
-                       lastToken.isOperator(".")
-                    {
-                        break
-                    }
-                    formatter.insert([.identifier("self"), .operator(".", .infix)], at: index)
-                    index += 2
-                case .endOfScope("case"), .endOfScope("default"):
-                    return
-                case .endOfScope:
-                    if token == .endOfScope("#endif") {
-                        while let scope = scopeStack.last?.token, scope != .space("") {
-                            scopeStack.removeLast()
-                            if scope != .startOfScope("#if") {
-                                break
-                            }
-                        }
-                    } else if let scope = scopeStack.last?.token, scope != .space("") {
-                        // TODO: fix this bug
-                        assert(token.isEndOfScope(scope))
-                        scopeStack.removeLast()
-                    } else {
-                        assert(token.isEndOfScope(formatter.currentScope(at: index)!))
-                        index += 1
-                        return
-                    }
-                case .linebreak:
-                    formatter.processLinebreak()
-                default:
-                    break
-                }
-                index += 1
-            }
-        }
-        func processAccessors(_ names: [String], for name: String, at index: inout Int,
-                              localNames: Set<String>, members: Set<String>,
-                              typeStack: inout [(name: String, keyword: String)],
-                              closureStack: inout [(allowsImplicitSelf: Bool, selfCapture: String?)],
-                              membersByType: inout [String: Set<String>],
-                              classMembersByType: inout [String: Set<String>],
-                              usingDynamicLookup: Bool)
-        {
-            assert(formatter.tokens[index] == .startOfScope("{"))
-            var foundAccessors = false
-            var localNames = localNames
-            while let nextIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: index, if: {
-                if case let .identifier(name) = $0, names.contains(name) { return true } else { return false }
-            }), let startIndex = formatter.index(of: .startOfScope("{"), after: nextIndex) {
-                foundAccessors = true
-                index = startIndex + 1
-                if let parenStart = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: nextIndex, if: {
-                    $0 == .startOfScope("(")
-                }), let varToken = formatter.next(.identifier, after: parenStart) {
-                    localNames.insert(varToken.unescaped())
-                } else {
-                    switch formatter.tokens[nextIndex].string {
-                    case "get":
-                        localNames.insert(name)
-                    case "set":
-                        localNames.insert(name)
-                        localNames.insert("newValue")
-                    case "willSet":
-                        localNames.insert("newValue")
-                    case "didSet":
-                        localNames.insert("oldValue")
-                    default:
-                        break
-                    }
-                }
-                processBody(at: &index, localNames: localNames, members: members, typeStack: &typeStack,
-                            closureStack: &closureStack, membersByType: &membersByType, classMembersByType: &classMembersByType,
-                            usingDynamicLookup: usingDynamicLookup, isTypeRoot: false, isInit: false)
-            }
-            if foundAccessors {
-                guard let endIndex = formatter.index(of: .endOfScope("}"), after: index) else { return }
-                index = endIndex + 1
-            } else {
-                index += 1
-                localNames.insert(name)
-                processBody(at: &index, localNames: localNames, members: members, typeStack: &typeStack,
-                            closureStack: &closureStack, membersByType: &membersByType, classMembersByType: &classMembersByType,
-                            usingDynamicLookup: usingDynamicLookup, isTypeRoot: false, isInit: false)
-            }
-        }
-        func processFunction(at index: inout Int, localNames: Set<String>, members: Set<String>,
-                             typeStack: inout [(name: String, keyword: String)],
-                             closureStack: inout [(allowsImplicitSelf: Bool, selfCapture: String?)],
-                             membersByType: inout [String: Set<String>],
-                             classMembersByType: inout [String: Set<String>],
-                             usingDynamicLookup: Bool)
-        {
-            let startToken = formatter.tokens[index]
-            var localNames = localNames
-            guard let startIndex = formatter.index(of: .startOfScope("("), after: index),
-                  let endIndex = formatter.index(of: .endOfScope(")"), after: startIndex)
-            else {
-                index += 1 // Prevent endless loop
-                return
-            }
-            // Get argument names
-            index = startIndex
-            while index < endIndex {
-                guard let externalNameIndex = formatter.index(of: .identifier, after: index),
-                      let nextIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: externalNameIndex)
-                else { break }
-                let token = formatter.tokens[nextIndex]
-                switch token {
-                case let .identifier(name) where name != "_":
-                    localNames.insert(token.unescaped())
-                case .delimiter(":"):
-                    let externalNameToken = formatter.tokens[externalNameIndex]
-                    if case let .identifier(name) = externalNameToken, name != "_" {
-                        localNames.insert(externalNameToken.unescaped())
-                    }
-                default:
-                    break
-                }
-                index = formatter.index(of: .delimiter(","), after: index) ?? endIndex
-            }
-            guard let bodyStartIndex = formatter.index(
-                of: .startOfScope("{"),
-                after: endIndex
-            ) else {
-                return // TODO: treat this as an error?
-            }
-
-            // Functions defined inside closures with `[weak self]` captures can
-            // never use implicit self.
-            //
-            // When we encounter a `guard let self` in a `[weak self]` closure,
-            // we remove `self` from the list of locals since that disables
-            // implicit self. Now that we're moving into a function that doesn't
-            // support implicit self, we can re-insert `self` into the list of
-            // locals to disable implicit self again for this scope.
-            if formatter.options.swiftVersion >= "5.8",
-               closureStack.last?.selfCapture == "weak self"
-            {
-                localNames.insert("self")
-            }
-
-            if startToken == .keyword("subscript") {
-                index = bodyStartIndex
-                processAccessors(["get", "set"], for: "", at: &index, localNames: localNames,
-                                 members: members, typeStack: &typeStack, closureStack: &closureStack, membersByType: &membersByType,
-                                 classMembersByType: &classMembersByType,
-                                 usingDynamicLookup: usingDynamicLookup)
-            } else {
-                index = bodyStartIndex + 1
-                processBody(at: &index,
-                            localNames: localNames,
-                            members: members,
-                            typeStack: &typeStack,
-                            closureStack: &closureStack,
-                            membersByType: &membersByType,
-                            classMembersByType: &classMembersByType,
-                            usingDynamicLookup: usingDynamicLookup,
-                            isTypeRoot: false,
-                            isInit: startToken == .keyword("init"))
-            }
-        }
-        var typeStack = [(name: String, keyword: String)]()
-        var closureStack = [(allowsImplicitSelf: Bool, selfCapture: String?)]()
-        var membersByType = [String: Set<String>]()
-        var classMembersByType = [String: Set<String>]()
-        var index = 0
-        processBody(at: &index, localNames: [], members: [], typeStack: &typeStack,
-                    closureStack: &closureStack, membersByType: &membersByType, classMembersByType: &classMembersByType,
-                    usingDynamicLookup: false, isTypeRoot: false, isInit: false)
+        _ = formatter.options.selfRequired
+        _ = formatter.options.explicitSelf
+        formatter.addOrRemoveSelf(static: false)
     }
 
     /// Replace unused arguments with an underscore
@@ -4617,7 +3817,7 @@ public struct _FormatRules {
 
     /// Formats enum cases declaration into one case per line
     public let wrapEnumCases = FormatRule(
-        help: "Writes one enum case per line.",
+        help: "Rewrite comma-delimited enum cases to one case per line.",
         disabledByDefault: true,
         options: ["wrapenumcases"],
         sharedOptions: ["linebreaks"]
@@ -4725,7 +3925,7 @@ public struct _FormatRules {
 
     /// Writes one switch case per line
     public let wrapSwitchCases = FormatRule(
-        help: "Writes one switch case per line.",
+        help: "Wrap comma-delimited switch cases onto multiple lines.",
         disabledByDefault: true,
         sharedOptions: ["linebreaks", "tabwidth", "indent", "smarttabs"]
     ) { formatter in
@@ -4972,7 +4172,9 @@ public struct _FormatRules {
         options: ["header"],
         sharedOptions: ["linebreaks"]
     ) { formatter in
-        guard !formatter.options.fragment else { return }
+        guard let headerRange = formatter.headerCommentTokenRange else {
+            return
+        }
 
         var header: String
         switch formatter.options.fileHeader {
@@ -5096,10 +4298,12 @@ public struct _FormatRules {
         }
 
         if header.isEmpty {
-            formatter.removeTokens(in: start ..< lastHeaderTokenIndex + 1)
+            formatter.removeTokens(in: headerRange)
             return
         }
+
         var headerTokens = tokenize(header)
+        var lastHeaderTokenIndex = headerRange.endIndex - 1
         let endIndex = lastHeaderTokenIndex + headerTokens.count
         if formatter.tokens.endIndex > endIndex, headerTokens == Array(formatter.tokens[
             lastHeaderTokenIndex + 1 ... endIndex
@@ -5124,7 +4328,30 @@ public struct _FormatRules {
         }) {
             lastHeaderTokenIndex = index
         }
-        formatter.replaceTokens(in: start ..< lastHeaderTokenIndex + 1, with: headerTokens)
+        formatter.replaceTokens(in: headerRange.startIndex ..< lastHeaderTokenIndex + 1, with: headerTokens)
+    }
+
+    /// Ensure file name reference in header matches actual file name
+    public let headerFileName = FormatRule(
+        help: "Ensure file name in header comment matches the actual file name.",
+        runOnceOnly: true,
+        orderAfter: ["fileHeader"]
+    ) { formatter in
+        guard let fileName = formatter.options.fileInfo.fileName,
+              let headerRange = formatter.headerCommentTokenRange,
+              fileName.hasSuffix(".swift")
+        else {
+            return
+        }
+
+        for i in headerRange {
+            guard case let .commentBody(body) = formatter.tokens[i] else {
+                continue
+            }
+            if body.hasSuffix(".swift"), body != fileName, !body.contains(where: { " /".contains($0) }) {
+                formatter.replaceToken(at: i, with: .commentBody(fileName))
+            }
+        }
     }
 
     /// Strip redundant `.init` from type instantiations
@@ -5168,10 +4395,18 @@ public struct _FormatRules {
         }
     }
 
-    /// Sorts switch cases alphabetically
+    /// Deprecated
     public let sortedSwitchCases = FormatRule(
-        help: "Sorts switch cases alphabetically.",
-        disabledByDefault: true // TODO: enable by default in next major release
+        help: "Sort switch cases alphabetically.",
+        deprecationMessage: "Use sortSwitchCases instead."
+    ) { formatter in
+        FormatRules.sortSwitchCases.apply(with: formatter)
+    }
+
+    /// Sorts switch cases alphabetically
+    public let sortSwitchCases = FormatRule(
+        help: "Sort switch cases alphabetically.",
+        disabledByDefault: true
     ) { formatter in
         formatter.parseSwitchCaseRanges()
             .reversed() // don't mess with indexes
@@ -5249,8 +4484,20 @@ public struct _FormatRules {
             }
     }
 
-    /// Sort import statements
+    /// Deprecated
     public let sortedImports = FormatRule(
+        help: "Sort import statements alphabetically.",
+        deprecationMessage: "Use sortImports instead.",
+        options: ["importgrouping"],
+        sharedOptions: ["linebreaks"]
+    ) { formatter in
+        _ = formatter.options.importGrouping
+        _ = formatter.options.linebreak
+        FormatRules.sortImports.apply(with: formatter)
+    }
+
+    /// Sort import statements
+    public let sortImports = FormatRule(
         help: "Sort import statements alphabetically.",
         options: ["importgrouping"],
         sharedOptions: ["linebreaks"]
@@ -6278,7 +5525,7 @@ public struct _FormatRules {
     }
 
     public let organizeDeclarations = FormatRule(
-        help: "Organizes declarations within class, struct, enum, actor, and extension bodies.",
+        help: "Organize declarations within class, struct, enum, actor, and extension bodies.",
         runOnceOnly: true,
         disabledByDefault: true,
         orderAfter: ["extensionAccessControl", "redundantFileprivate"],
@@ -6417,7 +5664,7 @@ public struct _FormatRules {
     }
 
     public let markTypes = FormatRule(
-        help: "Adds a mark comment before top-level types and extensions.",
+        help: "Add a MARK comment before top-level types and extensions.",
         runOnceOnly: true,
         disabledByDefault: true,
         options: ["marktypes", "typemark", "markextensions", "extensionmark", "groupedextension"],
@@ -6823,7 +6070,7 @@ public struct _FormatRules {
     }
 
     public let acronyms = FormatRule(
-        help: "Capitalizes acronyms when the first character is capitalized.",
+        help: "Capitalize acronyms when the first character is capitalized.",
         disabledByDefault: true,
         options: ["acronyms"]
     ) { formatter in
@@ -6888,7 +6135,7 @@ public struct _FormatRules {
     }
 
     public let blockComments = FormatRule(
-        help: "Changes block comments to single line comments.",
+        help: "Convert block comments to consecutive single line comments.",
         disabledByDefault: true
     ) { formatter in
         formatter.forEachToken { i, token in
@@ -7120,7 +6367,7 @@ public struct _FormatRules {
     }
 
     public let redundantOptionalBinding = FormatRule(
-        help: "Removes redundant identifiers in optional binding conditions.",
+        help: "Remove redundant identifiers in optional binding conditions.",
         // We can convert `if let foo = self.foo` to just `if let foo`,
         // but only if `redundantSelf` can first remove the `self.`.
         orderAfter: ["redundantSelf"]
@@ -7158,7 +6405,7 @@ public struct _FormatRules {
         primary associated types for common standard library types, so definitions like
         `T where T: Collection, T.Element == Foo` are updated to `some Collection<Foo>`.
         """,
-        options: ["someAny"]
+        options: ["someany"]
     ) { formatter in
         formatter.forEach(.keyword) { keywordIndex, keyword in
             guard
@@ -7409,8 +6656,8 @@ public struct _FormatRules {
 
     public let genericExtensions = FormatRule(
         help: """
-        When extending generic types, use angle brackets (`extension Array<Foo>`)
-        instead of generic type constraints (`extension Array where Element == Foo`).
+        Use angle brackets (`extension Array<Foo>`) for generic type extensions
+        instead of type constraints (`extension Array where Element == Foo`).
         """,
         options: ["generictypes"]
     ) { formatter in
@@ -7525,7 +6772,7 @@ public struct _FormatRules {
     }
 
     public let docComments = FormatRule(
-        help: "Use doc comments for comments preceding declarations.",
+        help: "Use doc comments for API declarations, otherwise use regular comments.",
         disabledByDefault: true,
         orderAfter: ["fileHeader"]
     ) { formatter in
@@ -7781,6 +7028,149 @@ public struct _FormatRules {
             else {
                 formatter.insert([.operator("=", .infix), .space(" ")], at: startOfConditional)
             }
+        }
+    }
+
+    public let sortTypealiases = FormatRule(
+        help: "Sort protocol composition typealiases alphabetically."
+    ) { formatter in
+        formatter.forEach(.keyword("typealias")) { typealiasIndex, _ in
+            guard
+                let (equalsIndex, andTokenIndices, endIndex) = formatter.parseProtocolCompositionTypealias(at: typealiasIndex),
+                let typealiasNameIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: equalsIndex)
+            else {
+                return
+            }
+
+            // Split the typealias into individual elements.
+            // Any comments on their own line are grouped with the following element.
+            let delimiters = [equalsIndex] + andTokenIndices
+            var parsedElements: [(startIndex: Int, delimiterIndex: Int, endIndex: Int, type: String, allTokens: [Token])] = []
+
+            for delimiter in delimiters.indices {
+                let endOfPreviousElement = parsedElements.last?.endIndex ?? typealiasNameIndex
+                let elementStartIndex = formatter.index(of: .nonSpaceOrLinebreak, after: endOfPreviousElement) ?? delimiters[delimiter]
+
+                // Start with the end index just being the end of the type name
+                var elementEndIndex: Int
+                let nextElementIsOnSameLine: Bool
+                if delimiter == delimiters.indices.last {
+                    elementEndIndex = endIndex
+                    nextElementIsOnSameLine = false
+                } else {
+                    let nextDelimiterIndex = delimiters[delimiter + 1]
+                    elementEndIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: nextDelimiterIndex) ?? (nextDelimiterIndex - 1)
+
+                    let endOfLine = formatter.endOfLine(at: elementEndIndex)
+                    nextElementIsOnSameLine = formatter.endOfLine(at: nextDelimiterIndex) == endOfLine
+                }
+
+                // Handle comments in multiline typealiases
+                if !nextElementIsOnSameLine {
+                    // Any comments on the same line as the type name should be considered part of this element.
+                    // Any comments after the linebreak are consisidered part of the next element.
+                    // To do that we just extend this element to the end of the current line.
+                    elementEndIndex = formatter.endOfLine(at: elementEndIndex) - 1
+                }
+
+                let tokens = Array(formatter.tokens[elementStartIndex ... elementEndIndex])
+                let typeName = tokens
+                    .filter { !$0.isSpaceOrCommentOrLinebreak && !$0.isOperator }
+                    .map { $0.string }.joined()
+
+                parsedElements.append((
+                    startIndex: elementStartIndex,
+                    delimiterIndex: delimiters[delimiter],
+                    endIndex: elementEndIndex,
+                    type: typeName,
+                    allTokens: tokens
+                ))
+            }
+
+            // Sort each element by type name
+            var sortedElements = parsedElements.sorted(by: { lhsElement, rhsElement in
+                lhsElement.type.lexicographicallyPrecedes(rhsElement.type)
+            })
+
+            // Don't modify the file if the typealias is already sorted
+            if parsedElements.map(\.startIndex) == sortedElements.map(\.startIndex) {
+                return
+            }
+
+            for elementIndex in sortedElements.indices {
+                // Revalidate all of the delimiters after sorting
+                // (the first delimiter should be `=` and all others should be `&`
+                let delimiterIndexInTokens = sortedElements[elementIndex].delimiterIndex - sortedElements[elementIndex].startIndex
+
+                if elementIndex == 0 {
+                    sortedElements[elementIndex].allTokens[delimiterIndexInTokens] = .operator("=", .infix)
+                } else {
+                    sortedElements[elementIndex].allTokens[delimiterIndexInTokens] = .operator("&", .infix)
+                }
+
+                // Make sure there's always a linebreak after any comments, to prevent
+                // them from accidentially commenting out following elements of the typealias
+                if
+                    elementIndex != sortedElements.indices.last,
+                    sortedElements[elementIndex].allTokens.last?.isComment == true,
+                    let nextToken = formatter.nextToken(after: parsedElements[elementIndex].endIndex),
+                    !nextToken.isLinebreak
+                {
+                    sortedElements[elementIndex].allTokens.append(.linebreak("\n", 0))
+                }
+
+                // If this element starts with a comment, that's because the comment
+                // was originally on a line all by itself. To preserve this, make sure
+                // there's a linebreak before the comment.
+                if
+                    elementIndex != sortedElements.indices.first,
+                    sortedElements[elementIndex].allTokens.first?.isComment == true,
+                    let previousToken = formatter.lastToken(before: parsedElements[elementIndex].startIndex, where: { !$0.isSpace }),
+                    !previousToken.isLinebreak
+                {
+                    sortedElements[elementIndex].allTokens.insert(.linebreak("\n", 0), at: 0)
+                }
+            }
+
+            // Replace each index in the parsed list with the corresponding index in the sorted list,
+            // working backwards to not invalidate any existing indices
+            for (originalElement, newElement) in zip(parsedElements, sortedElements).reversed() {
+                let newElementTokens =
+                    formatter.replaceTokens(
+                        in: originalElement.startIndex ... originalElement.endIndex,
+                        with: newElement.allTokens
+                    )
+            }
+        }
+    }
+
+    public let redundantInternal = FormatRule(
+        help: "Remove redundant internal access control."
+    ) { formatter in
+        formatter.forEach(.keyword("internal")) { internalKeywordIndex, _ in
+            let accessControlLevels = ["public", "package", "internal", "private", "fileprivate"]
+
+            // If we're inside an extension, than `internal` is only redundant
+            // if the extension itself is `internal`.
+            if
+                let startOfScope = formatter.startOfScope(at: internalKeywordIndex),
+                let typeKeywordIndex = formatter.indexOfLastSignificantKeyword(at: startOfScope),
+                formatter.tokens[typeKeywordIndex] == .keyword("extension"),
+                // In the language grammar, the ACL level always directly precedes the
+                // `extension` keyword if present.
+                let previousToken = formatter.last(.nonSpaceOrCommentOrLinebreak, before: typeKeywordIndex),
+                accessControlLevels.contains(previousToken.string),
+                previousToken.string != "internal"
+            {
+                // The extension has an explicit ACL other than `internal`, so is not internal.
+                // We can't remove the `internal` keyword since the declaration would change
+                // to the ACL of the extension.
+                return
+            }
+
+            guard formatter.token(at: internalKeywordIndex + 1)?.isSpace == true else { return }
+
+            formatter.removeTokens(in: internalKeywordIndex ... (internalKeywordIndex + 1))
         }
     }
 }

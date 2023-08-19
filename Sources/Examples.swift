@@ -721,7 +721,7 @@ private struct Examples {
     ```
     """
 
-    let sortedImports = """
+    let sortImports = """
     ```diff
     - import Foo
     - import Bar
@@ -1484,7 +1484,7 @@ private struct Examples {
           print(value)
       }
 
-    // With `--someAny enabled` (the default)
+    // With `--someany enabled` (the default)
     - func handle<T>(_ value: T) {
     + func handle(_ value: some Any) {
           print(value)
@@ -1584,6 +1584,39 @@ private struct Examples {
       case false:
     -     foo = "bar"
     +     "bar"
+      }
+    ```
+    """
+
+    let sortTypealiases = """
+    ```diff
+    - typealias Placeholders = Foo & Bar & Baaz & Quux
+    + typealias Placeholders = Baaz & Bar & Foo & Quux
+
+      typealias Dependencies
+    -     = FooProviding
+    +     = BaazProviding
+          & BarProviding
+    -     & BaazProviding
+    +     & FooProviding
+          & QuuxProviding
+    ```
+    """
+
+    let redundantInternal = """
+    ```diff
+    - internal class Foo {
+    + class Foo {
+    -     internal let bar: String
+    +     let bar: String
+
+    -     internal func baaz() {}
+    +     func baaz() {}
+
+    -     internal init() {
+    +     init() {
+              bar = "bar"
+          }
       }
     ```
     """

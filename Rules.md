@@ -2,6 +2,7 @@
 
 * [andOperator](#andOperator)
 * [anyObjectProtocol](#anyObjectProtocol)
+* [applicationMain](#applicationMain)
 * [assertionFailures](#assertionFailures)
 * [blankLinesAroundMark](#blankLinesAroundMark)
 * [blankLinesAtEndOfScope](#blankLinesAtEndOfScope)
@@ -18,6 +19,7 @@
 * [extensionAccessControl](#extensionAccessControl)
 * [fileHeader](#fileHeader)
 * [genericExtensions](#genericExtensions)
+* [headerFileName](#headerFileName)
 * [hoistAwait](#hoistAwait)
 * [hoistPatternLet](#hoistPatternLet)
 * [hoistTry](#hoistTry)
@@ -37,6 +39,7 @@
 * [redundantFileprivate](#redundantFileprivate)
 * [redundantGet](#redundantGet)
 * [redundantInit](#redundantInit)
+* [redundantInternal](#redundantInternal)
 * [redundantLet](#redundantLet)
 * [redundantLetError](#redundantLetError)
 * [redundantNilInit](#redundantNilInit)
@@ -47,11 +50,13 @@
 * [redundantRawValues](#redundantRawValues)
 * [redundantReturn](#redundantReturn)
 * [redundantSelf](#redundantSelf)
+* [redundantStaticSelf](#redundantStaticSelf)
 * [redundantType](#redundantType)
 * [redundantVoidReturnType](#redundantVoidReturnType)
 * [semicolons](#semicolons)
 * [sortDeclarations](#sortDeclarations)
-* [sortedImports](#sortedImports)
+* [sortImports](#sortImports)
+* [sortTypealiases](#sortTypealiases)
 * [spaceAroundBraces](#spaceAroundBraces)
 * [spaceAroundBrackets](#spaceAroundBrackets)
 * [spaceAroundComments](#spaceAroundComments)
@@ -83,26 +88,29 @@
 
 * [acronyms](#acronyms)
 * [blankLineAfterImports](#blankLineAfterImports)
+* [blankLinesBetweenChainedFunctions](#blankLinesBetweenChainedFunctions)
 * [blankLinesBetweenImports](#blankLinesBetweenImports)
 * [blockComments](#blockComments)
 * [docComments](#docComments)
 * [isEmpty](#isEmpty)
 * [markTypes](#markTypes)
 * [organizeDeclarations](#organizeDeclarations)
-* [sortedSwitchCases](#sortedSwitchCases)
+* [sortSwitchCases](#sortSwitchCases)
 * [wrapConditionalBodies](#wrapConditionalBodies)
 * [wrapEnumCases](#wrapEnumCases)
 * [wrapSwitchCases](#wrapSwitchCases)
 
 # Deprecated Rules (do not use)
 
+* [sortedImports](#sortedImports)
+* [sortedSwitchCases](#sortedSwitchCases)
 * [specifiers](#specifiers)
 
 ----------
 
 ## acronyms
 
-Capitalizes acronyms when the first character is capitalized.
+Capitalize acronyms when the first character is capitalized.
 
 Option | Description
 --- | ---
@@ -174,6 +182,11 @@ swift version is set to 4.1 or above.
 
 </details>
 <br/>
+
+## applicationMain
+
+Replace obsolete @UIApplicationMain and @NSApplicationMain attributes
+with @main for Swift 5.3 and above.
 
 ## assertionFailures
 
@@ -331,6 +344,10 @@ Option | Description
 </details>
 <br/>
 
+## blankLinesBetweenChainedFunctions
+
+Remove blank lines between chained functions but keep the linebreaks.
+
 ## blankLinesBetweenImports
 
 Remove blank lines between import statements.
@@ -387,7 +404,7 @@ declarations.
 
 ## blockComments
 
-Changes block comments to single line comments.
+Convert block comments to consecutive single line comments.
 
 <details>
 <summary>Examples</summary>
@@ -524,7 +541,7 @@ Replace consecutive spaces with a single space.
 
 ## docComments
 
-Use doc comments for comments preceding declarations.
+Use doc comments for API declarations, otherwise use regular comments.
 
 <details>
 <summary>Examples</summary>
@@ -654,7 +671,7 @@ Option | Description
 
 ## enumNamespaces
 
-Converts types used for hosting only static members into enums (an empty enum is
+Convert types used for hosting only static members into enums (an empty enum is
 the canonical way to create a namespace in Swift as it can't be instantiated).
 
 Option | Description
@@ -743,8 +760,8 @@ Token | Description
 
 ## genericExtensions
 
-When extending generic types, use angle brackets (`extension Array<Foo>`)
-instead of generic type constraints (`extension Array where Element == Foo`).
+Use angle brackets (`extension Array<Foo>`) for generic type extensions
+instead of type constraints (`extension Array where Element == Foo`).
 
 Option | Description
 --- | ---
@@ -783,6 +800,10 @@ Option | Description
 
 </details>
 <br/>
+
+## headerFileName
+
+Ensure file name in header comment matches the actual file name.
 
 ## hoistAwait
 
@@ -997,7 +1018,7 @@ Option | Description
 
 ## markTypes
 
-Adds a mark comment before top-level types and extensions.
+Add a MARK comment before top-level types and extensions.
 
 Option | Description
 --- | ---
@@ -1099,7 +1120,7 @@ primary associated types for common standard library types, so definitions like
 
 Option | Description
 --- | ---
-`--someAny` | Use `some Any` types: "true" (default) or "false"
+`--someany` | Use `some Any` types: "true" (default) or "false"
 
 <details>
 <summary>Examples</summary>
@@ -1120,7 +1141,7 @@ Option | Description
       print(value)
   }
 
-// With `--someAny enabled` (the default)
+// With `--someany enabled` (the default)
 - func handle<T>(_ value: T) {
 + func handle(_ value: some Any) {
       print(value)
@@ -1132,7 +1153,7 @@ Option | Description
 
 ## organizeDeclarations
 
-Organizes declarations within class, struct, enum, actor, and extension bodies.
+Organize declarations within class, struct, enum, actor, and extension bodies.
 
 Option | Description
 --- | ---
@@ -1367,6 +1388,32 @@ Remove explicit `init` if not required.
 </details>
 <br/>
 
+## redundantInternal
+
+Remove redundant internal access control.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- internal class Foo {
++ class Foo {
+-     internal let bar: String
++     let bar: String
+
+-     internal func baaz() {}
++     func baaz() {}
+
+-     internal init() {
++     init() {
+          bar = "bar"
+      }
+  }
+```
+
+</details>
+<br/>
+
 ## redundantLet
 
 Remove redundant `let`/`var` from ignored variables.
@@ -1449,7 +1496,7 @@ Remove redundant `@objc` annotations.
 
 ## redundantOptionalBinding
 
-Removes redundant identifiers in optional binding conditions.
+Remove redundant identifiers in optional binding conditions.
 
 <details>
 <summary>Examples</summary>
@@ -1628,6 +1675,10 @@ by using `--self init-only`:
 </details>
 <br/>
 
+## redundantStaticSelf
+
+Remove explicit `Self` where applicable.
+
 ## redundantType
 
 Remove redundant type from variable declarations.
@@ -1786,7 +1837,7 @@ and declarations between // swiftformat:sort:begin and
 </details>
 <br/>
 
-## sortedImports
+## sortImports
 
 Sort import statements alphabetically.
 
@@ -1822,9 +1873,44 @@ Option | Description
 </details>
 <br/>
 
+## sortSwitchCases
+
+Sort switch cases alphabetically.
+
+## sortTypealiases
+
+Sort protocol composition typealiases alphabetically.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- typealias Placeholders = Foo & Bar & Baaz & Quux
++ typealias Placeholders = Baaz & Bar & Foo & Quux
+
+  typealias Dependencies
+-     = FooProviding
++     = BaazProviding
+      & BarProviding
+-     & BaazProviding
++     & FooProviding
+      & QuuxProviding
+```
+
+</details>
+<br/>
+
+## sortedImports
+
+Sort import statements alphabetically.
+
+*Note: sortedImports rule is deprecated. Use sortImports instead.*
+
 ## sortedSwitchCases
 
-Sorts switch cases alphabetically.
+Sort switch cases alphabetically.
+
+*Note: sortedSwitchCases rule is deprecated. Use sortSwitchCases instead.*
 
 ## spaceAroundBraces
 
@@ -2433,7 +2519,7 @@ Wrap the bodies of inline conditional statements onto a new line.
 
 ## wrapEnumCases
 
-Writes one enum case per line.
+Rewrite comma-delimited enum cases to one case per line.
 
 Option | Description
 --- | ---
@@ -2526,7 +2612,7 @@ Wrap single line `//` comments that exceed the specified `--maxwidth`.
 
 ## wrapSwitchCases
 
-Writes one switch case per line.
+Wrap comma-delimited switch cases onto multiple lines.
 
 <details>
 <summary>Examples</summary>

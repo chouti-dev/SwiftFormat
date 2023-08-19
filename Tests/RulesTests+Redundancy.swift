@@ -1724,7 +1724,7 @@ class RedundancyTests: RulesTests {
     func testNoRemoveLazyPublicPrivateSetVarNilInit() {
         let input = "lazy private(set) public var foo: Int? = nil"
         testFormatting(for: input, rule: FormatRules.redundantNilInit,
-                       exclude: ["modifierOrder", "specifiers"])
+                       exclude: ["modifierOrder"])
     }
 
     func testNoRemoveCodableNilInit() {
@@ -2495,6 +2495,17 @@ class RedundancyTests: RulesTests {
                        options: FormatOptions(swiftVersion: "5.1"))
     }
 
+    func testDisableNextRedundantReturn() {
+        let input = """
+        func foo() -> Foo {
+            // swiftformat:disable:next redundantReturn
+            return Foo()
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.1")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options)
+    }
+
     func testRedundantIfStatementReturnSwift5_8() {
         let input = """
         func foo(condition: Bool) -> String {
@@ -2669,6 +2680,35 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
     }
 
+    func testRedundantSwitchStatementReturnInFunctionWithComment() {
+        let input = """
+        func foo(condition: Bool) -> String {
+            switch condition {
+            case true:
+                // foo
+                return "foo"
+            default:
+                /* bar */
+                return "bar"
+            }
+        }
+        """
+        let output = """
+        func foo(condition: Bool) -> String {
+            switch condition {
+            case true:
+                // foo
+                "foo"
+            default:
+                /* bar */
+                "bar"
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+    }
+
     func testNonRedundantSwitchStatementReturnInFunctionWithDefault() {
         let input = """
         func foo(condition: Bool) -> String {
@@ -2681,6 +2721,36 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.8")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testNonRedundantSwitchStatementReturnInFunctionWithFallthrough() {
+        let input = """
+        func foo(condition: Bool) -> String {
+            switch condition {
+            case true:
+                fallthrough
+            case false:
+                return "bar"
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testVoidReturnNotStrippedFromSwitch() {
+        let input = """
+        func foo(condition: Bool) {
+            switch condition {
+            case true:
+                print("foo")
+            case false:
+                return
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
         testFormatting(for: input, rule: FormatRules.redundantReturn, options: options)
     }
 
@@ -2720,6 +2790,128 @@ class RedundancyTests: RulesTests {
                 }
             case false:
                 "quux"
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testRedundantSwitchStatementReturnWithAssociatedValueMatchingInFunction() {
+        let input = """
+        func test(_ value: SomeEnum) -> String {
+            switch value {
+            case let .first(str):
+                return "first \\(str)"
+            case .second("str"):
+                return "second"
+            default:
+                return "default"
+            }
+        }
+        """
+        let output = """
+        func test(_ value: SomeEnum) -> String {
+            switch value {
+            case let .first(str):
+                "first \\(str)"
+            case .second("str"):
+                "second"
+            default:
+                "default"
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testRedundantReturnDoesntFailToTerminateOnLongSwitch() {
+        let input = """
+        func test(_ value: SomeEnum) -> String {
+            switch value {
+            case .one:
+                return ""
+            case .two:
+                return ""
+            case .three:
+                return ""
+            case .four:
+                return ""
+            case .five:
+                return ""
+            case .six:
+                return ""
+            case .seven:
+                return ""
+            case .eight:
+                return ""
+            case .nine:
+                return ""
+            case .ten:
+                return ""
+            case .eleven:
+                return ""
+            case .twelve:
+                return ""
+            case .thirteen:
+                return ""
+            case .fourteen:
+                return ""
+            case .fifteen:
+                return ""
+            case .sixteen:
+                return ""
+            case .seventeen:
+                return ""
+            case .eighteen:
+                return ""
+            case .nineteen:
+                return ""
+            }
+        }
+        """
+        let output = """
+        func test(_ value: SomeEnum) -> String {
+            switch value {
+            case .one:
+                ""
+            case .two:
+                ""
+            case .three:
+                ""
+            case .four:
+                ""
+            case .five:
+                ""
+            case .six:
+                ""
+            case .seven:
+                ""
+            case .eight:
+                ""
+            case .nine:
+                ""
+            case .ten:
+                ""
+            case .eleven:
+                ""
+            case .twelve:
+                ""
+            case .thirteen:
+                ""
+            case .fourteen:
+                ""
+            case .fifteen:
+                ""
+            case .sixteen:
+                ""
+            case .seventeen:
+                ""
+            case .eighteen:
+                ""
+            case .nineteen:
+                ""
             }
         }
         """
@@ -3304,7 +3496,7 @@ class RedundancyTests: RulesTests {
         let input = "class Foo {\n    class private func foo() {\n        func bar() { self.foo() }\n    }\n}"
         let output = "class Foo {\n    class private func foo() {\n        func bar() { foo() }\n    }\n}"
         testFormatting(for: input, output, rule: FormatRules.redundantSelf,
-                       exclude: ["modifierOrder", "specifiers"])
+                       exclude: ["modifierOrder"])
     }
 
     func testNoRemoveSelfInClassFunction() {
@@ -5368,6 +5560,21 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
     }
 
+    func testBodilessFunctionDoesntBreakParser() {
+        let input = """
+        @_silgen_name("foo")
+        func foo(_: CFString, _: CFTypeRef) -> Int?
+
+        enum Bar {
+            static func baz() {
+                fatalError()
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
     // explicitSelf = .initOnly
 
     func testPreserveSelfInsideClassInit() {
@@ -6092,6 +6299,222 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantSelf)
     }
 
+    // MARK: - redundantStaticSelf
+
+    func testRedundantStaticSelfInStaticVar() {
+        let input = "enum E { static var x: Int { Self.y } }"
+        let output = "enum E { static var x: Int { y } }"
+        testFormatting(for: input, output, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testRedundantStaticSelfInStaticMethod() {
+        let input = "enum E { static func foo() { Self.bar() } }"
+        let output = "enum E { static func foo() { bar() } }"
+        testFormatting(for: input, output, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testRedundantStaticSelfOnNextLine() {
+        let input = """
+        enum E {
+            static func foo() {
+                Self
+                    .bar()
+            }
+        }
+        """
+        let output = """
+        enum E {
+            static func foo() {
+                bar()
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testRedundantStaticSelfWithReturn() {
+        let input = "enum E { static func foo() { return Self.bar() } }"
+        let output = "enum E { static func foo() { return bar() } }"
+        testFormatting(for: input, output, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testRedundantStaticSelfInConditional() {
+        let input = """
+        enum E {
+            static func foo() {
+                if Bool.random() {
+                    Self.bar()
+                }
+            }
+        }
+        """
+        let output = """
+        enum E {
+            static func foo() {
+                if Bool.random() {
+                    bar()
+                }
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testRedundantStaticSelfInNestedFunction() {
+        let input = """
+        enum E {
+            static func foo() {
+                func bar() {
+                    Self.foo()
+                }
+            }
+        }
+        """
+        let output = """
+        enum E {
+            static func foo() {
+                func bar() {
+                    foo()
+                }
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testRedundantStaticSelfInNestedType() {
+        let input = """
+        enum Outer {
+            enum Inner {
+                static func foo() {}
+                static func bar() { Self.foo() }
+            }
+        }
+        """
+        let output = """
+        enum Outer {
+            enum Inner {
+                static func foo() {}
+                static func bar() { foo() }
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testStaticSelfNotRemovedWhenUsedAsImplicitInitializer() {
+        let input = "enum E { static func foo() { Self().bar() } }"
+        testFormatting(for: input, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testStaticSelfNotRemovedWhenUsedAsExplicitInitializer() {
+        let input = "enum E { static func foo() { Self.init().bar() } }"
+        testFormatting(for: input, rule: FormatRules.redundantStaticSelf, exclude: ["redundantInit"])
+    }
+
+    func testPreservesStaticSelfInFunctionAfterStaticVar() {
+        let input = """
+        enum MyFeatureCacheStrategy {
+            case networkOnly
+            case cacheFirst
+
+            static let defaultCacheAge: TimeInterval = .minutes(5)
+
+            func requestStrategy<Outcome>() -> SingleRequestStrategy<Outcome> {
+                switch self {
+                case .networkOnly:
+                    return .networkOnly(writeResultToCache: true)
+                case .cacheFirst:
+                    return .cacheFirst(maxCacheAge: Self.defaultCacheAge)
+                }
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testPreserveStaticSelfInInstanceFunction() {
+        let input = """
+        enum Foo {
+            static var value = 0
+
+            func f() {
+                Self.value = value
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testPreserveStaticSelfForShadowedProperty() {
+        let input = """
+        enum Foo {
+            static var value = 0
+
+            static func f(value: Int) {
+                Self.value = value
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testPreserveStaticSelfInGetter() {
+        let input = """
+        enum Foo {
+            static let foo: String = "foo"
+
+            var sharedFoo: String {
+                Self.foo
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testRemoveStaticSelfInStaticGetter() {
+        let input = """
+        public enum Foo {
+            static let foo: String = "foo"
+
+            static var getFoo: String {
+                Self.foo
+            }
+        }
+        """
+        let output = """
+        public enum Foo {
+            static let foo: String = "foo"
+
+            static var getFoo: String {
+                foo
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testPreserveStaticSelfInGuardLet() {
+        let input = """
+        class LocationDeeplink: Deeplink {
+            convenience init?(warnRegion: String) {
+                guard let value = Self.location(for: warnRegion) else {
+                    return nil
+                }
+                self.init(location: value)
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantStaticSelf)
+    }
+
+    func testPreserveStaticSelfInSingleLineClassInit() {
+        let input = """
+        class A { static let defaultName = "A"; let name: String; init() { name = Self.defaultName }}
+        """
+        testFormatting(for: input, rule: FormatRules.redundantStaticSelf)
+    }
+
     // MARK: - semicolons
 
     func testSemicolonRemovedAtEndOfLine() {
@@ -6768,7 +7191,7 @@ class RedundancyTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.unusedArguments,
-                       exclude: ["sortedSwitchCases"])
+                       exclude: ["sortSwitchCases"])
     }
 
     func testTryArgumentNotMarkedUnused() {
@@ -7702,5 +8125,83 @@ class RedundancyTests: RulesTests {
 
         let options = FormatOptions(swiftVersion: "5.7")
         testFormatting(for: input, rule: FormatRules.redundantOptionalBinding, options: options)
+    }
+
+    // MARK: - redundantInternal
+
+    func testRemoveRedundantInternalACL() {
+        let input = """
+        internal class Foo {
+            internal let bar: String
+
+            internal func baaz() {}
+
+            internal init() {
+                bar = "bar"
+            }
+        }
+        """
+
+        let output = """
+        class Foo {
+            let bar: String
+
+            func baaz() {}
+
+            init() {
+                bar = "bar"
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.redundantInternal)
+    }
+
+    func testPreserveInternalInNonInternalExtensionExtension() {
+        let input = """
+        extension Foo {
+            /// internal is redundant here since the extension is internal
+            internal func bar() {}
+
+            public func baaz() {}
+
+            /// internal is redundant here since the extension is internal
+            internal func bar() {}
+        }
+
+        public extension Foo {
+            /// internal is not redundant here since the extension is public
+            internal func bar() {}
+
+            public func baaz() {}
+
+            /// internal is not redundant here since the extension is public
+            internal func bar() {}
+        }
+        """
+
+        let output = """
+        extension Foo {
+            /// internal is redundant here since the extension is internal
+            func bar() {}
+
+            public func baaz() {}
+
+            /// internal is redundant here since the extension is internal
+            func bar() {}
+        }
+
+        public extension Foo {
+            /// internal is not redundant here since the extension is public
+            internal func bar() {}
+
+            public func baaz() {}
+
+            /// internal is not redundant here since the extension is public
+            internal func bar() {}
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.redundantInternal, exclude: ["redundantExtensionACL"])
     }
 }

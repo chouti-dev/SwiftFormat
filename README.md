@@ -14,7 +14,7 @@ Created by Alice on 07/08/2018.
 [![PayPal](https://img.shields.io/badge/paypal-donate-blue.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=9ZGWNK5FEZFF6&source=url)
 [![Build](https://github.com/nicklockwood/SwiftFormat/actions/workflows/build.yml/badge.svg)](https://github.com/nicklockwood/SwiftFormat/actions/workflows/build.yml)
 [![Codecov](https://codecov.io/gh/nicklockwood/SwiftFormat/graphs/badge.svg)](https://codecov.io/gh/nicklockwood/SwiftFormat)
-[![Swift 4.2](https://img.shields.io/badge/swift-4.2-red.svg?style=flat)](https://developer.apple.com/swift)
+[![Swift 5.1](https://img.shields.io/badge/swift-5.1-red.svg?style=flat)](https://developer.apple.com/swift)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](https://opensource.org/licenses/MIT)
 [![Mastodon](https://img.shields.io/badge/mastodon-@nicklockwood@mastodon.social-636dff.svg)](https://mastodon.social/@nicklockwood)
 
@@ -103,7 +103,7 @@ $ brew upgrade swiftformat
 Alternatively, you can install the tool on macOS or Linux by using [Mint](https://github.com/yonaskolb/Mint) as follows:
 
 ```bash
-$ mint install nicklockwood/SwiftFormat
+$ mint install nicklockwood/SwiftFormat@main
 ```
 
 Or if you prefer, you can check out and build SwiftFormat manually on macOS, Linux or Windows as follows:
@@ -518,7 +518,7 @@ The options available in SwiftFormat can be displayed using the `--options` comm
 
 Rules are configured by adding `--[option_name] [value]` to your command-line arguments, or by creating a `.swiftformat` [config file](#config-file) and placing it in your project directory.
 
-A given option may affect multiple rules. Use `--ruleinfo [rule_name]` command for details about which options affect a given rule, or see the [Rules.md](https://github.com/nicklockwood/SwiftFormat/blob/master/Rules.md) file.
+A given option may affect multiple rules. Use `--ruleinfo [rule_name]` command for details about which options affect a given rule, or see the [Rules.md](https://github.com/nicklockwood/SwiftFormat/blob/main/Rules.md) file.
 
 You can configure options for specific files or code ranges by using `swiftformat:options` directive in comments inside your Swift file. To temporarily set one or more options inside a source file, use:
 
@@ -537,7 +537,7 @@ doTheThing(); print("Did the thing")
 Rules
 -----
 
-SwiftFormat includes over 50 rules, and new ones are added all the time. An up-to-date list can be found in [Rules.md](https://github.com/nicklockwood/SwiftFormat/blob/master/Rules.md) along with documentation for how they are used.
+SwiftFormat includes over 50 rules, and new ones are added all the time. An up-to-date list can be found in [Rules.md](https://github.com/nicklockwood/SwiftFormat/blob/main/Rules.md) along with documentation for how they are used.
 
 The list of available rules can be displayed within the command-line app using the `--rules` argument. Rules can be either enabled or disabled. Most are enabled by default. Disabled rules are marked with "(disabled)" when displayed using `--rules`.
 

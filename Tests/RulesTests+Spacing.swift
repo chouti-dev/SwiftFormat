@@ -1,5 +1,5 @@
 //
-//  SpacingRulesTests.swift
+//  RulesTests+Spacing.swift
 //  SwiftFormatTests
 //
 //  Created by Nick Lockwood on 04/09/2020.
@@ -943,6 +943,13 @@ class SpacingTests: RulesTests {
         let input = "let a = b! * c"
         let output = "let a = b!*c"
         let options = FormatOptions(noSpaceOperators: ["*"])
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators, options: options)
+    }
+
+    func testNoAddSpaceAroundNoSpaceSlash() {
+        let input = "let a = b/c+d"
+        let output = "let a = b/c + d"
+        let options = FormatOptions(noSpaceOperators: ["/"])
         testFormatting(for: input, output, rule: FormatRules.spaceAroundOperators, options: options)
     }
 

@@ -132,6 +132,16 @@ class ArgumentsTests: XCTestCase {
         ]), output)
     }
 
+    func testPreprocessArgumentsNormalizesKeyCase() {
+        let input = ["", "--Help", "-VERSION", "-foo", "BaR"]
+        let output = ["0": "", "help": "", "version": "", "foo": "BaR"]
+        XCTAssertEqual(try preprocessArguments(input, [
+            "help",
+            "version",
+            "foo",
+        ]), output)
+    }
+
     func testEmptyArgsAreRecognized() {
         let input = ["", "--help", "--version"]
         let output = ["0": "", "help": "", "version": ""]
@@ -745,7 +755,7 @@ class ArgumentsTests: XCTestCase {
 
     func testParseOptionAsRuleThrows() {
         XCTAssertThrowsError(try parseRules("importgrouping")) { error in
-            XCTAssert("\(error)".contains("'sortedImports'"))
+            XCTAssert("\(error)".contains("'sortImports'"))
         }
     }
 
@@ -794,5 +804,53 @@ class ArgumentsTests: XCTestCase {
         XCTAssertEqual("foo".editDistance(from: ""), 3)
         XCTAssertEqual("".editDistance(from: "foo"), 3)
         XCTAssertEqual("".editDistance(from: ""), 0)
+    }
+
+    // MARK: Warnings
+
+    func testDeprecatedRuleWarning() {
+        let warnings = warningsForArguments(["rules": "specifiers"])
+        XCTAssertEqual(warnings.count, 1)
+        XCTAssert((warnings.first ?? "").contains("rule is deprecated"))
+    }
+
+    func testDeprecatedOptionWarning() {
+        let warnings = warningsForArguments(["insertlines": "enabled"])
+        XCTAssertEqual(warnings.count, 1)
+        XCTAssert((warnings.first ?? "").contains("option is deprecated"))
+    }
+
+    func testUnusedOptionWarning() {
+        let warnings = warningsForArguments([
+            "disable": "sortImports",
+            "importgrouping": "testable-bottom",
+        ])
+        XCTAssertEqual(warnings.count, 1)
+        XCTAssert((warnings.first ?? "").contains("option has no effect"))
+    }
+
+    func testLintOnlyRuleDoesntTriggerUnusedOptionWarning() {
+        let warnings = warningsForArguments([
+            "lintonly": "sortImports",
+            "importgrouping": "testable-bottom",
+        ])
+        XCTAssertEqual(warnings, [])
+    }
+
+    func testLintOnlyRuleDoesntTriggerUnusedOptionWarning2() throws {
+        let options = try Options([
+            "lintonly": "sortImports",
+            "importgrouping": "testable-bottom",
+        ], in: "")
+        let arguments = argumentsFor(options, excludingDefaults: true)
+
+        // This is a bug / known issue - since --lintonly rules aren't tracked through
+        // conversion to Options, resulting in a false positive for 'option has no effect'
+        let warnings = warningsForArguments(arguments)
+        XCTAssertEqual(warnings.count, 1)
+        XCTAssert((warnings.first ?? "").contains("option has no effect"))
+
+        // This is the solution to the aforementioned bug
+        XCTAssertEqual(warningsForArguments(arguments, ignoreUnusedOptions: true), [])
     }
 }

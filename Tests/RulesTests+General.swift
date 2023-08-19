@@ -114,7 +114,7 @@ class GeneralTests: RulesTests {
         }
         """
         testFormatting(for: input, output, rule: FormatRules.initCoderUnavailable,
-                       exclude: ["modifierOrder", "specifiers"])
+                       exclude: ["modifierOrder"])
     }
 
     // MARK: - trailingCommas
@@ -734,6 +734,23 @@ class GeneralTests: RulesTests {
         """
         let options = FormatOptions(fileHeader: "")
         testFormatting(for: input, rule: FormatRules.fileHeader, options: options)
+    }
+
+    // MARK: - headerFileName
+
+    func testHeaderFileNameReplaced() {
+        let input = """
+        // MyFile.swift
+
+        let foo = bar
+        """
+        let output = """
+        // YourFile.swift
+
+        let foo = bar
+        """
+        let options = FormatOptions(fileInfo: FileInfo(filePath: "~/YourFile.swift"))
+        testFormatting(for: input, output, rule: FormatRules.headerFileName, options: options)
     }
 
     // MARK: - strongOutlets

@@ -1,14 +1,46 @@
 # Change Log
 
+## [0.52.2](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.52.2) (2023-08-19)
+
+- Fixed static `Self` being incorrectly removed in `let` or `if let` expressions
+- Fixed `// swiftformat:disable` directive not working for `redundantReturn` rule
+- Fixed spurious assertion failure
+
+## [0.52.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.52.1) (2023-08-17)
+
+- Fixed various bugs and edge cases in `redundantStaticSelf` rule
+- Fixed bug with `redundantReturn` rule for switch statements containing `fallthrough`
+- Fixed `redundantReturn` rule stripping required return from `Void` switch statements
+- Fixed some more cases where prefix `/` operator could be mistaken for a regex literal
+- The `redundantReturn` rule now handles statements containing comments or raw strings
+- Fixed spurious warning for unused options when using `--lintonly` rules
+- Including `/` operator in `--nospaceoperators` or `--nowrapoperators` now works again
+
+## [0.52.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.52.0) (2023-08-13)
+
+- Added `redundantInternal` rule to remove redundant `internal` access modifiers
+- Added `sortTypealiases` rule to sort `typealias` types alphabetically
+- Added `headerFileName` rule to ensure filename in header comment matches actual file
+- Added `redundantStaticSelf` rule to remove redundant `self` inside static functions
+- Added `blankLinesBetweenChainedFunctions` rule to remove blank lines inside function chains
+- Added `applicationMain` rule to remove obsolete `@UIApplicationMain` and `@NSApplicationMain` attributes
+- Renamed `sortedSwitchCases` rule to `sortSwitchCases` for consistency
+- Renamed `sortedImports` rule to `sortImports` for consistency
+- Redundant `return` is now correctly removed in switch cases with associated values
+- Fixed failure to terminate when removing returns from long switch statement
+- Fixed spurious "unexpected static" error in `redundantSelf` rule
+- Deliberate blank line before `else` statement is now preserved
+- Rule options are now case-insensitive
+
 ## [0.51.15](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.51.15) (2023-08-06)
-
-- This release actually includes the fixes listed for 0.51.14 (these were accidentally reverted in a merge error).
-
-## [0.51.14](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.51.14) (2023-08-05)
 
 - Fixed regression in `unusedArguments` rule that caused used parameters to be marked unused
 - Fixed some additional cases where regex literal was mistaken for `/` operator
 - Vertical tab and form feed characters in source file no longer cause spurious errors
+
+## [0.51.14](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.51.14) (2023-08-05)
+
+- Withdrawn
 
 ## [0.51.13](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.51.13) (2023-07-18)
 

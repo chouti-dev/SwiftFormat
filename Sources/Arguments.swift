@@ -157,7 +157,7 @@ func preprocessArguments(_ args: [String], _ names: [String]) throws -> [String:
     for arg in args {
         if arg.hasPrefix("--") {
             // Long argument names
-            let key = String(arg.unicodeScalars.dropFirst(2))
+            let key = String(arg.unicodeScalars.dropFirst(2)).lowercased()
             guard names.contains(key) else {
                 guard let match = key.bestMatches(in: names).first else {
                     throw FormatError.options("Unknown option --\(key)")
@@ -169,7 +169,7 @@ func preprocessArguments(_ args: [String], _ names: [String]) throws -> [String:
             continue
         } else if arg.hasPrefix("-") {
             // Short argument names
-            let flag = String(arg.unicodeScalars.dropFirst())
+            let flag = String(arg.unicodeScalars.dropFirst()).lowercased()
             guard let match = names.first(where: { $0.hasPrefix(flag) }) else {
                 throw FormatError.options("Unknown flag -\(flag)")
             }
@@ -602,7 +602,7 @@ public func formatOptionsFor(_ args: [String: String]) throws -> FormatOptions? 
 }
 
 // Get deprecation warnings from a set of arguments
-func warningsForArguments(_ args: [String: String]) -> [String] {
+func warningsForArguments(_ args: [String: String], ignoreUnusedOptions: Bool = false) -> [String] {
     var warnings = [String]()
     for option in Descriptors.all {
         if args[option.argumentName] != nil, let message = option.deprecationMessage {
@@ -614,7 +614,7 @@ func warningsForArguments(_ args: [String: String]) -> [String] {
             warnings.append("\(name) rule is deprecated. \(message)")
         }
     }
-    if let rules = try? rulesFor(args, lint: true) {
+    if !ignoreUnusedOptions, let rules = try? rulesFor(args, lint: true) {
         for arg in args.keys where formattingArguments.contains(arg) {
             if !rules.contains(where: {
                 guard let rule = FormatRules.byName[$0] else {

@@ -611,7 +611,7 @@ class HoistingTests: RulesTests {
         let input = "switch foo {\ncase .foo(let bar), .bar(let bar):\n}"
         let output = "switch foo {\ncase let .foo(bar), let .bar(bar):\n}"
         testFormatting(for: input, output, rule: FormatRules.hoistPatternLet,
-                       exclude: ["wrapSwitchCases", "sortedSwitchCases"])
+                       exclude: ["wrapSwitchCases", "sortSwitchCases"])
     }
 
     func testHoistNewlineSeparatedSwitchCaseLets() {
@@ -630,7 +630,7 @@ class HoistingTests: RulesTests {
         """
 
         testFormatting(for: input, output, rule: FormatRules.hoistPatternLet,
-                       exclude: ["wrapSwitchCases", "sortedSwitchCases"])
+                       exclude: ["wrapSwitchCases", "sortSwitchCases"])
     }
 
     func testHoistCatchLet() {
@@ -743,11 +743,12 @@ class HoistingTests: RulesTests {
 
     func testNoUnhoistGuardCaseLetFollowedByFunction() {
         let input = """
-        guard case let foo as Foo = bar { else return }
+        guard case let foo as Foo = bar else { return }
         foo.bar(foo: bar)
         """
         let options = FormatOptions(hoistPatternLet: false)
-        testFormatting(for: input, rule: FormatRules.hoistPatternLet, options: options)
+        testFormatting(for: input, rule: FormatRules.hoistPatternLet, options: options,
+                       exclude: ["wrapConditionalBodies"])
     }
 
     func testNoUnhoistSwitchCaseLetFollowedByWhere() {
@@ -828,7 +829,7 @@ class HoistingTests: RulesTests {
         let output = "switch foo {\ncase .foo(let bar), .bar(let bar):\n}"
         let options = FormatOptions(hoistPatternLet: false)
         testFormatting(for: input, output, rule: FormatRules.hoistPatternLet, options: options,
-                       exclude: ["wrapSwitchCases", "sortedSwitchCases"])
+                       exclude: ["wrapSwitchCases", "sortSwitchCases"])
     }
 
     func testUnhoistCommaSeparatedSwitchCaseLets2() {
@@ -836,7 +837,7 @@ class HoistingTests: RulesTests {
         let output = "switch foo {\ncase Foo.foo(let bar), Foo.bar(let bar):\n}"
         let options = FormatOptions(hoistPatternLet: false)
         testFormatting(for: input, output, rule: FormatRules.hoistPatternLet, options: options,
-                       exclude: ["wrapSwitchCases", "sortedSwitchCases"])
+                       exclude: ["wrapSwitchCases", "sortSwitchCases"])
     }
 
     func testUnhoistCatchLet() {
@@ -886,7 +887,7 @@ class HoistingTests: RulesTests {
 
         let options = FormatOptions(hoistPatternLet: false)
         testFormatting(for: input, output, rule: FormatRules.hoistPatternLet,
-                       options: options, exclude: ["wrapSwitchCases", "sortedSwitchCases"])
+                       options: options, exclude: ["wrapSwitchCases", "sortSwitchCases"])
     }
 
     func testMultilineGuardLet() {

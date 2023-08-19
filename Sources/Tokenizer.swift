@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.51.15
+//  Version 0.52.2
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -46,8 +46,8 @@ private let swiftKeywords = Set([
     "class", "try", "guard", "case", "for", "init", "extension", "private", "static",
     "fileprivate", "internal", "switch", "do", "catch", "enum", "struct", "throws",
     "throw", "typealias", "where", "break", "deinit", "subscript", "is", "while",
-    "associatedtype", "inout", "continue", "operator", "repeat", "rethrows",
-    "default", "protocol", "defer", "await", "consume", "discard",
+    "associatedtype", "inout", "continue", "fallthrough", "operator", "repeat",
+    "rethrows", "default", "protocol", "defer", "await", "consume", "discard",
     /* Any, Self, self, super, nil, true, false */
 ])
 
@@ -1159,6 +1159,12 @@ public func tokenize(_ source: String) -> [Token] {
                 string.append("\\" + hashes)
                 continue
             case delimiter where !escaped && characters.readString(hashes):
+                if regex, hashCount == 0, ["/", "*"].contains(characters.first ?? "\n") ||
+                    string.unicodeScalars.last?.isSpace == true
+                {
+                    // Encountered a comment, so this isn't a regex literal after all
+                    return
+                }
                 if string != "" {
                     tokens.append(.stringBody(string))
                 }
@@ -1875,7 +1881,7 @@ public func tokenize(_ source: String) -> [Token] {
         token = tokens[count - 1]
         switch token {
         case .startOfScope("/"):
-            if let next = characters.first, next.isSpaceOrLinebreak {
+            if characters.first.map({ $0.isSpaceOrLinebreak }) ?? true {
                 // Misidentified as regex
                 token = .operator("/", .none)
                 tokens[count - 1] = token
@@ -1955,11 +1961,6 @@ public func tokenize(_ source: String) -> [Token] {
             }
             break loop
         }
-    }
-
-    // Set final operator type
-    if let lastOperatorIndex = index(of: .operator, before: tokens.count) {
-        setOperatorType(at: lastOperatorIndex)
     }
 
     return tokens
