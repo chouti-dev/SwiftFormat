@@ -4303,7 +4303,6 @@ public struct _FormatRules {
         }
 
         var headerTokens = tokenize(header)
-        var lastHeaderTokenIndex = headerRange.endIndex - 1
         let endIndex = lastHeaderTokenIndex + headerTokens.count
         if formatter.tokens.endIndex > endIndex, headerTokens == Array(formatter.tokens[
             lastHeaderTokenIndex + 1 ... endIndex
