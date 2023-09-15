@@ -2802,7 +2802,9 @@ public struct _FormatRules {
                           default:
                               return false
                           }
-                      }) == nil
+                      }) == nil,
+                      formatter.index(in: i + 1 ..< closingIndex, where: { $0.isUnwrapOperator }) ?? closingIndex >=
+                      formatter.index(of: .nonSpace, before: closingIndex) ?? closingIndex - 1
                 else {
                     return
                 }
@@ -3137,10 +3139,11 @@ public struct _FormatRules {
                     return
                 }
             }
-            if formatter.index(of: .keyword("return"), after: i) != nil {
+            let endIndex = formatter.endOfScope(at: i)
+            if let endIndex = endIndex, formatter.tokens[i + 1 ..< endIndex].contains(.keyword("return")) {
                 return
             }
-            if formatter.next(.nonSpaceOrLinebreak, after: i) == .endOfScope("}"),
+            if formatter.index(of: .nonSpaceOrLinebreak, after: i) == endIndex,
                let startIndex = formatter.index(of: .nonSpaceOrLinebreak, before: i)
             {
                 formatter.removeTokens(in: startIndex + 1 ... i)

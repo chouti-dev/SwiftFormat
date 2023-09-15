@@ -84,6 +84,26 @@ class HoistingTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.hoistTry)
     }
 
+    func testHoistTryInsideStringInterpolation6() {
+        let input = #"""
+        """
+        let \(object.varName) =
+        \(tripleQuote)
+        \(try encode(object.object))
+        \(tripleQuote)
+        """
+        """#
+        let output = #"""
+        try """
+        let \(object.varName) =
+        \(tripleQuote)
+        \(encode(object.object))
+        \(tripleQuote)
+        """
+        """#
+        testFormatting(for: input, output, rule: FormatRules.hoistTry)
+    }
+
     func testHoistTryInsideArgument() {
         let input = """
         array.append(contentsOf: try await asyncFunction(param1: param1))
@@ -355,6 +375,26 @@ class HoistingTests: RulesTests {
     func testHoistTryAfterSubscript() {
         let input = "if foo[5].bar(try baz()) {}"
         let output = "if try foo[5].bar(baz()) {}"
+        testFormatting(for: input, output, rule: FormatRules.hoistTry)
+    }
+
+    func testHoistTryInsideGenericInit() {
+        let input = """
+        return Target<T>(
+            file: try parseFile(path: $0)
+        )
+        """
+        let output = """
+        return try Target<T>(
+            file: parseFile(path: $0)
+        )
+        """
+        testFormatting(for: input, output, rule: FormatRules.hoistTry)
+    }
+
+    func testHoistTryInsideArrayClosure() {
+        let input = "foo[bar](try parseFile(path: $0))"
+        let output = "try foo[bar](parseFile(path: $0))"
         testFormatting(for: input, output, rule: FormatRules.hoistTry)
     }
 
