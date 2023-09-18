@@ -2880,14 +2880,14 @@ class WrappingTests: RulesTests {
         let input = """
         func multilineFunction(
             foo _: String,
-            bar _: String) async throws -> String {}
+            bar _: String) async -> String {}
         """
 
         let output = """
         func multilineFunction(
             foo _: String,
             bar _: String)
-            async throws -> String {}
+            async -> String {}
         """
 
         let options = FormatOptions(
@@ -3697,7 +3697,6 @@ class WrappingTests: RulesTests {
             let quux = baz.quux
         {}
         """
-
         testFormatting(
             for: input, rules: [FormatRules.wrapArguments, FormatRules.indent],
             options: FormatOptions(closingParenOnSameLine: true, wrapConditions: .beforeFirst)
@@ -3721,7 +3720,6 @@ class WrappingTests: RulesTests {
         while let foo = foo,
               let bar = bar {}
         """
-
         let output = """
         if
           let foo = foo,
@@ -3742,9 +3740,8 @@ class WrappingTests: RulesTests {
           let foo = foo,
           let bar = bar {}
         """
-
         testFormatting(
-            for: input, [output], rules: [FormatRules.wrapArguments, FormatRules.indent],
+            for: input, output, rule: FormatRules.wrapArguments,
             options: FormatOptions(indent: "  ", wrapConditions: .beforeFirst),
             exclude: ["wrapConditionalBodies"]
         )
@@ -3766,9 +3763,8 @@ class WrappingTests: RulesTests {
         guard let foo = bar
         else {}
         """
-
         testFormatting(
-            for: input, rules: [FormatRules.wrapArguments, FormatRules.indent],
+            for: input, rule: FormatRules.wrapArguments,
             options: FormatOptions(indent: "  ", wrapConditions: .beforeFirst),
             exclude: ["elseOnSameLine", "wrapConditionalBodies"]
         )
@@ -3797,7 +3793,6 @@ class WrappingTests: RulesTests {
           let foo = foo,
           let bar = bar {}
         """
-
         let output = """
         if let foo = foo,
            let bar = bar,
@@ -3816,10 +3811,52 @@ class WrappingTests: RulesTests {
         while let foo = foo,
               let bar = bar {}
         """
+        testFormatting(
+            for: input, output, rule: FormatRules.wrapArguments,
+            options: FormatOptions(indent: "  ", wrapConditions: .afterFirst),
+            exclude: ["wrapConditionalBodies"]
+        )
+    }
 
+    func testWrapConditionsAfterFirstWhenFirstLineIsComment() {
+        let input = """
+        guard
+            // Apply this rule to any function-like declaration
+            ["func", "init", "subscript"].contains(keyword.string),
+            // Opaque generic parameter syntax is only supported in Swift 5.7+
+            formatter.options.swiftVersion >= "5.7",
+            // Validate that this is a generic method using angle bracket syntax,
+            // and find the indices for all of the key tokens
+            let paramListStartIndex = formatter.index(of: .startOfScope("("), after: keywordIndex),
+            let paramListEndIndex = formatter.endOfScope(at: paramListStartIndex),
+            let genericSignatureStartIndex = formatter.index(of: .startOfScope("<"), after: keywordIndex),
+            let genericSignatureEndIndex = formatter.endOfScope(at: genericSignatureStartIndex),
+            genericSignatureStartIndex < paramListStartIndex,
+            genericSignatureEndIndex < paramListStartIndex,
+            let openBraceIndex = formatter.index(of: .startOfScope("{"), after: paramListEndIndex),
+            let closeBraceIndex = formatter.endOfScope(at: openBraceIndex)
+        else { return }
+        """
+        let output = """
+        guard // Apply this rule to any function-like declaration
+            ["func", "init", "subscript"].contains(keyword.string),
+            // Opaque generic parameter syntax is only supported in Swift 5.7+
+            formatter.options.swiftVersion >= "5.7",
+            // Validate that this is a generic method using angle bracket syntax,
+            // and find the indices for all of the key tokens
+            let paramListStartIndex = formatter.index(of: .startOfScope("("), after: keywordIndex),
+            let paramListEndIndex = formatter.endOfScope(at: paramListStartIndex),
+            let genericSignatureStartIndex = formatter.index(of: .startOfScope("<"), after: keywordIndex),
+            let genericSignatureEndIndex = formatter.endOfScope(at: genericSignatureStartIndex),
+            genericSignatureStartIndex < paramListStartIndex,
+            genericSignatureEndIndex < paramListStartIndex,
+            let openBraceIndex = formatter.index(of: .startOfScope("{"), after: paramListEndIndex),
+            let closeBraceIndex = formatter.endOfScope(at: openBraceIndex)
+        else { return }
+        """
         testFormatting(
             for: input, [output], rules: [FormatRules.wrapArguments, FormatRules.indent],
-            options: FormatOptions(indent: "  ", wrapConditions: .afterFirst),
+            options: FormatOptions(wrapConditions: .afterFirst),
             exclude: ["wrapConditionalBodies"]
         )
     }

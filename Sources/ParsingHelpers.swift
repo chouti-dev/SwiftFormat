@@ -464,7 +464,7 @@ extension Formatter {
     /// the specified index is in a return type declaration.
     func startOfReturnType(at i: Int) -> Int? {
         guard let startIndex = indexOfLastSignificantKeyword(
-            at: i, excluding: ["throws", "rethrows", "async"]
+            at: i, excluding: ["throws", "rethrows"]
         ), ["func", "subscript"].contains(tokens[startIndex].string) else {
             return nil
         }
@@ -590,10 +590,10 @@ extension Formatter {
                     }
                 }
                 return false
-            case "class", "actor", "struct", "protocol", "enum", "extension",
+            case "class", "actor", "struct", "enum", "protocol", "extension",
                  "func", "subscript", "catch":
                 return false
-            case "throws", "rethrows", "async":
+            case "throws", "rethrows":
                 return next(
                     .nonSpaceOrLinebreak,
                     after: prevKeywordIndex
@@ -1040,7 +1040,7 @@ extension Formatter {
                 return false
             }
             if case let .identifier(name) = tokens[prevIndex], name.first?.isUppercase == true {
-                switch last(.nonSpaceOrComment, before: prevIndex) {
+                switch last(.nonSpaceOrCommentOrLinebreak, before: prevIndex) {
                 case .identifier("some")?, .delimiter?, .startOfScope?, .endOfScope?,
                      .operator(_, .infix)?, .operator(_, .prefix)?, nil:
                     return true
@@ -1447,7 +1447,7 @@ extension Formatter {
 
         /// Whether or not this declaration defines a type (a class, enum, etc, but not an extension)
         var definesType: Bool {
-            ["class", "actor", "enum", "protocol", "struct", "typealias"].contains(keyword)
+            ["class", "actor", "struct", "enum", "protocol", "typealias"].contains(keyword)
         }
 
         /// The name of this type or variable
@@ -1591,21 +1591,20 @@ extension Formatter {
             endOfDeclaration = linebreakSearchIndex + 1
         }
 
-        /// If there was another declaration after this one in the same scope,
-        /// then we know this declaration ends before that one starts
+        // If there was another declaration after this one in the same scope,
+        // then we know this declaration ends before that one starts
         if let endOfDeclaration = endOfDeclaration {
             return endOfDeclaration
         }
 
-        /// Otherwise this is the last declaration in the scope.
-        /// To know where this declaration ends we just have to know where
-        /// the parent scope ends.
-        ///  - We don't do this inside `parseDeclarations` itself since it handles this cases
-        if
-            fallBackToEndOfScope,
-            declarationKeywordIndex != 0,
-            let endOfParentScope = endOfScope(at: declarationKeywordIndex - 1),
-            let endOfDeclaration = index(of: .nonSpaceOrLinebreak, before: endOfParentScope)
+        // Otherwise this is the last declaration in the scope.
+        // To know where this declaration ends we just have to know where
+        // the parent scope ends.
+        //  - We don't do this inside `parseDeclarations` itself since it handles this cases
+        if fallBackToEndOfScope,
+           declarationKeywordIndex != 0,
+           let endOfParentScope = endOfScope(at: declarationKeywordIndex - 1),
+           let endOfDeclaration = index(of: .nonSpaceOrLinebreak, before: endOfParentScope)
         {
             return endOfDeclaration
         }
@@ -1640,7 +1639,7 @@ extension Formatter {
         return declarations.map { declaration in
             let declarationParser = Formatter(declaration.tokens)
 
-            /// Parses this declaration into a body of declarations separate from the start and end tokens
+            // Parses this declaration into a body of declarations separate from the start and end tokens
             func parseBody(in bodyRange: ClosedRange<Int>) -> (start: [Token], body: [Declaration], end: [Token]) {
                 var startTokens = declarationParser.tokens[...bodyRange.lowerBound]
                 var bodyTokens = declarationParser.tokens[bodyRange.lowerBound + 1 ..< bodyRange.upperBound]
@@ -1720,10 +1719,10 @@ extension Formatter {
     /// Returns the declaration scope (global, type, or local) that the
     /// given token index is contained by.
     func declarationScope(at i: Int) -> DeclarationScope {
-        /// Declarations which have `DeclarationScope.type`
+        // Declarations which have `DeclarationScope.type`
         let typeDeclarations = Set(["class", "actor", "struct", "enum", "extension"])
 
-        /// Declarations which have `DeclarationScope.local`
+        // Declarations which have `DeclarationScope.local`
         let localDeclarations = Set(["let", "var", "func", "subscript", "init", "deinit"])
 
         let allDeclarationScopes = typeDeclarations.union(localDeclarations)
@@ -1751,9 +1750,8 @@ extension Formatter {
 
         // If this declaration isn't within any scope,
         // it must be a global.
-        guard
-            let startOfScopeIndex = startOfScope,
-            let declarationTypeKeyword = lastToken(before: startOfScopeIndex, where: { allDeclarationScopes.contains($0.string) })
+        guard let startOfScopeIndex = startOfScope,
+              let declarationTypeKeyword = lastToken(before: startOfScopeIndex, where: { allDeclarationScopes.contains($0.string) })
         else {
             return .global
         }
@@ -1992,7 +1990,7 @@ extension Formatter {
         }
     }
 
-    // Range of tokens forming file header comment
+    /// Range of tokens forming file header comment
     var headerCommentTokenRange: Range<Int>? {
         guard !options.fragment else {
             return nil
@@ -2163,16 +2161,15 @@ extension Formatter {
             guard isEnumCase(at: i) else { return }
 
             var idx = i
-            while
-                let starOfCaseRangeIdx = index(of: .identifier, after: idx),
-                lastSignificantKeyword(at: starOfCaseRangeIdx) == "case",
-                let lastCaseIndex = lastIndex(of: .keyword("case"), in: i ..< starOfCaseRangeIdx),
-                lastCaseIndex == i,
-                let endOfCaseRangeIdx = index(
-                    after: starOfCaseRangeIdx,
-                    where: { $0 == .delimiter(",") || $0.isLinebreak }
-                ),
-                let endOfCaseRangeToken = token(at: endOfCaseRangeIdx)
+            while let starOfCaseRangeIdx = index(of: .identifier, after: idx),
+                  lastSignificantKeyword(at: starOfCaseRangeIdx) == "case",
+                  let lastCaseIndex = lastIndex(of: .keyword("case"), in: i ..< starOfCaseRangeIdx),
+                  lastCaseIndex == i,
+                  let endOfCaseRangeIdx = index(
+                      after: starOfCaseRangeIdx,
+                      where: { $0 == .delimiter(",") || $0.isLinebreak }
+                  ),
+                  let endOfCaseRangeToken = token(at: endOfCaseRangeIdx)
             {
                 let startOfScopeIdx = index(of: .startOfScope, before: starOfCaseRangeIdx) ?? 0
 
@@ -2197,32 +2194,30 @@ extension Formatter {
     func parseProtocolCompositionTypealias(at typealiasIndex: Int)
         -> (equalsIndex: Int, andTokenIndices: [Int], endIndex: Int)?
     {
-        guard
-            let equalsIndex = index(of: .operator("=", .infix), after: typealiasIndex),
-            // Any type can follow the equals index of a typealias,
-            // but we're specifically looking for protocol compositions.
-            //  - Valid composite protocols are strictly _only_ prootocol types
-            //    separated by `&` tokens. These always start with identifiers,
-            //    but can be generic (e.g. `Collection<Int>`).
-            //  - `&` tokens in types are also _only valid_ for composite protocol types,
-            //    so if we see one then we know this if what we're looking for.
-            // https://docs.swift.org/swift-book/ReferenceManual/Types.html#grammar_protocol-composition-type
-            let firstIdentifierIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: equalsIndex),
-            tokens[firstIdentifierIndex].isIdentifier,
-            case var lastTypeEndIndex = parseType(at: firstIdentifierIndex).range.upperBound,
-            let firstAndIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: lastTypeEndIndex),
-            tokens[firstAndIndex] == .operator("&", .infix)
+        guard let equalsIndex = index(of: .operator("=", .infix), after: typealiasIndex),
+              // Any type can follow the equals index of a typealias,
+              // but we're specifically looking for protocol compositions.
+              //  - Valid composite protocols are strictly _only_ prootocol types
+              //    separated by `&` tokens. These always start with identifiers,
+              //    but can be generic (e.g. `Collection<Int>`).
+              //  - `&` tokens in types are also _only valid_ for composite protocol types,
+              //    so if we see one then we know this if what we're looking for.
+              // https://docs.swift.org/swift-book/ReferenceManual/Types.html#grammar_protocol-composition-type
+              let firstIdentifierIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: equalsIndex),
+              tokens[firstIdentifierIndex].isIdentifier,
+              case var lastTypeEndIndex = parseType(at: firstIdentifierIndex).range.upperBound,
+              let firstAndIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: lastTypeEndIndex),
+              tokens[firstAndIndex] == .operator("&", .infix)
         else { return nil }
 
         // Parse through to the end of the composite protocol type
         // so we know how long it is (and where the &s are)
         var andTokenIndices = [Int]()
 
-        while
-            let nextAndIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: lastTypeEndIndex),
-            tokens[nextAndIndex] == .operator("&", .infix),
-            let nextIdentifierIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: nextAndIndex),
-            tokens[nextIdentifierIndex].isIdentifier
+        while let nextAndIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: lastTypeEndIndex),
+              tokens[nextAndIndex] == .operator("&", .infix),
+              let nextIdentifierIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: nextAndIndex),
+              tokens[nextIdentifierIndex].isIdentifier
         {
             let endOfType = parseType(at: nextIdentifierIndex).range.upperBound
             andTokenIndices.append(nextAndIndex)

@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.52.3
+//  Version 0.52.4
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -35,19 +35,19 @@ import Foundation
 
 // https://developer.apple.com/library/ios/documentation/Swift/Conceptual/Swift_Programming_Language/LexicalStructure.html
 
-// Used to speed up matching
+/// Used to speed up matching
 // Note: Any, Self, self, super, nil, true and false have been omitted deliberately, as they
-// behave like identifiers. So too have context-specific keywords such as the following:
-// any, associativity, async, convenience, didSet, dynamic, final, get, indirect, infix, lazy,
-// left, mutating, none, nonmutating, open, optional, override, postfix, precedence,
-// prefix, Protocol, required, right, set, some, any, Type, unowned, weak, willSet
-private let swiftKeywords = Set([
+/// behave like identifiers. So too have context-specific keywords such as the following:
+/// any, associativity, async, convenience, didSet, dynamic, final, get, indirect, infix, lazy,
+/// left, mutating, none, nonmutating, open, optional, override, postfix, precedence,
+/// prefix, Protocol, required, right, set, some, any, Type, unowned, weak, willSet
+let swiftKeywords = Set([
     "let", "return", "func", "var", "if", "public", "as", "else", "in", "import",
     "class", "try", "guard", "case", "for", "init", "extension", "private", "static",
     "fileprivate", "internal", "switch", "do", "catch", "enum", "struct", "throws",
     "throw", "typealias", "where", "break", "deinit", "subscript", "is", "while",
-    "associatedtype", "inout", "continue", "fallthrough", "operator", "repeat",
-    "rethrows", "default", "protocol", "defer", "await", "consume", "discard",
+    "associatedtype", "inout", "continue", "fallthrough", "operator", "precedencegroup",
+    "repeat", "rethrows", "default", "protocol", "defer", "await", "consume", "discard",
     /* Any, Self, self, super, nil, true, false */
 ])
 
@@ -90,13 +90,13 @@ public enum TokenType {
     case number
     case error
 
-    // OR types
+    /// OR types
     case spaceOrComment
     case spaceOrLinebreak
     case spaceOrCommentOrLinebreak
     case identifierOrKeyword
 
-    // NOT types
+    /// NOT types
     case nonSpace
     case nonLinebreak
     case nonSpaceOrComment
@@ -121,7 +121,7 @@ public enum OperatorType {
     case postfix
 }
 
-// Original line number for token
+/// Original line number for token
 public typealias OriginalLine = Int
 
 /// All token types

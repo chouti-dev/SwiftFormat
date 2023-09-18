@@ -11,7 +11,7 @@ import Foundation
 // MARK: shared helper methods
 
 extension Formatter {
-    // should brace be wrapped according to `wrapMultilineStatementBraces` rule?
+    /// should brace be wrapped according to `wrapMultilineStatementBraces` rule?
     func shouldWrapMultilineStatementBrace(at index: Int) -> Bool {
         assert(tokens[index] == .startOfScope("{"))
         guard let endIndex = endOfScope(at: index),
@@ -36,7 +36,7 @@ extension Formatter {
         return false
     }
 
-    // remove self if possible
+    /// remove self if possible
     func removeSelf(at i: Int, exclude: Set<String>, include: Set<String>? = nil) -> Bool {
         guard case let .identifier(selfKeyword) = tokens[i], ["self", "Self"].contains(selfKeyword) else {
             assertionFailure()
@@ -82,7 +82,7 @@ extension Formatter {
         return true
     }
 
-    // gather declared variable names, starting at index after let/var keyword
+    /// gather declared variable names, starting at index after let/var keyword
     func processDeclaredVariables(at index: inout Int, names: inout Set<String>,
                                   removeSelfKeyword: String?, onlyLocal: Bool,
                                   scopeAllowsImplicitSelfRebinding: Bool)
@@ -270,7 +270,7 @@ extension Formatter {
         }
     }
 
-    // Shared wrap implementation
+    /// Shared wrap implementation
     func wrapCollectionsAndArguments(completePartialWrapping: Bool, wrapSingleArguments: Bool) {
         let maxWidth = options.maxWidth
         func removeLinebreakBeforeEndOfScope(at endOfScope: inout Int) {
@@ -344,9 +344,9 @@ extension Formatter {
                 }
             }
 
-            if let effectIndex = index(after: endOfFunctionScope, where: { ["throws", "async"].contains($0.string) }),
-               effectIndex < openBracket
-            {
+            if let effectIndex = index(after: endOfFunctionScope, where: {
+                [.keyword("throws"), .identifier("async")].contains($0)
+            }), effectIndex < openBracket {
                 switch options.wrapEffects {
                 case .preserve:
                     break
@@ -371,9 +371,8 @@ extension Formatter {
                 }
             }
 
-            if
-                let returnArrowIndex = index(of: .operator("->", .infix), after: endOfFunctionScope),
-                returnArrowIndex < openBracket
+            if let returnArrowIndex = index(of: .operator("->", .infix), after: endOfFunctionScope),
+               returnArrowIndex < openBracket
             {
                 switch options.wrapReturnType {
                 case .preserve:
@@ -541,7 +540,7 @@ extension Formatter {
             var isParameters = false
             switch string {
             case "(":
-                /// Don't wrap color/image literals due to Xcode bug
+                // Don't wrap color/image literals due to Xcode bug
                 guard let prevToken = self.token(at: i - 1),
                       prevToken != .keyword("#colorLiteral"),
                       prevToken != .keyword("#imageLiteral")
@@ -682,35 +681,44 @@ extension Formatter {
 
         // -- wrapconditions
         forEach(.keyword) { index, token in
+            let indent: String
             let endOfConditionsToken: Token
             switch token {
             case .keyword("guard"):
                 endOfConditionsToken = .keyword("else")
-            case .keyword("if"), .keyword("while"):
+                indent = "      "
+            case .keyword("if"):
                 endOfConditionsToken = .startOfScope("{")
+                indent = "   "
+            case .keyword("while"):
+                endOfConditionsToken = .startOfScope("{")
+                indent = "      "
             default:
                 return
             }
 
             // Only wrap when this is a control flow condition that spans multiple lines
-            guard let endOfConditionsTokenIndex = self.index(of: endOfConditionsToken, after: index),
-                  let nextTokenIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index),
-                  !(onSameLine(index, endOfConditionsTokenIndex)
-                      || self.index(of: .nonSpaceOrCommentOrLinebreak,
-                                    after: endOfLine(at: index)) == endOfConditionsTokenIndex)
+            guard let endIndex = self.index(of: endOfConditionsToken, after: index),
+                  let nextTokenIndex = self.index(of: .nonSpaceOrLinebreak, after: index),
+                  !(onSameLine(index, endIndex) || self.index(of: .nonSpaceOrLinebreak, after: endOfLine(at: index)) == endIndex)
             else { return }
 
             switch options.wrapConditions {
             case .preserve, .disabled, .default:
                 break
-
             case .beforeFirst:
                 // Wrap if the next non-whitespace-or-comment
                 // is on the same line as the control flow keyword
                 if onSameLine(index, nextTokenIndex) {
                     insertLinebreak(at: index + 1)
                 }
-
+                // Re-indent lines
+                var linebreakIndex: Int? = index + 1
+                let indent = indentForLine(at: index) + options.indent
+                while let index = linebreakIndex, index < endIndex {
+                    insertSpace(indent, at: index + 1)
+                    linebreakIndex = self.index(of: .linebreak, after: index)
+                }
             case .afterFirst:
                 // Unwrap if the next non-whitespace-or-comment
                 // is not on the same line as the control flow keyword
@@ -719,16 +727,22 @@ extension Formatter {
                 {
                     removeToken(at: linebreakIndex)
                 }
-
                 // Make sure there is exactly one space after control flow keyword
                 insertSpace(" ", at: index + 1)
+                // Re-indent lines
+                var lastIndex = index + 1
+                let indent = spaceEquivalentToTokens(from: startOfLine(at: index), upTo: index) + indent
+                while let index = self.index(of: .linebreak, after: lastIndex), index < endIndex {
+                    insertSpace(indent, at: index + 1)
+                    lastIndex = index
+                }
             }
         }
 
-        /// Wraps / re-wraps a multi-line statement where each delimiter index
-        /// should be the first token on its line, if the statement
-        /// is longer than the max width or there is already a linebreak
-        /// adjacent to one of the delimiters
+        // Wraps / re-wraps a multi-line statement where each delimiter index
+        // should be the first token on its line, if the statement
+        // is longer than the max width or there is already a linebreak
+        // adjacent to one of the delimiters
         @discardableResult
         func wrapMultilineStatement(
             startIndex: Int,
@@ -786,9 +800,8 @@ extension Formatter {
 
         // -- wraptypealiases
         forEach(.keyword("typealias")) { typealiasIndex, _ in
-            guard
-                options.wrapTypealiases == .beforeFirst || options.wrapTypealiases == .afterFirst,
-                let (equalsIndex, andTokenIndices, lastIdentifierIndex) = parseProtocolCompositionTypealias(at: typealiasIndex)
+            guard options.wrapTypealiases == .beforeFirst || options.wrapTypealiases == .afterFirst,
+                  let (equalsIndex, andTokenIndices, lastIdentifierIndex) = parseProtocolCompositionTypealias(at: typealiasIndex)
             else { return }
 
             // Decide which indices to wrap at
@@ -827,10 +840,9 @@ extension Formatter {
 
         // --wrapternary
         forEach(.operator("?", .infix)) { conditionIndex, _ in
-            guard
-                options.wrapTernaryOperators != .default,
-                let expressionStartIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: conditionIndex),
-                !isInSingleLineStringLiteral(at: conditionIndex)
+            guard options.wrapTernaryOperators != .default,
+                  let expressionStartIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: conditionIndex),
+                  !isInSingleLineStringLiteral(at: conditionIndex)
             else { return }
 
             // Find the : operator that separates the true and false branches
@@ -845,9 +857,8 @@ extension Formatter {
             var currentIndex = conditionIndex + 1
             var foundColonIndex: Int?
 
-            while
-                foundColonIndex == nil,
-                currentIndex < tokens.count
+            while foundColonIndex == nil,
+                  currentIndex < tokens.count
             {
                 switch tokens[currentIndex] {
                 case .operator("?", .infix):
@@ -865,9 +876,8 @@ extension Formatter {
                 currentIndex += 1
             }
 
-            guard
-                let colonIndex = foundColonIndex,
-                let endOfElseExpression = endOfExpression(at: colonIndex, upTo: [])
+            guard let colonIndex = foundColonIndex,
+                  let endOfElseExpression = endOfExpression(at: colonIndex, upTo: [])
             else { return }
 
             wrapMultilineStatement(
@@ -989,8 +999,8 @@ extension Formatter {
         }
     }
 
-    // Common implementation for the `hoistTry` and `hoistAwait` rules
-    // Hoists the first keyword of the specified type out of the specified scope
+    /// Common implementation for the `hoistTry` and `hoistAwait` rules
+    /// Hoists the first keyword of the specified type out of the specified scope
     func hoistEffectKeyword(
         _ keyword: String,
         inScopeAt scopeStart: Int,
@@ -1159,11 +1169,10 @@ extension Formatter {
     /// If this is a closure, the body starts after any `in` clause that may exist.
     func startOfBody(atStartOfScope startOfScopeIndex: Int) -> Int {
         // If this is a closure that has an `in` clause, the body scope starts after that
-        if
-            isStartOfClosure(at: startOfScopeIndex),
-            let endOfScopeIndex = endOfScope(at: startOfScopeIndex),
-            let inToken = index(of: .keyword("in"), in: (startOfScopeIndex + 1) ..< endOfScopeIndex),
-            !indexIsWithinNestedClosure(inToken, startOfScopeIndex: startOfScopeIndex)
+        if isStartOfClosure(at: startOfScopeIndex),
+           let endOfScopeIndex = endOfScope(at: startOfScopeIndex),
+           let inToken = index(of: .keyword("in"), in: (startOfScopeIndex + 1) ..< endOfScopeIndex),
+           !indexIsWithinNestedClosure(inToken, startOfScopeIndex: startOfScopeIndex)
         {
             return inToken
         } else {
@@ -1191,13 +1200,12 @@ extension Formatter {
         var branches = [(startOfBranch: Int, endOfBranch: Int)]()
         var nextConditionalBranchIndex: Int? = ifIndex
 
-        while
-            let conditionalBranchIndex = nextConditionalBranchIndex,
-            ["if", "else"].contains(tokens[conditionalBranchIndex].string),
-            let startOfBody = index(of: .startOfScope, after: conditionalBranchIndex),
-            tokens[startOfBody] == .startOfScope("{"),
-            let endOfBody = endOfScope(at: startOfBody),
-            tokens[endOfBody] == .endOfScope("}")
+        while let conditionalBranchIndex = nextConditionalBranchIndex,
+              ["if", "else"].contains(tokens[conditionalBranchIndex].string),
+              let startOfBody = index(of: .startOfScope, after: conditionalBranchIndex),
+              tokens[startOfBody] == .startOfScope("{"),
+              let endOfBody = endOfScope(at: startOfBody),
+              tokens[endOfBody] == .endOfScope("}")
         {
             branches.append((startOfBranch: startOfBody, endOfBranch: endOfBody))
             nextConditionalBranchIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfBody)
@@ -1209,20 +1217,18 @@ extension Formatter {
     /// Finds all of the branch bodies in a switch statement.
     /// Returns the index of the `startOfScope` and `endOfScope` of each branch.
     func switchStatementBranches(at switchIndex: Int) -> [ConditionalBranch] {
-        guard
-            let startOfSwitchScope = index(of: .startOfScope("{"), after: switchIndex),
-            let firstCaseIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfSwitchScope),
-            tokens[firstCaseIndex].isSwitchCaseOrDefault
+        guard let startOfSwitchScope = index(of: .startOfScope("{"), after: switchIndex),
+              let firstCaseIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfSwitchScope),
+              tokens[firstCaseIndex].isSwitchCaseOrDefault
         else { return [] }
 
         var branches = [(startOfBranch: Int, endOfBranch: Int)]()
         var nextConditionalBranchIndex: Int? = firstCaseIndex
 
-        while
-            let conditionalBranchIndex = nextConditionalBranchIndex,
-            tokens[conditionalBranchIndex].isSwitchCaseOrDefault,
-            let startOfBody = index(of: .startOfScope(":"), after: conditionalBranchIndex),
-            let endOfBody = endOfScope(at: startOfBody)
+        while let conditionalBranchIndex = nextConditionalBranchIndex,
+              tokens[conditionalBranchIndex].isSwitchCaseOrDefault,
+              let startOfBody = index(of: .startOfScope(":"), after: conditionalBranchIndex),
+              let endOfBody = endOfScope(at: startOfBody)
         {
             branches.append((startOfBranch: startOfBody, endOfBranch: endOfBody))
 
@@ -1463,7 +1469,7 @@ extension Formatter {
     }
 }
 
-// Utility functions used by organizeDeclarations rule
+/// Utility functions used by organizeDeclarations rule
 // TODO: find a better place to put this
 extension Formatter {
     /// Categories of declarations within an individual type
@@ -1877,7 +1883,7 @@ extension Formatter {
             $0.isComment && $0.string.contains("swiftformat:sort") && !$0.string.contains(":sort:")
         })
 
-        /// Sorts the given categoried declarations based on their derived metadata
+        // Sorts the given categoried declarations based on their derived metadata
         func sortDeclarations(
             _ declarations: CategorizedDeclarations,
             byCategory sortByCategory: Bool,
@@ -1935,8 +1941,8 @@ extension Formatter {
         if typeDeclaration.kind == "struct",
            !typeDeclaration.body.contains(where: { $0.keyword == "init" })
         {
-            /// Whether or not this declaration is an instance property that can affect
-            /// the parameters struct's synthesized memberwise initializer
+            // Whether or not this declaration is an instance property that can affect
+            // the parameters struct's synthesized memberwise initializer
             func affectsSynthesizedMemberwiseInitializer(
                 _ declaration: Declaration,
                 _ type: DeclarationType?
@@ -2108,7 +2114,7 @@ extension Formatter {
 }
 
 extension Formatter {
-    /// A generic type parameter for a method
+    // A generic type parameter for a method
     class GenericType {
         /// The name of the generic parameter. For example with `<T: Fooable>` the generic parameter `name` is `T`.
         let name: String
@@ -2147,8 +2153,8 @@ extension Formatter {
             self.conformances = conformances
         }
 
-        // The opaque parameter syntax that represents this generic type,
-        // if the constraints can be expressed using this syntax
+        /// The opaque parameter syntax that represents this generic type,
+        /// if the constraints can be expressed using this syntax
         func asOpaqueParameter(useSomeAny: Bool) -> [Token]? {
             // Protocols with primary associated types that can be used with
             // opaque parameter syntax. In the future we could make this extensible
@@ -2244,9 +2250,8 @@ extension Formatter {
         var currentIndex = genericSignatureStartIndex
 
         while currentIndex < genericSignatureEndIndex - 1 {
-            guard
-                let genericTypeNameIndex = index(of: .identifier, after: currentIndex),
-                genericTypeNameIndex < genericSignatureEndIndex
+            guard let genericTypeNameIndex = index(of: .identifier, after: currentIndex),
+                  genericTypeNameIndex < genericSignatureEndIndex
             else { break }
 
             let typeEndIndex: Int
@@ -2402,10 +2407,17 @@ extension Formatter {
                     case .keyword("class"), .keyword("static"):
                         classOrStatic = true
                     case .keyword("repeat"):
-                        guard let nextIndex = self.index(of: .keyword("while"), after: i) else {
-                            return fatalError("Expected while", at: i)
+                        if let scopeStart = self.index(of: .nonSpaceOrCommentOrLinebreak, after: i, if: {
+                            $0 == .startOfScope("{")
+                        }) {
+                            guard let nextIndex = self.index(of: .keyword("while"), after: i) else {
+                                return fatalError("Expected while", at: i)
+                            }
+                            i = nextIndex
+                        } else {
+                            // Probably a parameter pack
+                            break
                         }
-                        i = nextIndex
                     case .keyword("if"), .keyword("for"), .keyword("while"):
                         if explicitSelf == .insert {
                             break
@@ -2838,14 +2850,14 @@ extension Formatter {
                         closureLocalNames.insert("self")
                     }
 
-                    /// Whether or not the closure at the current index permits implicit self.
-                    ///
-                    /// SE-0269 (in Swift 5.3) allows implicit self when:
-                    ///  - the closure captures self explicitly using [self] or [unowned self]
-                    ///  - self is not a reference type
-                    ///
-                    /// SE-0365 (in Swift 5.8) additionally allows implicit self using
-                    /// [weak self] captures after self has been unwrapped.
+                    // Whether or not the closure at the current index permits implicit self.
+                    //
+                    // SE-0269 (in Swift 5.3) allows implicit self when:
+                    //  - the closure captures self explicitly using [self] or [unowned self]
+                    //  - self is not a reference type
+                    //
+                    // SE-0365 (in Swift 5.8) additionally allows implicit self using
+                    // [weak self] captures after self has been unwrapped.
                     func closureAllowsImplicitSelf() -> Bool {
                         guard options.swiftVersion >= "5.3" else {
                             return false
@@ -3108,8 +3120,7 @@ extension Formatter {
                 switch $0 {
                 case .startOfScope("{"): // What we're looking for
                     return true
-                case .keyword("async"),
-                     .keyword("throws"),
+                case .keyword("throws"),
                      .keyword("rethrows"),
                      .keyword("where"),
                      .keyword("is"):

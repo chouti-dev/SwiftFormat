@@ -1903,6 +1903,20 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantLet)
     }
 
+    func testNoRemoveLetInViewBuilderModifier() {
+        let input = """
+        VStack {
+            Text("Some text")
+        }
+        .overlay(
+            HStack {
+                let _ = print("")
+            }
+        )
+        """
+        testFormatting(for: input, rule: FormatRules.redundantLet)
+    }
+
     func testNoRemoveLetInIfStatementInViewBuilder() {
         let input = """
         VStack {
@@ -1937,6 +1951,24 @@ class RedundancyTests: RulesTests {
 
     func testNoRemoveAsyncLet() {
         let input = "async let _ = foo()"
+        testFormatting(for: input, rule: FormatRules.redundantLet)
+    }
+
+    func testNoRemoveLetImmediatelyAfterMainActorAttribute() {
+        let input = """
+        let foo = bar { @MainActor
+            let _ = try await baz()
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantLet)
+    }
+
+    func testNoRemoveLetImmediatelyAfterSendableAttribute() {
+        let input = """
+        let foo = bar { @Sendable
+            let _ = try await baz()
+        }
+        """
         testFormatting(for: input, rule: FormatRules.redundantLet)
     }
 
@@ -6313,6 +6345,16 @@ class RedundancyTests: RulesTests {
         }
         """
         testFormatting(for: input, output, rule: FormatRules.redundantSelf)
+    }
+
+    func testRedundantSelfNotConfusedByParameterPack() {
+        let input = """
+        func pairUp<each T, each U>(firstPeople: repeat each T, secondPeople: repeat each U) -> (repeat (first: each T, second: each U)) {
+            (repeat (each firstPeople, each secondPeople))
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.indent, options: options)
     }
 
     // MARK: - redundantStaticSelf
