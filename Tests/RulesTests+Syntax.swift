@@ -3178,6 +3178,34 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.docComments)
     }
 
+    func testConvertNoteCommentsToDocComments() {
+        let input = """
+        // Does something
+        // Note: not really
+        func doSomething() {}
+        """
+        let output = """
+        /// Does something
+        /// Note: not really
+        func doSomething() {}
+        """
+        testFormatting(for: input, output, rule: FormatRules.docComments)
+    }
+
+    func testConvertURLCommentsToDocComments() {
+        let input = """
+        // Does something
+        // http://example.com
+        func doSomething() {}
+        """
+        let output = """
+        /// Does something
+        /// http://example.com
+        func doSomething() {}
+        """
+        testFormatting(for: input, output, rule: FormatRules.docComments)
+    }
+
     func testMultilineDocCommentReplaced() {
         let input = """
         // A class
@@ -3242,6 +3270,36 @@ class SyntaxTests: RulesTests {
             // baz
             let baz = quux()
         }
+        """
+        testFormatting(for: input, rule: FormatRules.docComments)
+    }
+
+    func testDocCommentInsideIfdef() {
+        let input = """
+        #if DEBUG
+            // return 3
+            func returnNumber() { 3 }
+        #endif
+        """
+        let output = """
+        #if DEBUG
+            /// return 3
+            func returnNumber() { 3 }
+        #endif
+        """
+        testFormatting(for: input, output, rule: FormatRules.docComments)
+    }
+
+    func testDocCommentInsideIfdefElse() {
+        let input = """
+        #if DEBUG
+        #elseif PROD
+            /// return 2
+            func returnNumber() { 2 }
+        #else
+            /// return 3
+            func returnNumber() { 3 }
+        #endif
         """
         testFormatting(for: input, rule: FormatRules.docComments)
     }

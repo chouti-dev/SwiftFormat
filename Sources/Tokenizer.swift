@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.52.4
+//  Version 0.52.6
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -69,7 +69,8 @@ public extension String {
         guard parts.count > 1 else {
             return false
         }
-        return !parts[0].contains(" ") && !parts[1].hasPrefix("//")
+        let exclude = ["note", "warning"]
+        return !parts[0].contains(" ") && !exclude.contains(parts[0].lowercased()) && !parts[1].hasPrefix("//")
     }
 }
 

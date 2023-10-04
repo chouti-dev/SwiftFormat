@@ -52,7 +52,7 @@ extension Formatter {
         let nextIndex = index(of: .nonSpaceOrLinebreak, after: dotIndex),
         let token = token(at: nextIndex), token.isIdentifier,
         case let name = token.unescaped(), (include.map { $0.contains(name) } ?? true),
-        !isFunction(at: nextIndex, in: exclusionList),
+        !isSymbol(at: nextIndex, in: exclusionList),
         !backticksRequired(at: nextIndex, ignoreLeadingDot: true)
         else {
             return false
@@ -64,7 +64,7 @@ extension Formatter {
                 break
             case .startOfScope("("):
                 if let prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: scopeStart),
-                   isFunction(at: prevIndex, in: staticSelf ? [] : options.selfRequired.union([
+                   isSymbol(at: prevIndex, in: staticSelf ? [] : options.selfRequired.union([
                        "expect", // Special case to support autoclosure arguments in the Nimble framework
                    ]))
                 {
@@ -123,8 +123,7 @@ extension Formatter {
                 {
                     // If we find the end of the condition instead of an = token,
                     // then this was a shorthand `if let self` condition.
-                    if tokens[equalsIndex] == .startOfScope("{") || tokens[equalsIndex] == .delimiter(",") || tokens[equalsIndex] == .keyword("else")
-                    {
+                    if tokens[equalsIndex] == .startOfScope("{") || tokens[equalsIndex] == .delimiter(",") || tokens[equalsIndex] == .keyword("else") {
                         isPermittedImplicitSelfRebinding = true
                     } else if tokens[equalsIndex] == Token.operator("=", .infix),
                               let rhsSelfIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: equalsIndex),
@@ -1055,8 +1054,11 @@ extension Formatter {
                 if isEffectCapturingAt(i) {
                     return
                 }
-            case let .keyword(name) where ["is", "as", "try", "await"].contains(name),
-                 let .operator(name, .infix) where name != "=":
+            case let .operator(name, .infix) where name != "=":
+                if [.startOfScope("("), .startOfScope("[")].contains(prevToken), isEffectCapturingAt(i) {
+                    return
+                }
+            case let .keyword(name) where ["is", "as", "try", "await"].contains(name):
                 break
             case .operator(_, .prefix), .stringBody,
                  .endOfScope(")") where prevToken.isStringBody ||
@@ -1197,15 +1199,14 @@ extension Formatter {
     /// Finds all of the branch bodies in an if statement.
     /// Returns the index of the `startOfScope` and `endOfScope` of each branch.
     func ifStatementBranches(at ifIndex: Int) -> [ConditionalBranch] {
+        assert(tokens[ifIndex] == .keyword("if"))
         var branches = [(startOfBranch: Int, endOfBranch: Int)]()
         var nextConditionalBranchIndex: Int? = ifIndex
 
         while let conditionalBranchIndex = nextConditionalBranchIndex,
-              ["if", "else"].contains(tokens[conditionalBranchIndex].string),
-              let startOfBody = index(of: .startOfScope, after: conditionalBranchIndex),
-              tokens[startOfBody] == .startOfScope("{"),
-              let endOfBody = endOfScope(at: startOfBody),
-              tokens[endOfBody] == .endOfScope("}")
+              conditionalBranchIndex == ifIndex || tokens[conditionalBranchIndex] == .keyword("else"),
+              let startOfBody = index(of: .startOfScope("{"), after: conditionalBranchIndex),
+              let endOfBody = endOfScope(at: startOfBody)
         {
             branches.append((startOfBranch: startOfBody, endOfBranch: endOfBody))
             nextConditionalBranchIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfBody)
@@ -1217,6 +1218,7 @@ extension Formatter {
     /// Finds all of the branch bodies in a switch statement.
     /// Returns the index of the `startOfScope` and `endOfScope` of each branch.
     func switchStatementBranches(at switchIndex: Int) -> [ConditionalBranch] {
+        assert(tokens[switchIndex] == .keyword("switch"))
         guard let startOfSwitchScope = index(of: .startOfScope("{"), after: switchIndex),
               let firstCaseIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfSwitchScope),
               tokens[firstCaseIndex].isSwitchCaseOrDefault
@@ -2407,9 +2409,7 @@ extension Formatter {
                     case .keyword("class"), .keyword("static"):
                         classOrStatic = true
                     case .keyword("repeat"):
-                        if let scopeStart = self.index(of: .nonSpaceOrCommentOrLinebreak, after: i, if: {
-                            $0 == .startOfScope("{")
-                        }) {
+                        if next(.nonSpaceOrCommentOrLinebreak, after: i) == .startOfScope("{") {
                             guard let nextIndex = self.index(of: .keyword("while"), after: i) else {
                                 return fatalError("Expected while", at: i)
                             }

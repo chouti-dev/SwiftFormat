@@ -1927,7 +1927,7 @@ public struct _FormatRules {
                         if let startToken = startToken, [
                             .startOfScope("#if"), .keyword("#else"), .keyword("#elseif"), .endOfScope("#endif")
                         ].contains(startToken) {
-                            if let index = formatter.index(of: .nonSpaceOrLinebreak, before: lineStart) {
+                            if let index = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: lineStart) {
                                 lastNonSpaceOrLinebreakIndex = index
                                 lineStart = formatter.startOfLine(at: lastNonSpaceOrLinebreakIndex, excludingIndent: true)
                             }
@@ -2176,8 +2176,7 @@ public struct _FormatRules {
 
                 var maxWidth = formatter.options.maxWidth
                 if maxWidth == 0 {
-                    // Set reasonable default
-                    maxWidth = 100
+                    maxWidth = .max
                 }
 
                 // Check that unwrapping wouldn't exceed line length
@@ -3180,6 +3179,15 @@ public struct _FormatRules {
                 return
             }
 
+            // Make sure we aren't in a failable `init?`, where explicit return is required
+            if let lastSignificantKeywordIndex = formatter.indexOfLastSignificantKeyword(at: startOfScopeIndex),
+               formatter.tokens[lastSignificantKeywordIndex] == .keyword("init"),
+               let nextToken = formatter.next(.nonSpaceOrCommentOrLinebreak, after: lastSignificantKeywordIndex),
+               nextToken == .operator("?", .postfix)
+            {
+                return
+            }
+
             // Removes return statements in the given single-statement scope
             func removeReturn(atStartOfScope startOfScopeIndex: Int) {
                 // If this scope is a single-statement if or switch statement then we have to recursively
@@ -3548,7 +3556,7 @@ public struct _FormatRules {
                 guard case let .identifier(name) = formatter.tokens[prevIndex] else {
                     return false
                 }
-                return name.hasPrefix("XCTAssert") || formatter.isFunction(at: prevIndex, in: names)
+                return name.hasPrefix("XCTAssert") || formatter.isSymbol(at: prevIndex, in: names)
             }
         }
     }
@@ -3564,7 +3572,7 @@ public struct _FormatRules {
             $0 == .startOfScope("(") || $0 == .startOfScope("[")
         }) { i, _ in
             formatter.hoistEffectKeyword("await", inScopeAt: i) { prevIndex in
-                formatter.isFunction(at: prevIndex, in: formatter.options.asyncCapturing)
+                formatter.isSymbol(at: prevIndex, in: formatter.options.asyncCapturing)
             }
         }
     }
@@ -6801,10 +6809,16 @@ public struct _FormatRules {
 
                 // Only use doc comments on declarations in type bodies, or top-level declarations
                 if let startOfEnclosingScope = formatter.index(of: .startOfScope, before: index) {
-                    guard formatter.tokens[startOfEnclosingScope] == .startOfScope("{"),
-                          let scope = formatter.lastSignificantKeyword(at: startOfEnclosingScope, excluding: ["where"]),
-                          ["class", "actor", "struct", "enum", "protocol", "extension"].contains(scope)
-                    else {
+                    switch formatter.tokens[startOfEnclosingScope] {
+                    case .startOfScope("#if"):
+                        break
+                    case .startOfScope("{"):
+                        guard let scope = formatter.lastSignificantKeyword(at: startOfEnclosingScope, excluding: ["where"]),
+                              ["class", "actor", "struct", "enum", "protocol", "extension"].contains(scope)
+                        else {
+                            return false
+                        }
+                    default:
                         return false
                     }
                 }
