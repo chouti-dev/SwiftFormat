@@ -1299,9 +1299,7 @@ extension Formatter {
                 nextTokenAfterTry = nextTokenAfterTryOperator
             }
 
-            if let startOfFollowingExpressionIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: nextTokenAfterTry),
-               let followingExpression = parseExpressionRange(startingAt: startOfFollowingExpressionIndex)
-            {
+            if let followingExpression = parseExpressionRange(startingAt: nextTokenAfterTry) {
                 return startIndex ... followingExpression.upperBound
             }
         }
@@ -2491,7 +2489,7 @@ extension Token {
             "import", "let", "var", "typealias", "func", "enum", "case",
             "struct", "class", "actor", "protocol", "init", "deinit",
             "extension", "subscript", "operator", "precedencegroup",
-            "associatedtype",
+            "associatedtype", "macro",
         ])
 
         for keywordToExclude in keywordsToExclude {

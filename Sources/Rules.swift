@@ -6286,7 +6286,17 @@ public struct _FormatRules {
                // because removing them could break the build.
                formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: closureStartIndex) != closureEndIndex
             {
-                guard formatter.blockBodyHasSingleStatement(atStartOfScope: closureStartIndex) else {
+                /// Whether or not this closure has a single, simple expression in its body.
+                /// These closures can always be simplified / removed regardless of the context.
+                let hasSingleSimpleExpression = formatter.blockBodyHasSingleStatement(atStartOfScope: closureStartIndex, includingConditionalStatements: false)
+
+                /// Whether or not this closure has a single if/switch expression in its body.
+                /// Since if/switch expressions are only valid in the `return` position or as an `=` assignment,
+                /// these closures can only sometimes be simplified / removed.
+                let hasSingleConditionalExpression = !hasSingleSimpleExpression &&
+                    formatter.blockBodyHasSingleStatement(atStartOfScope: closureStartIndex, includingConditionalStatements: true)
+
+                guard hasSingleSimpleExpression || hasSingleConditionalExpression else {
                     return
                 }
 
@@ -6330,6 +6340,43 @@ public struct _FormatRules {
                     startIndex = prevIndex
                 }
 
+                // Since if/switch expressions are only valid in the `return` position or as an `=` assignment,
+                // these closures can only sometimes be simplified / removed.
+                if hasSingleConditionalExpression {
+                    // Find the `{` start of scope or `=` and verify that the entire following expression consists of just this closure.
+                    var startOfScopeContainingClosure = formatter.startOfScope(at: startIndex)
+                    var assignmentBeforeClosure = formatter.index(of: .operator("=", .infix), before: startIndex)
+
+                    let potentialStartOfExpressionContainingClosure: Int?
+                    switch (startOfScopeContainingClosure, assignmentBeforeClosure) {
+                    case (nil, nil):
+                        potentialStartOfExpressionContainingClosure = nil
+                    case (.some(let startOfScope), nil):
+                        potentialStartOfExpressionContainingClosure = startOfScope
+                    case (nil, let .some(assignmentBeforeClosure)):
+                        potentialStartOfExpressionContainingClosure = assignmentBeforeClosure
+                    case let (.some(startOfScope), .some(assignmentBeforeClosure)):
+                        potentialStartOfExpressionContainingClosure = max(startOfScope, assignmentBeforeClosure)
+                    }
+
+                    if let potentialStartOfExpressionContainingClosure = potentialStartOfExpressionContainingClosure {
+                        guard var startOfExpressionIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: potentialStartOfExpressionContainingClosure)
+                        else { return }
+
+                        // Skip over any return token that may be present
+                        if formatter.tokens[startOfExpressionIndex] == .keyword("return"),
+                           let nextTokenIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: startOfExpressionIndex)
+                        {
+                            startOfExpressionIndex = nextTokenIndex
+                        }
+
+                        // Parse the expression and require that entire expression is simply just this closure.
+                        guard let expressionRange = formatter.parseExpressionRange(startingAt: startOfExpressionIndex),
+                              expressionRange == startIndex ... closureCallCloseParenIndex
+                        else { return }
+                    }
+                }
+
                 // If the closure is a property with an explicit `Void` type,
                 // we can't remove the closure since the build would break
                 // if the method is `@discardableResult`
@@ -6362,14 +6409,13 @@ public struct _FormatRules {
                     closureEndIndex -= 1
                 }
 
-                // remove the { }() tokens
+                // remove the trailing }() tokens, working backwards to not invalidate any indices
                 formatter.removeToken(at: closureCallCloseParenIndex)
                 formatter.removeToken(at: closureCallOpenParenIndex)
                 formatter.removeToken(at: closureEndIndex)
-                formatter.removeTokens(in: startIndex ... closureStartIndex)
 
-                // Remove the initial return token, and any trailing space, if present
-                if let returnIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: closureStartIndex - 1),
+                // Remove the initial return token, and any trailing space, if present.
+                if let returnIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: closureStartIndex),
                    formatter.token(at: returnIndex)?.string == "return"
                 {
                     while formatter.token(at: returnIndex + 1)?.isSpaceOrLinebreak == true {
@@ -6378,6 +6424,9 @@ public struct _FormatRules {
 
                     formatter.removeToken(at: returnIndex)
                 }
+
+                // Finally, remove then open `{` token
+                formatter.removeTokens(in: startIndex ... closureStartIndex)
             }
         }
     }
@@ -6791,33 +6840,27 @@ public struct _FormatRules {
     ) { formatter in
         formatter.forEach(.startOfScope) { index, token in
             guard [.startOfScope("//"), .startOfScope("/*")].contains(token),
-                  let endOfComment = formatter.endOfScope(at: index)
-            else { return }
+                  let endOfComment = formatter.endOfScope(at: index),
+                  let nextDeclarationIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: endOfComment)
+            else {
+                return
+            }
 
-            let shouldBeDocComment: Bool = {
+            func shouldBeDocComment(at index: Int, endOfComment: Int) -> Bool {
                 // Check if this is a special type of comment that isn't documentation
                 if case let .commentBody(body)? = formatter.next(.nonSpace, after: index), body.isCommentDirective {
                     return false
                 }
 
                 // Check if this token defines a declaration that supports doc comments
-                let nextDeclarationIndex: Int
-                do {
-                    guard var nextIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: endOfComment) else {
-                        return false
-                    }
-                    var token = formatter.tokens[nextIndex]
-                    if token.isAttribute || token.isModifierKeyword, let index = formatter.index(after: nextIndex, where: {
-                        $0.isDeclarationTypeKeyword
-                    }) {
-                        nextIndex = index
-                        token = formatter.tokens[nextIndex]
-                    }
-                    if token.isDeclarationTypeKeyword(excluding: ["import"]) {
-                        nextDeclarationIndex = nextIndex
-                    } else {
-                        return false
-                    }
+                var declarationToken = formatter.tokens[nextDeclarationIndex]
+                if declarationToken.isAttribute || declarationToken.isModifierKeyword,
+                   let index = formatter.index(after: nextDeclarationIndex, where: { $0.isDeclarationTypeKeyword })
+                {
+                    declarationToken = formatter.tokens[index]
+                }
+                guard declarationToken.isDeclarationTypeKeyword(excluding: ["import"]) else {
+                    return false
                 }
 
                 // Only use doc comments on declarations in type bodies, or top-level declarations
@@ -6855,7 +6898,34 @@ public struct _FormatRules {
 
                 // Comments inside conditional statements are not doc comments
                 return !formatter.isConditionalStatement(at: index)
-            }()
+            }
+
+            var commentIndices = [index]
+            if token == .startOfScope("//") {
+                var i = index
+                while let prevLineIndex = formatter.index(of: .linebreak, before: i),
+                      case let lineStartIndex = formatter.startOfLine(at: prevLineIndex, excludingIndent: true),
+                      formatter.token(at: lineStartIndex) == .startOfScope("//")
+                {
+                    commentIndices.append(lineStartIndex)
+                    i = lineStartIndex
+                }
+                i = index
+                while let nextLineIndex = formatter.index(of: .linebreak, after: i),
+                      let lineStartIndex = formatter.index(of: .nonSpace, after: nextLineIndex),
+                      formatter.token(at: lineStartIndex) == .startOfScope("//")
+                {
+                    commentIndices.append(lineStartIndex)
+                    i = lineStartIndex
+                }
+            }
+
+            let useDocComment = shouldBeDocComment(at: index, endOfComment: endOfComment)
+            guard commentIndices.allSatisfy({
+                shouldBeDocComment(at: $0, endOfComment: endOfComment) == useDocComment
+            }) else {
+                return
+            }
 
             // Doc comment tokens like `///` and `/**` aren't parsed as a
             // single `.startOfScope` token -- they're parsed as:
@@ -6874,10 +6944,11 @@ public struct _FormatRules {
             if let commentBody = formatter.token(at: index + 1),
                case .commentBody = commentBody
             {
-                if shouldBeDocComment, !commentBody.string.hasPrefix(startOfDocCommentBody) {
+                let isDocComment = commentBody.string.hasPrefix(startOfDocCommentBody)
+                if useDocComment, !isDocComment {
                     let updatedCommentBody = "\(startOfDocCommentBody)\(commentBody.string)"
                     formatter.replaceToken(at: index + 1, with: .commentBody(updatedCommentBody))
-                } else if !shouldBeDocComment, commentBody.string.hasPrefix(startOfDocCommentBody) {
+                } else if !useDocComment, isDocComment {
                     let prefix = commentBody.string.prefix(while: { String($0) == startOfDocCommentBody })
 
                     // Do nothing if this is a unusual comment like `//////////////////`
@@ -6894,7 +6965,7 @@ public struct _FormatRules {
                     )
                 }
 
-            } else if shouldBeDocComment {
+            } else if useDocComment {
                 formatter.insert(.commentBody(startOfDocCommentBody), at: index + 1)
             }
         }

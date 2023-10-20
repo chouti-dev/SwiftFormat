@@ -3178,6 +3178,24 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.docComments)
     }
 
+    func testDoesntConvertCommentAfterTODOToDocComments() {
+        let input = """
+        // TODO: Clean up this mess
+        // because it's bothering me
+        func doSomething() {}
+        """
+        testFormatting(for: input, rule: FormatRules.docComments)
+    }
+
+    func testDoesntConvertCommentBeforeTODOToDocComments() {
+        let input = """
+        // Something, something
+        // TODO: Clean up this mess
+        func doSomething() {}
+        """
+        testFormatting(for: input, rule: FormatRules.docComments)
+    }
+
     func testConvertNoteCommentsToDocComments() {
         let input = """
         // Does something
@@ -3300,6 +3318,17 @@ class SyntaxTests: RulesTests {
             /// return 3
             func returnNumber() { 3 }
         #endif
+        """
+        testFormatting(for: input, rule: FormatRules.docComments)
+    }
+
+    func testDocCommentForMacro() {
+        let input = """
+        /// Adds a static `logger` member to the type.
+        @attached(member, names: named(logger)) public macro StaticLogger(
+            subsystem: String? = nil,
+            category: String? = nil
+        ) = #externalMacro(module: "StaticLoggerMacros", type: "StaticLogger")
         """
         testFormatting(for: input, rule: FormatRules.docComments)
     }
