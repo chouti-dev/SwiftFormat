@@ -1110,7 +1110,9 @@ extension Formatter {
     /// has a single statement. This makes it eligible to be used with implicit return.
     func blockBodyHasSingleStatement(
         atStartOfScope startOfScopeIndex: Int,
-        includingConditionalStatements: Bool = true
+        includingConditionalStatements: Bool,
+        includingReturnStatements: Bool,
+        includingReturnInConditionalStatements: Bool? = nil
     ) -> Bool {
         guard let endOfScopeIndex = endOfScope(at: startOfScopeIndex) else { return false }
         let startOfBody = self.startOfBody(atStartOfScope: startOfScopeIndex)
@@ -1123,7 +1125,7 @@ extension Formatter {
         }
 
         // Skip over any optional `return` keyword
-        if tokens[firstTokenInBody] == .keyword("return") {
+        if includingReturnStatements, tokens[firstTokenInBody] == .keyword("return") {
             guard let tokenAfterReturnKeyword = index(of: .nonSpaceOrCommentOrLinebreak, after: firstTokenInBody) else { return false }
             firstTokenInBody = tokenAfterReturnKeyword
         }
@@ -1134,14 +1136,33 @@ extension Formatter {
            includingConditionalStatements,
            let conditionalBranches = conditionalBranches(at: firstTokenInBody)
         {
-            let isSingleStatement = conditionalBranches.allSatisfy { branch in
-                blockBodyHasSingleStatement(atStartOfScope: branch.startOfBranch, includingConditionalStatements: true)
+            let isSupportedSingleStatement = conditionalBranches.allSatisfy { branch in
+                // In Swift 5.9, there's a bug that prevents you from writing an
+                // if or switch expression using an `as?` on one of the branches:
+                // https://github.com/apple/swift/issues/68764
+                //
+                //  if condition {
+                //    foo as? String
+                //  } else {
+                //    "bar"
+                //  }
+                //
+                if conditionalBranchHasUnsupportedCastOperator(startOfScopeIndex: branch.startOfBranch) {
+                    return false
+                }
+
+                return blockBodyHasSingleStatement(
+                    atStartOfScope: branch.startOfBranch,
+                    includingConditionalStatements: true,
+                    includingReturnStatements: includingReturnInConditionalStatements ?? includingReturnStatements,
+                    includingReturnInConditionalStatements: includingReturnInConditionalStatements
+                )
             }
 
             let endOfStatement = conditionalBranches.last?.endOfBranch ?? firstTokenInBody
             let isOnlyStatement = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfStatement) == endOfScopeIndex
 
-            return isSingleStatement && isOnlyStatement
+            return isSupportedSingleStatement && isOnlyStatement
         }
 
         guard let expressionRange = parseExpressionRange(startingAt: firstTokenInBody),
@@ -1248,6 +1269,34 @@ extension Formatter {
         }
 
         return branches
+    }
+
+    /// In Swift 5.9, there's a bug that prevents you from writing an
+    /// if or switch expression using an `as?` on one of the branches:
+    /// https://github.com/apple/swift/issues/68764
+    ///
+    ///  if condition {
+    ///    foo as? String
+    ///  } else {
+    ///    "bar"
+    ///  }
+    ///
+    /// This helper returns whether or not the branch starting at the given `startOfScopeIndex`
+    /// includes an `as?` operator, so wouldn't be permitted in a if/switch exprssion in Swift 5.9
+    func conditionalBranchHasUnsupportedCastOperator(startOfScopeIndex: Int) -> Bool {
+        if options.swiftVersion == "5.9",
+           let asIndex = index(of: .keyword("as"), after: startOfScopeIndex),
+           let endOfScopeIndex = endOfScope(at: startOfScopeIndex),
+           asIndex < endOfScopeIndex,
+           next(.nonSpaceOrCommentOrLinebreak, after: asIndex) == .operator("?", .postfix),
+           // Make sure the as? is at the top level, not nested in some
+           // inner scope like a function call or closure
+           startOfScope(at: asIndex) == startOfScopeIndex
+        {
+            return true
+        }
+
+        return false
     }
 
     /// Performs a closure for each conditional branch in the given conditional statement,

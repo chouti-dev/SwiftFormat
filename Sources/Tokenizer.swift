@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.52.8
+//  Version 0.52.9
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -1788,8 +1788,6 @@ public func tokenize(_ source: String) -> [Token] {
                     convertOpeningChevronToOperator(at: scopeIndex)
                     processToken()
                     return
-                case .keyword("where"):
-                    break
                 case .endOfScope, .keyword:
                     // If we encountered a keyword, or closing scope token that wasn't >
                     // then the opening < must have been an operator after all

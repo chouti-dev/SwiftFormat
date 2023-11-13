@@ -2722,6 +2722,22 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
     }
 
+    func testClosureAroundConditionalAssignmentNotRedundantForExplicitReturn() {
+        let input = """
+        let myEnum = MyEnum.a
+        let test: Int = {
+            switch myEnum {
+            case .a:
+                return 0
+            case .b:
+                return 1
+            }
+        }()
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantClosure, options: options, exclude: ["redundantReturn"])
+    }
+
     func testNonRedundantSwitchStatementReturnInFunction() {
         let input = """
         func foo(condition: Bool) -> String {
@@ -3015,6 +3031,91 @@ class RedundancyTests: RulesTests {
         let options = FormatOptions(swiftVersion: "5.9")
         testFormatting(for: input, rule: FormatRules.redundantReturn, options: options,
                        exclude: ["wrapSwitchCases", "sortSwitchCases"])
+    }
+
+    func testDoesntRemoveReturnFromIfExpressionConditionalCastInSwift5_9() {
+        // The following code doesn't compile in Swift 5.9 due to this issue:
+        // https://github.com/apple/swift/issues/68764
+        //
+        //  var result: String {
+        //    if condition {
+        //      foo as? String
+        //    } else {
+        //      "bar"
+        //    }
+        //  }
+        //
+        let input = """
+        var result1: String {
+            if condition {
+                return foo as? String
+            } else {
+                return "bar"
+            }
+        }
+
+        var result2: String {
+            switch condition {
+            case true:
+                return foo as? String
+            case false:
+                return "bar"
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testRemovseReturnFromIfExpressionNestedConditionalCastInSwift5_9() {
+        let input = """
+        var result1: String {
+            if condition {
+                return method(foo as? String)
+            } else {
+                return "bar"
+            }
+        }
+        """
+
+        let output = """
+        var result1: String {
+            if condition {
+                method(foo as? String)
+            } else {
+                "bar"
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testRemovesReturnFromIfExpressionConditionalCastInSwift5_10() {
+        let input = """
+        var result: String {
+            if condition {
+                return foo as? String
+            } else {
+                return "bar"
+            }
+        }
+        """
+
+        let output = """
+        var result: String {
+            if condition {
+                foo as? String
+            } else {
+                "bar"
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.10")
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
     }
 
     // MARK: - redundantBackticks
@@ -7748,7 +7849,8 @@ class RedundancyTests: RulesTests {
         """
 
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options, exclude: ["indent"])
+        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
+                       options: options, exclude: ["indent"])
     }
 
     func testRedundantClosureWithExplicitReturn2() {
@@ -7784,7 +7886,7 @@ class RedundancyTests: RulesTests {
         }
         """
 
-        testFormatting(for: input, output, rule: FormatRules.redundantClosure, exclude: ["redundantReturn"])
+        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure])
     }
 
     func testKeepsClosureThatIsNotCalled() {
@@ -7851,7 +7953,8 @@ class RedundancyTests: RulesTests {
         }
         """
 
-        testFormatting(for: input, [output], rules: [FormatRules.redundantClosure, FormatRules.semicolons])
+        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure,
+                                                     FormatRules.semicolons])
     }
 
     func testRemoveRedundantClosureInWrappedPropertyDeclaration_beforeFirst() {
@@ -8137,14 +8240,14 @@ class RedundancyTests: RulesTests {
         """
         let output = """
         let user2: User? = if let data2 = defaults.data(forKey: defaultsKey) {
-                return try PropertyListDecoder().decode(User.self, from: data2)
+                try PropertyListDecoder().decode(User.self, from: data2)
             } else {
-                return nil
+                nil
             }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options,
-                       exclude: ["redundantReturn", "indent"])
+        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
+                       options: options, exclude: ["indent"])
     }
 
     func testRedundantClosureDoesntLeaveStrayTryAwait() {
@@ -8159,14 +8262,14 @@ class RedundancyTests: RulesTests {
         """
         let output = """
         let user2: User? = if let data2 = defaults.data(forKey: defaultsKey) {
-                return try await PropertyListDecoder().decode(User.self, from: data2)
+                try await PropertyListDecoder().decode(User.self, from: data2)
             } else {
-                return nil
+                nil
             }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options,
-                       exclude: ["redundantReturn", "indent"])
+        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
+                       options: options, exclude: ["indent"])
     }
 
     func testRedundantClosureDoesntLeaveInvalidSwitchExpressionInOperatorChain() {
@@ -8440,7 +8543,8 @@ class RedundancyTests: RulesTests {
         """
 
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options, exclude: ["redundantReturn", "indent"])
+        testFormatting(for: input, [output], rules: [FormatRules.redundantClosure],
+                       options: options, exclude: ["redundantReturn", "indent"])
     }
 
     func testRedundantClosureRemovesClosureAsImplicitReturnStatement() {
@@ -8470,7 +8574,287 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options, exclude: ["indent"])
     }
 
-    // MARK: Redundant optional binding
+    func testClosureNotRemovedAroundIfExpressionInGuard() {
+        let input = """
+        guard let foo = {
+            if condition {
+                bar()
+            }
+        }() else {
+            return
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantClosure, options: options)
+    }
+
+    func testClosureNotRemovedInMethodCall() {
+        let input = """
+        XCTAssert({
+            if foo {
+                bar
+            } else {
+                baaz
+            }
+        }())
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantClosure, options: options)
+    }
+
+    func testClosureNotRemovedInMethodCall2() {
+        let input = """
+        method("foo", {
+            if foo {
+                bar
+            } else {
+                baaz
+            }
+        }())
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantClosure, options: options)
+    }
+
+    func testClosureNotRemovedInMethodCall3() {
+        let input = """
+        XCTAssert({
+            if foo {
+                bar
+            } else {
+                baaz
+            }
+        }(), "message")
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantClosure, options: options)
+    }
+
+    func testClosureNotRemovedInMethodCall4() {
+        let input = """
+        method(
+            "foo",
+            {
+                if foo {
+                    bar
+                } else {
+                    baaz
+                }
+            }(),
+            "bar"
+        )
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantClosure, options: options)
+    }
+
+    func testDoesntRemoveClosureWithIfExpressionConditionalCastInSwift5_9() {
+        // The following code doesn't compile in Swift 5.9 due to this issue:
+        // https://github.com/apple/swift/issues/68764
+        //
+        //  let result = if condition {
+        //    foo as? String
+        //  } else {
+        //    "bar"
+        //  }
+        //
+        let input = """
+        let result1: String? = {
+            if condition {
+                return foo as? String
+            } else {
+                return "bar"
+            }
+        }()
+
+        let result1: String? = {
+            switch condition {
+            case true:
+                return foo as? String
+            case false:
+                return "bar"
+            }
+        }()
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantClosure, options: options)
+    }
+
+    func testDoesRemoveClosureWithIfExpressionConditionalCastInSwift5_10() {
+        let input = """
+        let result1: String? = {
+            if condition {
+                foo as? String
+            } else {
+                "bar"
+            }
+        }()
+
+        let result2: String? = {
+            switch condition {
+            case true:
+                foo as? String
+            case false:
+                "bar"
+            }
+        }()
+        """
+
+        let output = """
+        let result1: String? = if condition {
+                foo as? String
+            } else {
+                "bar"
+            }
+
+        let result2: String? = switch condition {
+            case true:
+                foo as? String
+            case false:
+                "bar"
+            }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.10")
+        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options, exclude: ["indent"])
+    }
+
+    func testRedundantClosureDoesntBreakBuildWithRedundantReturnRuleDisabled() {
+        let input = """
+        enum MyEnum {
+            case a
+            case b
+        }
+        let myEnum = MyEnum.a
+        let test: Int = {
+            return 0
+        }()
+        """
+
+        let output = """
+        enum MyEnum {
+            case a
+            case b
+        }
+        let myEnum = MyEnum.a
+        let test: Int = 0
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options,
+                       exclude: ["redundantReturn", "blankLinesBetweenScopes"])
+    }
+
+    func testRedundantClosureWithSwitchExpressionDoesntBreakBuildWithRedundantReturnRuleDisabled() {
+        // From https://github.com/nicklockwood/SwiftFormat/issues/1565
+        let input = """
+        enum MyEnum {
+            case a
+            case b
+        }
+        let myEnum = MyEnum.a
+        let test: Int = {
+            switch myEnum {
+            case .a:
+                return 0
+            case .b:
+                return 1
+            }
+        }()
+        """
+
+        let output = """
+        enum MyEnum {
+            case a
+            case b
+        }
+        let myEnum = MyEnum.a
+        let test: Int = switch myEnum {
+            case .a:
+                0
+            case .b:
+                1
+            }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
+                       options: options, exclude: ["indent", "blankLinesBetweenScopes"])
+    }
+
+    func testRedundantSwitchStatementReturnInFunctionWithMultipleWhereClauses() {
+        // https://github.com/nicklockwood/SwiftFormat/issues/1554
+        let input = """
+        func foo(cases: FooCases, count: Int) -> String? {
+            switch cases {
+            case .fooCase1 where count == 0:
+                return "foo"
+            case .fooCase2 where count < 100,
+                 .fooCase3 where count < 100,
+                 .fooCase4:
+                return "bar"
+            default:
+                return nil
+            }
+        }
+        """
+        let output = """
+        func foo(cases: FooCases, count: Int) -> String? {
+            switch cases {
+            case .fooCase1 where count == 0:
+                "foo"
+            case .fooCase2 where count < 100,
+                 .fooCase3 where count < 100,
+                 .fooCase4:
+                "bar"
+            default:
+                nil
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testRedundantSwitchStatementReturnInFunctionWithSingleWhereClause() {
+        // https://github.com/nicklockwood/SwiftFormat/issues/1554
+        let input = """
+        func anotherFoo(cases: FooCases, count: Int) -> String? {
+            switch cases {
+            case .fooCase1 where count == 0:
+                return "foo"
+            case .fooCase2 where count < 100,
+                 .fooCase4:
+                return "bar"
+            default:
+                return nil
+            }
+        }
+        """
+        let output = """
+        func anotherFoo(cases: FooCases, count: Int) -> String? {
+            switch cases {
+            case .fooCase1 where count == 0:
+                "foo"
+            case .fooCase2 where count < 100,
+                 .fooCase4:
+                "bar"
+            default:
+                nil
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    // MARK: - redundantOptionalBinding
 
     func testRemovesRedundantOptionalBindingsInSwift5_7() {
         let input = """
