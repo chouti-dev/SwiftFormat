@@ -1110,7 +1110,9 @@ extension Formatter {
     /// has a single statement. This makes it eligible to be used with implicit return.
     func blockBodyHasSingleStatement(
         atStartOfScope startOfScopeIndex: Int,
-        includingConditionalStatements: Bool = true
+        includingConditionalStatements: Bool,
+        includingReturnStatements: Bool,
+        includingReturnInConditionalStatements: Bool? = nil
     ) -> Bool {
         guard let endOfScopeIndex = endOfScope(at: startOfScopeIndex) else { return false }
         let startOfBody = self.startOfBody(atStartOfScope: startOfScopeIndex)
@@ -1123,7 +1125,7 @@ extension Formatter {
         }
 
         // Skip over any optional `return` keyword
-        if tokens[firstTokenInBody] == .keyword("return") {
+        if includingReturnStatements, tokens[firstTokenInBody] == .keyword("return") {
             guard let tokenAfterReturnKeyword = index(of: .nonSpaceOrCommentOrLinebreak, after: firstTokenInBody) else { return false }
             firstTokenInBody = tokenAfterReturnKeyword
         }
@@ -1134,14 +1136,33 @@ extension Formatter {
            includingConditionalStatements,
            let conditionalBranches = conditionalBranches(at: firstTokenInBody)
         {
-            let isSingleStatement = conditionalBranches.allSatisfy { branch in
-                blockBodyHasSingleStatement(atStartOfScope: branch.startOfBranch, includingConditionalStatements: true)
+            let isSupportedSingleStatement = conditionalBranches.allSatisfy { branch in
+                // In Swift 5.9, there's a bug that prevents you from writing an
+                // if or switch expression using an `as?` on one of the branches:
+                // https://github.com/apple/swift/issues/68764
+                //
+                //  if condition {
+                //    foo as? String
+                //  } else {
+                //    "bar"
+                //  }
+                //
+                if conditionalBranchHasUnsupportedCastOperator(startOfScopeIndex: branch.startOfBranch) {
+                    return false
+                }
+
+                return blockBodyHasSingleStatement(
+                    atStartOfScope: branch.startOfBranch,
+                    includingConditionalStatements: true,
+                    includingReturnStatements: includingReturnInConditionalStatements ?? includingReturnStatements,
+                    includingReturnInConditionalStatements: includingReturnInConditionalStatements
+                )
             }
 
             let endOfStatement = conditionalBranches.last?.endOfBranch ?? firstTokenInBody
             let isOnlyStatement = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfStatement) == endOfScopeIndex
 
-            return isSingleStatement && isOnlyStatement
+            return isSupportedSingleStatement && isOnlyStatement
         }
 
         guard let expressionRange = parseExpressionRange(startingAt: firstTokenInBody),
@@ -1173,31 +1194,30 @@ extension Formatter {
     /// If `index` is the start of an `if` or `switch` statement,
     /// finds and returns all of the statement branches.
     func conditionalBranches(at index: Int) -> [ConditionalBranch]? {
-        // Skip over any `try`, `try?`, `try!`, or `await` token,
-        // which are valid before an if/switch expression.
-        if tokens[index] == .keyword("await"),
-           let nextToken = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index)
-        {
-            return conditionalBranches(at: nextToken)
-        }
-
-        if tokens[index] == .keyword("try"),
-           let tokenAfterTry = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index)
-        {
-            if tokens[tokenAfterTry] == .operator("!", .postfix) || tokens[tokenAfterTry] == .operator("?", .postfix),
-               let tokenAfterOperator = self.index(of: .nonSpaceOrCommentOrLinebreak, after: tokenAfterTry)
-            {
-                return conditionalBranches(at: tokenAfterOperator)
-            } else {
-                return conditionalBranches(at: tokenAfterTry)
+        switch tokens[index] {
+        case .keyword("await"):
+            // Skip over any `try`, `try?`, `try!`, or `await` token,
+            // which are valid before an if/switch expression.
+            if let nextToken = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index) {
+                return conditionalBranches(at: nextToken)
             }
-        }
-
-        if tokens[index] == .keyword("if") {
+            return nil
+        case .keyword("try"):
+            if let nextIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index) {
+                if tokens[nextIndex].isUnwrapOperator,
+                   let tokenAfterOperator = self.index(of: .nonSpaceOrCommentOrLinebreak, after: nextIndex)
+                {
+                    return conditionalBranches(at: tokenAfterOperator)
+                } else {
+                    return conditionalBranches(at: nextIndex)
+                }
+            }
+            return nil
+        case .keyword("if"):
             return ifStatementBranches(at: index)
-        } else if tokens[index] == .keyword("switch") {
+        case .keyword("switch"):
             return switchStatementBranches(at: index)
-        } else {
+        default:
             return nil
         }
     }
@@ -1223,12 +1243,12 @@ extension Formatter {
 
     /// Finds all of the branch bodies in a switch statement.
     /// Returns the index of the `startOfScope` and `endOfScope` of each branch.
-    func switchStatementBranches(at switchIndex: Int) -> [ConditionalBranch] {
+    func switchStatementBranches(at switchIndex: Int) -> [ConditionalBranch]? {
         assert(tokens[switchIndex] == .keyword("switch"))
         guard let startOfSwitchScope = index(of: .startOfScope("{"), after: switchIndex),
               let firstCaseIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfSwitchScope),
               tokens[firstCaseIndex].isSwitchCaseOrDefault
-        else { return [] }
+        else { return nil }
 
         var branches = [(startOfBranch: Int, endOfBranch: Int)]()
         var nextConditionalBranchIndex: Int? = firstCaseIndex
@@ -1242,12 +1262,42 @@ extension Formatter {
 
             if tokens[endOfBody].isSwitchCaseOrDefault {
                 nextConditionalBranchIndex = endOfBody
+            } else if tokens[startOfBody ..< endOfBody].contains(.startOfScope("#if")) {
+                return nil
             } else {
                 break
             }
         }
 
         return branches
+    }
+
+    /// In Swift 5.9, there's a bug that prevents you from writing an
+    /// if or switch expression using an `as?` on one of the branches:
+    /// https://github.com/apple/swift/issues/68764
+    ///
+    ///  if condition {
+    ///    foo as? String
+    ///  } else {
+    ///    "bar"
+    ///  }
+    ///
+    /// This helper returns whether or not the branch starting at the given `startOfScopeIndex`
+    /// includes an `as?` operator, so wouldn't be permitted in a if/switch exprssion in Swift 5.9
+    func conditionalBranchHasUnsupportedCastOperator(startOfScopeIndex: Int) -> Bool {
+        if options.swiftVersion == "5.9",
+           let asIndex = index(of: .keyword("as"), after: startOfScopeIndex),
+           let endOfScopeIndex = endOfScope(at: startOfScopeIndex),
+           asIndex < endOfScopeIndex,
+           next(.nonSpaceOrCommentOrLinebreak, after: asIndex)?.isUnwrapOperator == true,
+           // Make sure the as? is at the top level, not nested in some
+           // inner scope like a function call or closure
+           startOfScope(at: asIndex) == startOfScopeIndex
+        {
+            return true
+        }
+
+        return false
     }
 
     /// Performs a closure for each conditional branch in the given conditional statement,
@@ -2702,7 +2752,7 @@ extension Formatter {
                     continue
                 case .startOfScope("{") where isWhereClause && scopeStack.count == 1:
                     return
-                case .startOfScope("{") where lastKeyword == "switch":
+                case .startOfScope("{") where lastKeyword == "switch" && scopeStack.count == 1:
                     lastKeyword = ""
                     index += 1
                     loop: while let token = self.token(at: index) {

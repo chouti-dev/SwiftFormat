@@ -610,6 +610,16 @@ class TokenizerTests: XCTestCase {
         XCTAssertEqual(tokenize(input), output)
     }
 
+    func testRawStringContainingJustTwoUnescapedQuotes() {
+        let input = "#\"\"\"\"#"
+        let output: [Token] = [
+            .startOfScope("#\""),
+            .stringBody("\"\""),
+            .endOfScope("\"#"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
     func testRawStringContainingUnhashedBackslash() {
         let input = "#\"\\\"#"
         let output: [Token] = [
@@ -3262,26 +3272,6 @@ class TokenizerTests: XCTestCase {
             .space(" "),
             .operator(">", .none),
             .endOfScope(")"),
-        ]
-        XCTAssertEqual(tokenize(input), output)
-    }
-
-    func testGenericsWithWhereClause() {
-        let input = "<A where A.B == C>"
-        let output: [Token] = [
-            .startOfScope("<"),
-            .identifier("A"),
-            .space(" "),
-            .keyword("where"),
-            .space(" "),
-            .identifier("A"),
-            .operator(".", .infix),
-            .identifier("B"),
-            .space(" "),
-            .operator("==", .infix),
-            .space(" "),
-            .identifier("C"),
-            .endOfScope(">"),
         ]
         XCTAssertEqual(tokenize(input), output)
     }

@@ -1,5 +1,28 @@
 # Change Log
 
+## [0.52.11](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.52.11) (2023-12-05)
+
+- Updated `if`/`switch` expression workaround for Swift 5.9 bug to handle `as!` casts
+- Fixed indent logic  for wrapped conditional assignment expressions
+- Fixed assertion failure in `redundantSelf` rule
+- Fixed raw string parsing bug
+
+## [0.52.10](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.52.10) (2023-11-14)
+
+- Fixed `enumNamespaces` rule breaking `import struct`/`class` statements
+- Fixed unsafe application of `conditionalAssignment` rule to `switch` statements containing `#if` blocks
+
+## [0.52.9](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.52.9) (2023-11-10)
+
+- Fixed `redundantClosure` removing required closure around conditional statements
+- Fixed `redundantClosure` removing closure containing conditional expressions inside a method call
+- Fixed `redundantClosure` generating invalid code when the `redundantReturn` rule is disabled
+- Fixed issue where if/switch expressions with `as?` cast would break build in Swift 5.9
+- Fixed `blankLineAfterImports` introducing spurious blank line before `@preconcurrency` attribute
+- Fixed bug where `enumNamespaces` rule wouldn't be applied immediately after an `import` statement
+- Fixed issue where `switch` case with multiple `where` clauses could be parsed incorrectly
+- The SwiftFormat SPM plugin now formats local dependencies, not just final product targets
+
 ## [0.52.8](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.52.8) (2023-10-17)
 
 - Fixed `redundantClosure` rule in cases where an `if`/`switch` expression is not permitted

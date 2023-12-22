@@ -950,10 +950,11 @@ public struct _FormatRules {
             .keyword("class"),
             .keyword("struct"),
         ].contains($0) }) { i, token in
-            guard formatter.last(.keyword, before: i) != .keyword("import"),
+            guard let next = formatter.next(.nonSpaceOrCommentOrLinebreak, after: i),
                   // exit if class is a type modifier
-                  let next = formatter.next(.nonSpaceOrCommentOrLinebreak, after: i),
                   !(next.isKeyword || next.isModifierKeyword),
+                  // exit if import statement
+                  formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) != .keyword("import"),
                   // exit for class as protocol conformance
                   formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) != .delimiter(":"),
                   let braceIndex = formatter.index(of: .startOfScope("{"), after: i),
@@ -1183,7 +1184,7 @@ public struct _FormatRules {
             switch formatter.tokens[nextIndex] {
             case .linebreak, .keyword("import"), .keyword("@testable"),
                  .keyword("@_exported"), .keyword("@_implementationOnly"),
-                 .keyword("@_spi"), .keyword("@_spiOnly"),
+                 .keyword("@_spi"), .keyword("@_spiOnly"), .keyword("@preconcurrency"),
                  .keyword("#else"), .keyword("#elseif"), .endOfScope("#endif"):
                 break
             default:
@@ -1609,7 +1610,50 @@ public struct _FormatRules {
                 {
                     indentStack[indentStack.count - 1] += formatter.options.indent
                 }
+            case .operator("=", .infix):
+                // If/switch expressions on their own line following an `=` assignment should always be indented
+                guard let nextKeyword = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: i),
+                      ["if", "switch"].contains(formatter.tokens[nextKeyword].string),
+                      !formatter.onSameLine(i, nextKeyword)
+                else { fallthrough }
+
+                let indent = (indentStack.last ?? "") + formatter.options.indent
+                indentStack.append(indent)
+                stringBodyIndentStack.append("")
+                indentCounts.append(1)
+                scopeStartLineIndexes.append(lineIndex)
+                linewrapStack.append(false)
+                scopeStack.append(.operator("=", .infix))
+                scopeStartLineIndexes.append(lineIndex)
+
             default:
+                // If this is the final `endOfScope` in a conditional assignment,
+                // we have to end the scope introduced by that assignment operator.
+                defer {
+                    if token == .endOfScope("}"), let startOfScope = formatter.startOfScope(at: i) {
+                        // Find the `=` before this start of scope, which isn't itself part of the conditional statement
+                        var previousAssignmentIndex = formatter.index(of: .operator("=", .infix), before: startOfScope)
+                        while let currentPreviousAssignmentIndex = previousAssignmentIndex,
+                              formatter.isConditionalStatement(at: currentPreviousAssignmentIndex)
+                        {
+                            previousAssignmentIndex = formatter.index(of: .operator("=", .infix), before: currentPreviousAssignmentIndex)
+                        }
+
+                        // Make sure the `=` actually created a new scope
+                        if scopeStack.last == .operator("=", .infix),
+                           // Parse the conditional branches following the `=` assignment operator
+                           let previousAssignmentIndex = previousAssignmentIndex,
+                           let nextTokenAfterAssignment = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: previousAssignmentIndex),
+                           let conditionalBranches = formatter.conditionalBranches(at: nextTokenAfterAssignment),
+                           // If this is the very end of the conditional assignment following the `=`,
+                           // then we can end the scope.
+                           conditionalBranches.last?.endOfBranch == i
+                        {
+                            popScope()
+                        }
+                    }
+                }
+
                 // Handle end of scope
                 if let scope = scopeStack.last, token.isEndOfScope(scope) {
                     let indentCount = indentCounts.last! - 1
@@ -1626,6 +1670,7 @@ public struct _FormatRules {
                             stringBodyIndentStack.append(stringBodyIndentStack.last ?? "")
                         }
                     }
+
                     // Don't reduce indent if line doesn't start with end of scope
                     let start = formatter.startOfLine(at: i)
                     guard let firstIndex = formatter.index(of: .nonSpaceOrComment, after: start - 1) else {
@@ -1955,6 +2000,7 @@ public struct _FormatRules {
                     } else if !formatter.options.xcodeIndentation || !isWrappedDeclaration() {
                         indent += formatter.linewrapIndent(at: i)
                     }
+
                     linewrapStack[linewrapStack.count - 1] = true
                     indentStack.append(indent)
                     stringBodyIndentStack.append("")
@@ -3175,7 +3221,11 @@ public struct _FormatRules {
             }
 
             // Make sure the body only has a single statement
-            guard formatter.blockBodyHasSingleStatement(atStartOfScope: startOfScopeIndex) else {
+            guard formatter.blockBodyHasSingleStatement(
+                atStartOfScope: startOfScopeIndex,
+                includingConditionalStatements: true,
+                includingReturnStatements: true
+            ) else {
                 return
             }
 
@@ -3188,7 +3238,12 @@ public struct _FormatRules {
                 return
             }
 
-            // Removes return statements in the given single-statement scope
+            // Find all of the return keywords to remove before we remove any of them,
+            // so we can apply additional validation first.
+            var returnKeywordRangesToRemove = [Range<Int>]()
+            var hasReturnThatCantBeRemoved = false
+
+            /// Finds the return keywords to remove and stores them in `returnKeywordRangesToRemove`
             func removeReturn(atStartOfScope startOfScopeIndex: Int) {
                 // If this scope is a single-statement if or switch statement then we have to recursively
                 // remove the return from each branch of the if statement
@@ -3198,6 +3253,23 @@ public struct _FormatRules {
                    let conditionalBranches = formatter.conditionalBranches(at: firstTokenInBody)
                 {
                     for branch in conditionalBranches.reversed() {
+                        // In Swift 5.9, there's a bug that prevents you from writing an
+                        // if or switch expression using an `as?` on one of the branches:
+                        // https://github.com/apple/swift/issues/68764
+                        //
+                        //  if condition {
+                        //    foo as? String
+                        //  } else {
+                        //    "bar"
+                        //  }
+                        //
+                        if formatter.conditionalBranchHasUnsupportedCastOperator(
+                            startOfScopeIndex: branch.startOfBranch)
+                        {
+                            hasReturnThatCantBeRemoved = true
+                            return
+                        }
+
                         removeReturn(atStartOfScope: branch.startOfBranch)
                     }
                 }
@@ -3218,11 +3290,17 @@ public struct _FormatRules {
                             returnIndices[i] -= range.count
                         }
                     }
-                    formatter.removeTokens(in: range)
+                    returnKeywordRangesToRemove.append(range)
                 }
             }
 
             removeReturn(atStartOfScope: startOfScopeIndex)
+
+            guard !hasReturnThatCantBeRemoved else { return }
+
+            for returnKeywordRangeToRemove in returnKeywordRangesToRemove.sorted(by: { $0.startIndex > $1.startIndex }) {
+                formatter.removeTokens(in: returnKeywordRangeToRemove)
+            }
         }
     }
 
@@ -6288,13 +6366,22 @@ public struct _FormatRules {
             {
                 /// Whether or not this closure has a single, simple expression in its body.
                 /// These closures can always be simplified / removed regardless of the context.
-                let hasSingleSimpleExpression = formatter.blockBodyHasSingleStatement(atStartOfScope: closureStartIndex, includingConditionalStatements: false)
+                let hasSingleSimpleExpression = formatter.blockBodyHasSingleStatement(
+                    atStartOfScope: closureStartIndex,
+                    includingConditionalStatements: false,
+                    includingReturnStatements: true
+                )
 
                 /// Whether or not this closure has a single if/switch expression in its body.
                 /// Since if/switch expressions are only valid in the `return` position or as an `=` assignment,
                 /// these closures can only sometimes be simplified / removed.
                 let hasSingleConditionalExpression = !hasSingleSimpleExpression &&
-                    formatter.blockBodyHasSingleStatement(atStartOfScope: closureStartIndex, includingConditionalStatements: true)
+                    formatter.blockBodyHasSingleStatement(
+                        atStartOfScope: closureStartIndex,
+                        includingConditionalStatements: true,
+                        includingReturnStatements: true,
+                        includingReturnInConditionalStatements: false
+                    )
 
                 guard hasSingleSimpleExpression || hasSingleConditionalExpression else {
                     return
@@ -6347,11 +6434,17 @@ public struct _FormatRules {
                     var startOfScopeContainingClosure = formatter.startOfScope(at: startIndex)
                     var assignmentBeforeClosure = formatter.index(of: .operator("=", .infix), before: startIndex)
 
+                    if let assignmentBeforeClosure = assignmentBeforeClosure, formatter.isConditionalStatement(at: assignmentBeforeClosure) {
+                        // Not valid to use conditional expression directly in condition body
+                        return
+                    }
+
                     let potentialStartOfExpressionContainingClosure: Int?
                     switch (startOfScopeContainingClosure, assignmentBeforeClosure) {
                     case (nil, nil):
                         potentialStartOfExpressionContainingClosure = nil
                     case (.some(let startOfScope), nil):
+                        guard formatter.tokens[startOfScope] == .startOfScope("{") else { return }
                         potentialStartOfExpressionContainingClosure = startOfScope
                     case (nil, let .some(assignmentBeforeClosure)):
                         potentialStartOfExpressionContainingClosure = assignmentBeforeClosure
@@ -6972,7 +7065,8 @@ public struct _FormatRules {
     }
 
     public let conditionalAssignment = FormatRule(
-        help: "Assign properties using if / switch expressions."
+        help: "Assign properties using if / switch expressions.",
+        orderAfter: ["redundantReturn"]
     ) { formatter in
         // If / switch expressions were added in Swift 5.9 (SE-0380)
         guard formatter.options.swiftVersion >= "5.9" else {
@@ -7070,7 +7164,29 @@ public struct _FormatRules {
                     tempScopeTokens.append(.endOfScope("}"))
 
                     let tempFormatter = Formatter(tempScopeTokens, options: formatter.options)
-                    return tempFormatter.blockBodyHasSingleStatement(atStartOfScope: 0)
+                    guard tempFormatter.blockBodyHasSingleStatement(
+                        atStartOfScope: 0,
+                        includingConditionalStatements: true,
+                        includingReturnStatements: false
+                    ) else {
+                        return false
+                    }
+
+                    // In Swift 5.9, there's a bug that prevents you from writing an
+                    // if or switch expression using an `as?` on one of the branches:
+                    // https://github.com/apple/swift/issues/68764
+                    //
+                    //  let result = if condition {
+                    //    foo as? String
+                    //  } else {
+                    //    "bar"
+                    //  }
+                    //
+                    if tempFormatter.conditionalBranchHasUnsupportedCastOperator(startOfScopeIndex: 0) {
+                        return false
+                    }
+
+                    return true
                 }
 
                 return false
