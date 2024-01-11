@@ -4,9 +4,11 @@
 * [anyObjectProtocol](#anyObjectProtocol)
 * [applicationMain](#applicationMain)
 * [assertionFailures](#assertionFailures)
+* [blankLineAfterImports](#blankLineAfterImports)
 * [blankLinesAroundMark](#blankLinesAroundMark)
 * [blankLinesAtEndOfScope](#blankLinesAtEndOfScope)
 * [blankLinesAtStartOfScope](#blankLinesAtStartOfScope)
+* [blankLinesBetweenChainedFunctions](#blankLinesBetweenChainedFunctions)
 * [blankLinesBetweenScopes](#blankLinesBetweenScopes)
 * [braces](#braces)
 * [conditionalAssignment](#conditionalAssignment)
@@ -31,6 +33,7 @@
 * [modifierOrder](#modifierOrder)
 * [numberFormatting](#numberFormatting)
 * [opaqueGenericParameters](#opaqueGenericParameters)
+* [preferForLoop](#preferForLoop)
 * [preferKeyPath](#preferKeyPath)
 * [redundantBackticks](#redundantBackticks)
 * [redundantBreak](#redundantBreak)
@@ -80,6 +83,7 @@
 * [wrap](#wrap)
 * [wrapArguments](#wrapArguments)
 * [wrapAttributes](#wrapAttributes)
+* [wrapLoopBodies](#wrapLoopBodies)
 * [wrapMultilineStatementBraces](#wrapMultilineStatementBraces)
 * [wrapSingleLineComments](#wrapSingleLineComments)
 * [yodaConditions](#yodaConditions)
@@ -87,17 +91,17 @@
 # Opt-in Rules (disabled by default)
 
 * [acronyms](#acronyms)
-* [blankLineAfterImports](#blankLineAfterImports)
-* [blankLinesBetweenChainedFunctions](#blankLinesBetweenChainedFunctions)
 * [blankLinesBetweenImports](#blankLinesBetweenImports)
 * [blockComments](#blockComments)
 * [docComments](#docComments)
 * [isEmpty](#isEmpty)
 * [markTypes](#markTypes)
+* [noExplicitOwnership](#noExplicitOwnership)
 * [organizeDeclarations](#organizeDeclarations)
 * [sortSwitchCases](#sortSwitchCases)
 * [wrapConditionalBodies](#wrapConditionalBodies)
 * [wrapEnumCases](#wrapEnumCases)
+* [wrapMultilineConditionalAssignment](#wrapMultilineConditionalAssignment)
 * [wrapSwitchCases](#wrapSwitchCases)
 
 # Deprecated Rules (do not use)
@@ -1077,6 +1081,21 @@ Option | Description
 </details>
 <br/>
 
+## noExplicitOwnership
+
+Don't use explicit ownership modifiers (borrowing / consuming).
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- borrowing func foo(_ bar: consuming Bar) { ... }
++ func foo(_ bar: Bar) { ... }
+```
+
+</details>
+<br/>
+
 ## numberFormatting
 
 Use consistent grouping for numeric literals. Groups will be separated by `_`
@@ -1211,6 +1230,48 @@ Option | Description
 +     private let g: Int = 2
 +
  }
+```
+
+</details>
+<br/>
+
+## preferForLoop
+
+Convert functional `forEach` calls to for loops.
+
+Option | Description
+--- | ---
+`--anonymousforeach` | Convert anonymous forEach: "convert" (default) or "ignore".
+`--onelineforeach` | Convert one-line forEach: "convert" or "ignore" (default).
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  let strings = ["foo", "bar", "baaz"]
+- strings.forEach { placeholder in
++ for placeholder in strings {
+      print(placeholder)
+  }
+
+  // Supports anonymous closures
+- strings.forEach {
++ for string in strings {
+-     print($0)
++     print(string)
+  }
+
+- foo.item().bar[2].baazValues(option: true).forEach {
++ for baazValue in foo.item().bar[2].baazValues(option: true) {
+-     print($0)
++     print(baazValue)
+  }
+
+  // Doesn't affect long multiline functional chains
+  placeholderStrings
+      .filter { $0.style == .fooBar }
+      .map { $0.uppercased() }
+      .forEach { print($0) }
 ```
 
 </details>
@@ -2248,7 +2309,7 @@ Prefer shorthand syntax for Arrays, Dictionaries and Optionals.
 
 Option | Description
 --- | ---
-`--shortoptionals` | Use ? for optionals "always" (default) or "except-properties"
+`--shortoptionals` | Use ? for optionals "always" or "except-properties" (default)
 
 <details>
 <summary>Examples</summary>
@@ -2539,6 +2600,52 @@ Option | Description
 +   case baz
   }
 ```
+
+</details>
+<br/>
+
+## wrapLoopBodies
+
+Wrap the bodies of inline loop statements onto a new line.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- for foo in array { print(foo) }
++ for foo in array {
++     print(foo)
++ }
+```
+
+```diff
+- while let foo = bar.next() { print(foo) }
++ while let foo = bar.next() {
++     print(foo)
++ }
+```
+
+</details>
+<br/>
+
+## wrapMultilineConditionalAssignment
+
+Wrap multiline conditional assignment expressions after the assignment operator.
+
+<details>
+<summary>Examples</summary>
+
+- let planetLocation = if let star = planet.star {
+-     "The \(star.name) system"
+- } else {
+-     "Rogue planet"
+- }
++ let planetLocation =
++     if let star = planet.star {
++         "The \(star.name) system"
++     } else {
++         "Rogue planet"
++     }
 
 </details>
 <br/>

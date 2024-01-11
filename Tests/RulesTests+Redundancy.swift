@@ -1273,7 +1273,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(redundantType: .inferred, swiftVersion: "5.9")
-        testFormatting(for: input, rule: FormatRules.redundantType, options: options)
+        testFormatting(for: input, rule: FormatRules.redundantType, options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantTypeWithIfExpression_inferred() {
@@ -1292,7 +1292,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(redundantType: .inferred, swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options)
+        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantTypeWithIfExpression_explicit() {
@@ -1311,7 +1311,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(redundantType: .explicit, swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options)
+        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantTypeWithNestedIfExpression_inferred() {
@@ -1348,7 +1348,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(redundantType: .inferred, swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options)
+        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantTypeWithNestedIfExpression_explicit() {
@@ -1385,7 +1385,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(redundantType: .explicit, swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options)
+        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantTypeWithLiteralsInIfExpression() {
@@ -1404,7 +1404,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(redundantType: .inferred, swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options)
+        testFormatting(for: input, output, rule: FormatRules.redundantType, options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     // --redundanttype explicit
@@ -2303,12 +2303,12 @@ class RedundancyTests: RulesTests {
 
     func testNoRemoveReturnInForIn() {
         let input = "for foo in bar { return 5 }"
-        testFormatting(for: input, rule: FormatRules.redundantReturn)
+        testFormatting(for: input, rule: FormatRules.redundantReturn, exclude: ["wrapLoopBodies"])
     }
 
     func testNoRemoveReturnInForWhere() {
         let input = "for foo in bar where baz { return 5 }"
-        testFormatting(for: input, rule: FormatRules.redundantReturn)
+        testFormatting(for: input, rule: FormatRules.redundantReturn, exclude: ["wrapLoopBodies"])
     }
 
     func testNoRemoveReturnInIfLetTry() {
@@ -2694,7 +2694,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure, FormatRules.indent], options: options)
+        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure, FormatRules.indent], options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantSwitchStatementReturnInFunction() {
@@ -3500,12 +3500,12 @@ class RedundancyTests: RulesTests {
 
     func testNoRemoveSelfForIndexVarInFor() {
         let input = "for foo in bar { self.foo = foo }"
-        testFormatting(for: input, rule: FormatRules.redundantSelf)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, exclude: ["wrapLoopBodies"])
     }
 
     func testNoRemoveSelfForKeyValueTupleInFor() {
         let input = "for (foo, bar) in baz { self.foo = foo; self.bar = bar }"
-        testFormatting(for: input, rule: FormatRules.redundantSelf)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, exclude: ["wrapLoopBodies"])
     }
 
     func testRemoveSelfFromComputedVar() {
@@ -3660,13 +3660,13 @@ class RedundancyTests: RulesTests {
 
     func testNoRemoveSelfForVarDeclaredInWhileCondition() {
         let input = "while let foo = bar { self.foo = foo }"
-        testFormatting(for: input, rule: FormatRules.redundantSelf)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, exclude: ["wrapLoopBodies"])
     }
 
     func testRemoveSelfForVarNotDeclaredInWhileCondition() {
         let input = "while let foo == bar { self.baz = 5 }"
         let output = "while let foo == bar { baz = 5 }"
-        testFormatting(for: input, output, rule: FormatRules.redundantSelf)
+        testFormatting(for: input, output, rule: FormatRules.redundantSelf, exclude: ["wrapLoopBodies"])
     }
 
     func testNoRemoveSelfForVarDeclaredInSwitchCase() {
@@ -5258,7 +5258,7 @@ class RedundancyTests: RulesTests {
     func testNoInsertSelfForNestedVarReference() {
         let input = "class Foo {\n    func bar() {\n        var bar = 5\n        repeat { bar = 6 } while true\n    }\n}"
         let options = FormatOptions(explicitSelf: .insert)
-        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options, exclude: ["wrapLoopBodies"])
     }
 
     func testNoInsertSelfInSwitchCaseLet() {
@@ -5768,6 +5768,25 @@ class RedundancyTests: RulesTests {
             static func baz() {
                 fatalError()
             }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testNoInsertSelfBeforeSet() {
+        let input = """
+        class Foo {
+            var foo: Bool
+
+            var bar: Bool {
+                get { self.foo }
+                set { self.foo = newValue }
+            }
+
+            required init() {}
+
+            func set() {}
         }
         """
         let options = FormatOptions(explicitSelf: .insert)
@@ -7285,7 +7304,7 @@ class RedundancyTests: RulesTests {
     func testLabelsAreNotArguments() {
         let input = "func foo(bar: Int, baz: String) {\n    bar: while true { print(baz) }\n}"
         let output = "func foo(bar _: Int, baz: String) {\n    bar: while true { print(baz) }\n}"
-        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments, exclude: ["wrapLoopBodies"])
     }
 
     func testDictionaryLiteralsRuinEverything() {
@@ -7707,7 +7726,7 @@ class RedundancyTests: RulesTests {
             file.close()
         }
         """
-        testFormatting(for: input, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["noExplicitOwnership"])
     }
 
     func testUsedConsumingBorrowingArguments() {
@@ -7717,7 +7736,7 @@ class RedundancyTests: RulesTests {
             borrow(b)
         }
         """
-        testFormatting(for: input, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["noExplicitOwnership"])
     }
 
     func testUnusedConsumingArgument() {
@@ -7731,7 +7750,7 @@ class RedundancyTests: RulesTests {
             print("no-op")
         }
         """
-        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments, exclude: ["noExplicitOwnership"])
     }
 
     func testUnusedConsumingBorrowingArguments() {
@@ -7745,7 +7764,7 @@ class RedundancyTests: RulesTests {
             print("no-op")
         }
         """
-        testFormatting(for: input, output, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, output, rule: FormatRules.unusedArguments, exclude: ["noExplicitOwnership"])
     }
 
     func testFunctionArgumentUsedInGuardNotRemoved() {
@@ -7871,7 +7890,7 @@ class RedundancyTests: RulesTests {
 
         let options = FormatOptions(swiftVersion: "5.9")
         testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
-                       options: options, exclude: ["indent"])
+                       options: options, exclude: ["indent", "wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantClosureWithExplicitReturn2() {
@@ -8268,7 +8287,7 @@ class RedundancyTests: RulesTests {
         """
         let options = FormatOptions(swiftVersion: "5.9")
         testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
-                       options: options, exclude: ["indent"])
+                       options: options, exclude: ["indent", "wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantClosureDoesntLeaveStrayTryAwait() {
@@ -8290,7 +8309,7 @@ class RedundancyTests: RulesTests {
         """
         let options = FormatOptions(swiftVersion: "5.9")
         testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
-                       options: options, exclude: ["indent"])
+                       options: options, exclude: ["indent", "wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantClosureDoesntLeaveInvalidSwitchExpressionInOperatorChain() {
@@ -8408,7 +8427,7 @@ class RedundancyTests: RulesTests {
         """
 
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options, exclude: ["indent"])
+        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options, exclude: ["indent", "wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantClosureDoesntLeaveInvalidSwitchExpressionInArray() {
@@ -8743,7 +8762,7 @@ class RedundancyTests: RulesTests {
         """
 
         let options = FormatOptions(swiftVersion: "5.10")
-        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options, exclude: ["indent"])
+        testFormatting(for: input, output, rule: FormatRules.redundantClosure, options: options, exclude: ["indent", "wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantClosureDoesntBreakBuildWithRedundantReturnRuleDisabled() {
@@ -8806,7 +8825,7 @@ class RedundancyTests: RulesTests {
 
         let options = FormatOptions(swiftVersion: "5.9")
         testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
-                       options: options, exclude: ["indent", "blankLinesBetweenScopes"])
+                       options: options, exclude: ["indent", "blankLinesBetweenScopes", "wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantSwitchStatementReturnInFunctionWithMultipleWhereClauses() {
@@ -9124,5 +9143,59 @@ class RedundancyTests: RulesTests {
         """
 
         testFormatting(for: input, output, rule: FormatRules.redundantInternal, exclude: ["redundantExtensionACL"])
+    }
+
+    // MARK: - noExplicitOwnership
+
+    func testRemovesOwnershipKeywordsFromFunc() {
+        let input = """
+        consuming func myMethod(consuming foo: consuming Foo, borrowing bars: borrowing [Bar]) {}
+        borrowing func myMethod(consuming foo: consuming Foo, borrowing bars: borrowing [Bar]) {}
+        """
+
+        let output = """
+        func myMethod(consuming foo: Foo, borrowing bars: [Bar]) {}
+        func myMethod(consuming foo: Foo, borrowing bars: [Bar]) {}
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.noExplicitOwnership, exclude: ["unusedArguments"])
+    }
+
+    func testRemovesOwnershipKeywordsFromClosure() {
+        let input = """
+        foos.map { (foo: consuming Foo) in
+            foo.bar
+        }
+
+        foos.map { (foo: borrowing Foo) in
+            foo.bar
+        }
+        """
+
+        let output = """
+        foos.map { (foo: Foo) in
+            foo.bar
+        }
+
+        foos.map { (foo: Foo) in
+            foo.bar
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.noExplicitOwnership, exclude: ["unusedArguments"])
+    }
+
+    func testRemovesOwnershipKeywordsFromType() {
+        let input = """
+        let consuming: (consuming Foo) -> Bar
+        let borrowing: (borrowing Foo) -> Bar
+        """
+
+        let output = """
+        let consuming: (Foo) -> Bar
+        let borrowing: (Foo) -> Bar
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.noExplicitOwnership)
     }
 }

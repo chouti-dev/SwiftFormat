@@ -1668,40 +1668,51 @@ class SyntaxTests: RulesTests {
 
     // optionals
 
+    func testOptionalPropertyTypeNotConvertedToSugarByDefault() {
+        let input = "var bar: Optional<String>"
+        testFormatting(for: input, rule: FormatRules.typeSugar)
+    }
+
     func testOptionalTypeConvertedToSugar() {
         let input = "var foo: Optional<String>"
         let output = "var foo: String?"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testSwiftOptionalTypeConvertedToSugar() {
         let input = "var foo: Swift.Optional<String>"
         let output = "var foo: String?"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testOptionalClosureParenthesizedConvertedToSugar() {
         let input = "var foo: Optional<(Int) -> String>"
         let output = "var foo: ((Int) -> String)?"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testOptionalTupleWrappedInParensConvertedToSugar() {
         let input = "let foo: Optional<(foo: Int, bar: String)>"
         let output = "let foo: (foo: Int, bar: String)?"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testOptionalComposedProtocolWrappedInParensConvertedToSugar() {
         let input = "let foo: Optional<UIView & Foo>"
         let output = "let foo: (UIView & Foo)?"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testSwiftOptionalClosureParenthesizedConvertedToSugar() {
         let input = "var foo: Swift.Optional<(Int) -> String>"
         let output = "var foo: ((Int) -> String)?"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testStrippingSwiftNamespaceInOptionalTypeWhenConvertedToSugar() {
@@ -1713,7 +1724,8 @@ class SyntaxTests: RulesTests {
     func testStrippingSwiftNamespaceDoesNotStripPreviousSwiftNamespaceReferences() {
         let input = "let a: Swift.String = Optional<String>"
         let output = "let a: Swift.String = String?"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testOptionalTypeInsideCaseConvertedToSugar() {
@@ -1742,65 +1754,63 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.typeSugar)
     }
 
-    // shortOptionals = exceptProperties
-
-    func testPropertyTypeNotConvertedToSugar() {
-        let input = "var foo: Optional<String>"
-        let options = FormatOptions(shortOptionals: .exceptProperties)
-        testFormatting(for: input, rule: FormatRules.typeSugar, options: options)
-    }
-
     // swift parser bug
 
     func testAvoidSwiftParserBugWithClosuresInsideArrays() {
         let input = "var foo = Array<(_ image: Data?) -> Void>()"
-        testFormatting(for: input, rule: FormatRules.typeSugar)
+        testFormatting(for: input, rule: FormatRules.typeSugar, options: FormatOptions(shortOptionals: .always))
     }
 
     func testAvoidSwiftParserBugWithClosuresInsideDictionaries() {
         let input = "var foo = Dictionary<String, (_ image: Data?) -> Void>()"
-        testFormatting(for: input, rule: FormatRules.typeSugar)
+        testFormatting(for: input, rule: FormatRules.typeSugar, options: FormatOptions(shortOptionals: .always))
     }
 
     func testAvoidSwiftParserBugWithClosuresInsideOptionals() {
         let input = "var foo = Optional<(_ image: Data?) -> Void>()"
-        testFormatting(for: input, rule: FormatRules.typeSugar)
+        testFormatting(for: input, rule: FormatRules.typeSugar, options: FormatOptions(shortOptionals: .always))
     }
 
     func testDontOverApplyBugWorkaround() {
         let input = "var foo: Array<(_ image: Data?) -> Void>"
         let output = "var foo: [(_ image: Data?) -> Void]"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testDontOverApplyBugWorkaround2() {
         let input = "var foo: Dictionary<String, (_ image: Data?) -> Void>"
         let output = "var foo: [String: (_ image: Data?) -> Void]"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testDontOverApplyBugWorkaround3() {
         let input = "var foo: Optional<(_ image: Data?) -> Void>"
         let output = "var foo: ((_ image: Data?) -> Void)?"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testDontOverApplyBugWorkaround4() {
         let input = "var foo = Array<(image: Data?) -> Void>()"
         let output = "var foo = [(image: Data?) -> Void]()"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testDontOverApplyBugWorkaround5() {
         let input = "var foo = Array<(Data?) -> Void>()"
         let output = "var foo = [(Data?) -> Void]()"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     func testDontOverApplyBugWorkaround6() {
         let input = "var foo = Dictionary<Int, Array<(_ image: Data?) -> Void>>()"
         let output = "var foo = [Int: Array<(_ image: Data?) -> Void>]()"
-        testFormatting(for: input, output, rule: FormatRules.typeSugar)
+        let options = FormatOptions(shortOptionals: .always)
+        testFormatting(for: input, output, rule: FormatRules.typeSugar, options: options)
     }
 
     // MARK: - preferKeyPath
@@ -3427,7 +3437,7 @@ class SyntaxTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["redundantType"])
+        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["redundantType", "wrapMultilineConditionalAssignment"])
     }
 
     func testConvertsSimpleSwitchStatementAssignment() {
@@ -3449,7 +3459,7 @@ class SyntaxTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["redundantType"])
+        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["redundantType", "wrapMultilineConditionalAssignment"])
     }
 
     func testConvertsTrivialSwitchStatementAssignment() {
@@ -3467,7 +3477,7 @@ class SyntaxTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options)
+        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     func testConvertsNestedIfAndStatementAssignments() {
@@ -3515,7 +3525,7 @@ class SyntaxTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["redundantType"])
+        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["redundantType", "wrapMultilineConditionalAssignment"])
     }
 
     func testConvertsIfStatementAssignmentPreservingComment() {
@@ -3538,7 +3548,7 @@ class SyntaxTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["indent", "redundantType"])
+        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["indent", "redundantType", "wrapMultilineConditionalAssignment"])
     }
 
     func testDoesntConvertsIfStatementAssigningMultipleProperties() {
@@ -3792,7 +3802,7 @@ class SyntaxTests: RulesTests {
         """
 
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options)
+        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     // TODO: update branches parser to handle this case properly
@@ -3871,6 +3881,340 @@ class SyntaxTests: RulesTests {
         """
 
         let options = FormatOptions(swiftVersion: "5.10")
-        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options)
+        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["wrapMultilineConditionalAssignment"])
+    }
+
+    // MARK: - forLoop
+
+    func testConvertSimpleForEachToForLoop() {
+        let input = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        placeholderStrings.forEach { string in
+            print(string)
+        }
+
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        placeholderStrings.forEach { (string: String) in
+            print(string)
+        }
+        """
+
+        let output = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        for string in placeholderStrings {
+            print(string)
+        }
+
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        for string in placeholderStrings {
+            print(string)
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testConvertAnonymousForEachToForLoop() {
+        let input = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        placeholderStrings.forEach {
+            print($0)
+        }
+
+        potatoes.forEach({ $0.bake() })
+        """
+
+        let output = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        for placeholderString in placeholderStrings {
+            print(placeholderString)
+        }
+
+        potatoes.forEach({ $0.bake() })
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop, exclude: ["trailingClosures"])
+    }
+
+    func testNoConvertAnonymousForEachToForLoop() {
+        let input = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        placeholderStrings.forEach {
+            print($0)
+        }
+
+        potatoes.forEach({ $0.bake() })
+        """
+
+        let options = FormatOptions(preserveAnonymousForEach: true, preserveSingleLineForEach: false)
+        testFormatting(for: input, rule: FormatRules.preferForLoop, options: options, exclude: ["trailingClosures"])
+    }
+
+    func testConvertSingleLineForEachToForLoop() {
+        let input = "potatoes.forEach({ item in item.bake() })"
+        let output = "for item in potatoes { item.bake() }"
+
+        let options = FormatOptions(preserveSingleLineForEach: false)
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop, options: options,
+                       exclude: ["wrapLoopBodies"])
+    }
+
+    func testConvertSingleLineAnonymousForEachToForLoop() {
+        let input = "potatoes.forEach({ $0.bake() })"
+        let output = "for potato in potatoes { potato.bake() }"
+
+        let options = FormatOptions(preserveSingleLineForEach: false)
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop, options: options,
+                       exclude: ["wrapLoopBodies"])
+    }
+
+    func testConvertNestedForEach() {
+        let input = """
+        let nestedArrays = [[1, 2], [3, 4]]
+        nestedArrays.forEach {
+            $0.forEach {
+                $0.forEach {
+                    print($0)
+                }
+            }
+        }
+        """
+
+        let output = """
+        let nestedArrays = [[1, 2], [3, 4]]
+        for nestedArray in nestedArrays {
+            for item in nestedArray {
+                for item in item {
+                    print(item)
+                }
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testDefaultNameAlreadyUsedInLoopBody() {
+        let input = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        placeholderStrings.forEach {
+            let placeholderString = $0.uppercased()
+            print(placeholderString, $0)
+        }
+        """
+
+        let output = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        for item in placeholderStrings {
+            let placeholderString = item.uppercased()
+            print(placeholderString, item)
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testIgnoreLoopsWithCaptureListForNow() {
+        let input = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        placeholderStrings.forEach { [someCapturedValue = fooBar] in
+            print($0, someCapturedValue)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.preferForLoop)
+    }
+
+    func testRemoveAllPrefixFromLoopIdentifier() {
+        let input = """
+        allWindows.forEach {
+            print($0)
+        }
+        """
+
+        let output = """
+        for window in allWindows {
+            print(window)
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testConvertsReturnToContinue() {
+        let input = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        placeholderStrings.forEach {
+            func capitalize(_ value: String) -> String {
+                return value.uppercased()
+            }
+
+            if $0 == "foo" {
+                return
+            } else {
+                print(capitalize($0))
+            }
+        }
+        """
+
+        let output = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        for placeholderString in placeholderStrings {
+            func capitalize(_ value: String) -> String {
+                return value.uppercased()
+            }
+
+            if placeholderString == "foo" {
+                continue
+            } else {
+                print(capitalize(placeholderString))
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testHandlesForEachOnChainedProperties() {
+        let input = """
+        let bar = foo.bar
+        bar.baaz.quux.strings.forEach {
+            print($0)
+        }
+        """
+
+        let output = """
+        let bar = foo.bar
+        for string in bar.baaz.quux.strings {
+            print(string)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testHandlesForEachOnFunctionCallResult() {
+        let input = """
+        let bar = foo.bar
+        foo.item().bar[2].baazValues(option: true).forEach {
+            print($0)
+        }
+        """
+
+        let output = """
+        let bar = foo.bar
+        for baazValue in foo.item().bar[2].baazValues(option: true) {
+            print(baazValue)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testHandlesForEachOnSubscriptResult() {
+        let input = """
+        let bar = foo.bar
+        foo.item().bar[2].dictionary["myValue"].forEach {
+            print($0)
+        }
+        """
+
+        let output = """
+        let bar = foo.bar
+        for item in foo.item().bar[2].dictionary["myValue"] {
+            print(item)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testHandlesForEachOnArrayLiteral() {
+        let input = """
+        let quux = foo.bar.baaz.quux
+        ["foo", "bar", "baaz", quux].forEach {
+            print($0)
+        }
+        """
+
+        let output = """
+        let quux = foo.bar.baaz.quux
+        for item in ["foo", "bar", "baaz", quux] {
+            print(item)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testHandlesForEachOnCurriedFunctionWithSubscript() {
+        let input = """
+        let quux = foo.bar.baaz.quux
+        foo(bar)(baaz)["item"].forEach {
+            print($0)
+        }
+        """
+
+        let output = """
+        let quux = foo.bar.baaz.quux
+        for item in foo(bar)(baaz)["item"] {
+            print(item)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testHandlesForEachOnArrayLiteralInParens() {
+        let input = """
+        let quux = foo.bar.baaz.quux
+        (["foo", "bar", "baaz", quux]).forEach {
+            print($0)
+        }
+        """
+
+        let output = """
+        let quux = foo.bar.baaz.quux
+        for item in (["foo", "bar", "baaz", quux]) {
+            print(item)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop, exclude: ["redundantParens"])
+    }
+
+    func testPreservesForEachAfterMultilineChain() {
+        let input = """
+        placeholderStrings
+            .filter { $0.style == .fooBar }
+            .map { $0.uppercased() }
+            .forEach { print($0) }
+
+        placeholderStrings
+            .filter({ $0.style == .fooBar })
+            .map({ $0.uppercased() })
+            .forEach({ print($0) })
+        """
+        testFormatting(for: input, rule: FormatRules.preferForLoop, exclude: ["trailingClosures"])
+    }
+
+    func testPreservesChainWithClosure() {
+        let input = """
+        // Converting this to a for loop would result in unusual looking syntax like
+        // `for string in strings.map { $0.uppercased() } { print($0) }`
+        // which causes a warning to be emitted: "trailing closure in this context is
+        // confusable with the body of the statement; pass as a parenthesized argument
+        // to silence this warning".
+        strings.map { $0.uppercased() }.forEach { print($0) }
+        """
+        testFormatting(for: input, rule: FormatRules.preferForLoop)
+    }
+
+    func testDoesntConvertIfStatementWithForLoopInBranch() {
+        let input = """
+        var foo: Foo?
+        if condition {
+            foo = Foo("foo")
+            for foo in foos {
+                print(foo)
+            }
+        } else {
+            foo = Foo("bar")
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.conditionalAssignment, options: options)
     }
 }

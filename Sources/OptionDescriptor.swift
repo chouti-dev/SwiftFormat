@@ -736,7 +736,7 @@ struct _Descriptors {
     let shortOptionals = OptionDescriptor(
         argumentName: "shortoptionals",
         displayName: "Short Optional Syntax",
-        help: "Use ? for optionals \"always\" (default) or \"except-properties\"",
+        help: "Use ? for optionals \"always\" or \"except-properties\" (default)",
         keyPath: \.shortOptionals
     )
     let markTypes = OptionDescriptor(
@@ -924,6 +924,22 @@ struct _Descriptors {
         keyPath: \.useSomeAny,
         trueValues: ["true", "enabled"],
         falseValues: ["false", "disabled"]
+    )
+    let preserveAnonymousForEach = OptionDescriptor(
+        argumentName: "anonymousforeach",
+        displayName: "Anonymous forEach closures",
+        help: "Convert anonymous forEach: \"convert\" (default) or \"ignore\".",
+        keyPath: \.preserveAnonymousForEach,
+        trueValues: ["ignore", "preserve"],
+        falseValues: ["convert"]
+    )
+    let preserveSingleLineForEach = OptionDescriptor(
+        argumentName: "onelineforeach",
+        displayName: "Single-line forEach closures",
+        help: "Convert one-line forEach: \"convert\" or \"ignore\" (default).",
+        keyPath: \.preserveSingleLineForEach,
+        trueValues: ["ignore", "preserve"],
+        falseValues: ["convert"]
     )
 
     // MARK: - Internal

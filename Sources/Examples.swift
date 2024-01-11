@@ -325,6 +325,22 @@ private struct Examples {
     ```
     """
 
+    let wrapLoopBodies = """
+    ```diff
+    - for foo in array { print(foo) }
+    + for foo in array {
+    +     print(foo)
+    + }
+    ```
+
+    ```diff
+    - while let foo = bar.next() { print(foo) }
+    + while let foo = bar.next() {
+    +     print(foo)
+    + }
+    ```
+    """
+
     let hoistPatternLet = """
     ```diff
     - (let foo, let bar) = baz()
@@ -1621,4 +1637,54 @@ private struct Examples {
       }
     ```
     """
+
+    let preferForLoop = """
+    ```diff
+      let strings = ["foo", "bar", "baaz"]
+    - strings.forEach { placeholder in
+    + for placeholder in strings {
+          print(placeholder)
+      }
+
+      // Supports anonymous closures
+    - strings.forEach {
+    + for string in strings {
+    -     print($0)
+    +     print(string)
+      }
+
+    - foo.item().bar[2].baazValues(option: true).forEach {
+    + for baazValue in foo.item().bar[2].baazValues(option: true) {
+    -     print($0)
+    +     print(baazValue)
+      }
+
+      // Doesn't affect long multiline functional chains
+      placeholderStrings
+          .filter { $0.style == .fooBar }
+          .map { $0.uppercased() }
+          .forEach { print($0) }
+    ```
+    """
+
+    let noExplicitOwnership = """
+    ```diff
+    - borrowing func foo(_ bar: consuming Bar) { ... }
+    + func foo(_ bar: Bar) { ... }
+    ```
+    """
+
+    let wrapMultilineConditionalAssignment = #"""
+    - let planetLocation = if let star = planet.star {
+    -     "The \(star.name) system"
+    - } else {
+    -     "Rogue planet"
+    - }
+    + let planetLocation =
+    +     if let star = planet.star {
+    +         "The \(star.name) system"
+    +     } else {
+    +         "Rogue planet"
+    +     }
+    """#
 }

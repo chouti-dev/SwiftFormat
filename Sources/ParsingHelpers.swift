@@ -1202,8 +1202,13 @@ extension Formatter {
     ///  - `(...) -> ...`
     ///  - `...?`
     ///  - `...!`
-    func parseType(at startOfTypeIndex: Int) -> (name: String, range: ClosedRange<Int>) {
-        let baseType = parseNonOptionalType(at: startOfTypeIndex)
+    ///  - `any ...`
+    ///  - `some ...`
+    ///  - `borrowing ...`
+    ///  - `consuming ...`
+    ///  - `(type).(type)`
+    func parseType(at startOfTypeIndex: Int) -> (name: String, range: ClosedRange<Int>)? {
+        guard let baseType = parseNonOptionalType(at: startOfTypeIndex) else { return nil }
 
         // Any type can be optional, so check for a trailing `?` or `!`
         if let nextToken = index(of: .nonSpaceOrCommentOrLinebreak, after: baseType.range.upperBound),
@@ -1213,10 +1218,20 @@ extension Formatter {
             return (name: tokens[typeRange].string, range: typeRange)
         }
 
+        // Any type can be followed by a `.` which can then continue the type
+        if let nextTokenIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: baseType.range.upperBound),
+           tokens[nextTokenIndex] == .operator(".", .infix),
+           let followingToken = index(of: .nonSpaceOrCommentOrLinebreak, after: nextTokenIndex),
+           let followingType = parseType(at: followingToken)
+        {
+            let typeRange = startOfTypeIndex ... followingType.range.upperBound
+            return (name: tokens[typeRange].string, range: typeRange)
+        }
+
         return baseType
     }
 
-    private func parseNonOptionalType(at startOfTypeIndex: Int) -> (name: String, range: ClosedRange<Int>) {
+    private func parseNonOptionalType(at startOfTypeIndex: Int) -> (name: String, range: ClosedRange<Int>)? {
         // Parse types of the form `[...]`
         if tokens[startOfTypeIndex] == .startOfScope("["),
            let endOfScope = endOfScope(at: startOfTypeIndex)
@@ -1232,9 +1247,9 @@ extension Formatter {
             // Parse types of the form `(...) -> ...`
             if let closureReturnIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfScope),
                tokens[closureReturnIndex] == .operator("->", .infix),
-               let returnTypeIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: closureReturnIndex)
+               let returnTypeIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: closureReturnIndex),
+               let returnTypeRange = parseType(at: returnTypeIndex)?.range
             {
-                let returnTypeRange = parseType(at: returnTypeIndex).range
                 let typeRange = startOfTypeIndex ... returnTypeRange.upperBound
                 return (name: tokens[typeRange].string, range: typeRange)
             }
@@ -1253,8 +1268,21 @@ extension Formatter {
             return (name: tokens[typeRange].string, range: typeRange)
         }
 
+        // Parse types of the form `any ...`, `some ...`, `borrowing ...`, `consuming ...`
+        if ["any", "some", "borrowing", "consuming"].contains(tokens[startOfTypeIndex].string),
+           let nextToken = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfTypeIndex),
+           let followingType = parseType(at: nextToken)
+        {
+            let typeRange = startOfTypeIndex ... followingType.range.upperBound
+            return (name: tokens[typeRange].string, range: typeRange)
+        }
+
         // Otherwise this is just a single identifier
-        return (name: tokens[startOfTypeIndex].string, range: startOfTypeIndex ... startOfTypeIndex)
+        if tokens[startOfTypeIndex].isIdentifier || tokens[startOfTypeIndex].isKeyword {
+            return (name: tokens[startOfTypeIndex].string, range: startOfTypeIndex ... startOfTypeIndex)
+        }
+
+        return nil
     }
 
     /// Parses the expression starting at the given index.
@@ -1525,6 +1553,71 @@ extension Formatter {
         // End of imports
         importStack.append(importRanges)
         return importStack
+    }
+
+    /// Parses the arguments of the closure whose open brace is at the given index.
+    /// Returns `nil` if this is an anonymous closure, or if there was an issue parsing the closure arguments.
+    ///  - `{ foo in ... }` returns `argumentNames: ["foo"]`
+    ///  - `{ foo, bar in ... }` returns `argumentNames: ["foo", "bar"]`
+    ///  - `{ (foo: Foo, bar: Bar) in ... }` returns `argumentNames: ["foo", "bar"]`
+    func parseClosureArgumentList(at closureOpenBraceIndex: Int) -> (argumentNames: [String], inKeywordIndex: Int)? {
+        var argumentNames = [String]()
+        let inKeywordIndex: Int
+
+        // Check if this is a closure `{ value in ... }` clause
+        if let indexAfterOpenBrace = index(of: .nonSpaceOrCommentOrLinebreak, after: closureOpenBraceIndex),
+           tokens[indexAfterOpenBrace].isIdentifier
+        {
+            // Parse a list of argument names like `foo, bar, baaz` until the `in` keyword
+            var currentArgumentListIndex = indexAfterOpenBrace
+            while tokens[currentArgumentListIndex].isIdentifier {
+                argumentNames.append(tokens[currentArgumentListIndex].string)
+
+                guard let nextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: currentArgumentListIndex) else {
+                    return nil
+                }
+
+                // Skip over any commas
+                if tokens[nextIndex] == .delimiter(",") {
+                    currentArgumentListIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: nextIndex) ?? nextIndex
+                } else {
+                    currentArgumentListIndex = nextIndex
+                }
+            }
+
+            // Finally we expect there to be an `in` keyword
+            guard tokens[currentArgumentListIndex] == .keyword("in") else {
+                return nil
+            }
+
+            inKeywordIndex = currentArgumentListIndex
+        }
+
+        // Check if this is a closure `{ (value: ValueType) in ... }` clause
+        else if let indexAfterOpenBrace = index(of: .nonSpaceOrCommentOrLinebreak, after: closureOpenBraceIndex),
+                tokens[indexAfterOpenBrace] == .startOfScope("("),
+                let endOfArgumentsScopeIndex = endOfScope(at: indexAfterOpenBrace),
+                let firstTokenInArgumentsList = index(of: .nonSpaceOrCommentOrLinebreak, after: indexAfterOpenBrace),
+                let indexAfterArguments = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfArgumentsScopeIndex),
+                tokens[indexAfterArguments] == .keyword("in")
+        {
+            inKeywordIndex = indexAfterArguments
+
+            // This can be a completely empty argument list, like `{ () in ... }`.
+            if firstTokenInArgumentsList == endOfArgumentsScopeIndex {
+                return (argumentNames: [], inKeywordIndex: inKeywordIndex)
+            }
+
+            let argumentTokens = tokens[firstTokenInArgumentsList ... endOfArgumentsScopeIndex].split(separator: .delimiter(","))
+            argumentNames = argumentTokens.compactMap { $0.first(where: \.isIdentifier)?.string ?? $0[0].string }
+        }
+
+        // Otherwise this is an anonymous closure
+        else {
+            return nil
+        }
+
+        return (argumentNames: argumentNames, inKeywordIndex: inKeywordIndex)
     }
 
     enum Declaration: Equatable {
@@ -2353,7 +2446,7 @@ extension Formatter {
               // https://docs.swift.org/swift-book/ReferenceManual/Types.html#grammar_protocol-composition-type
               let firstIdentifierIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: equalsIndex),
               tokens[firstIdentifierIndex].isIdentifier,
-              case var lastTypeEndIndex = parseType(at: firstIdentifierIndex).range.upperBound,
+              var lastTypeEndIndex = parseType(at: firstIdentifierIndex)?.range.upperBound,
               let firstAndIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: lastTypeEndIndex),
               tokens[firstAndIndex] == .operator("&", .infix)
         else { return nil }
@@ -2365,9 +2458,9 @@ extension Formatter {
         while let nextAndIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: lastTypeEndIndex),
               tokens[nextAndIndex] == .operator("&", .infix),
               let nextIdentifierIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: nextAndIndex),
-              tokens[nextIdentifierIndex].isIdentifier
+              tokens[nextIdentifierIndex].isIdentifier,
+              let endOfType = parseType(at: nextIdentifierIndex)?.range.upperBound
         {
-            let endOfType = parseType(at: nextIdentifierIndex).range.upperBound
             andTokenIndices.append(nextAndIndex)
             lastTypeEndIndex = endOfType
         }

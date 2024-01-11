@@ -1179,11 +1179,9 @@ extension Formatter {
     func startOfBody(atStartOfScope startOfScopeIndex: Int) -> Int {
         // If this is a closure that has an `in` clause, the body scope starts after that
         if isStartOfClosure(at: startOfScopeIndex),
-           let endOfScopeIndex = endOfScope(at: startOfScopeIndex),
-           let inToken = index(of: .keyword("in"), in: (startOfScopeIndex + 1) ..< endOfScopeIndex),
-           !indexIsWithinNestedClosure(inToken, startOfScopeIndex: startOfScopeIndex)
+           let inKeywordIndex = parseClosureArgumentList(at: startOfScopeIndex)?.inKeywordIndex
         {
-            return inToken
+            return inKeywordIndex
         } else {
             return startOfScopeIndex
         }
@@ -1350,12 +1348,30 @@ extension Formatter {
             return false
         }
 
-        if isStartOfClosure(at: startOfScopeAtIndex) {
+        if isStartOfClosureOrFunctionBody(at: startOfScopeAtIndex) {
             return startOfScopeAtIndex != startOfScopeIndex
         } else if token(at: startOfScopeAtIndex)?.isStartOfScope == true {
             return indexIsWithinNestedClosure(startOfScopeAtIndex - 1, startOfScopeIndex: startOfScopeIndex)
         } else {
             return false
+        }
+    }
+
+    func isStartOfClosureOrFunctionBody(at startOfScopeIndex: Int) -> Bool {
+        guard tokens[startOfScopeIndex] == .startOfScope("{") else { return false }
+
+        // An open brace is always one of:
+        //  - a statement with a keyword, like `if x { ...`
+        //  - a declaration with keyword, like `func x() { ... ` or `var x: String { ...`
+        //  - a closure, which won't have an associated keyword, like `value.map { ...`.
+        if isStartOfClosure(at: startOfScopeIndex) {
+            return true
+        } else {
+            // Since this isn't a closure, it should be either the start of a statement
+            // like `if x { ...` _or_ a declaration like `func x() { ... `.
+            // All of these cases have a keyword, so the last significant keyword
+            // should be part of the same declaration / statement as the brace itself.
+            return last(.keyword, before: startOfScopeIndex) == .keyword("func")
         }
     }
 }
@@ -2795,12 +2811,6 @@ extension Formatter {
                     var prevIndex = index - 1
                     var name: String?
                     while let token = self.token(at: prevIndex), token != .keyword("var") {
-                        if token.isLvalue, let nextToken = nextToken(after: prevIndex, where: {
-                            !$0.isSpaceOrCommentOrLinebreak && !$0.isStartOfScope
-                        }), nextToken.isRvalue, !nextToken.isOperator(".") {
-                            // It's a closure
-                            fallthrough
-                        }
                         if case let .identifier(_name) = token {
                             // Is the declared variable
                             name = _name

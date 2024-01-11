@@ -631,6 +631,38 @@ class WrappingTests: RulesTests {
                        exclude: ["braces", "indent", "elseOnSameLine"])
     }
 
+    // MARK: - wrapLoopBodies
+
+    func testWrapForLoop() {
+        let input = "for foo in bar { print(foo) }"
+        let output = """
+        for foo in bar {
+            print(foo)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapLoopBodies)
+    }
+
+    func testWrapWhileLoop() {
+        let input = "while let foo = bar.next() { print(foo) }"
+        let output = """
+        while let foo = bar.next() {
+            print(foo)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapLoopBodies)
+    }
+
+    func testWrapRepeatWhileLoop() {
+        let input = "repeat { print(foo) } while condition()"
+        let output = """
+        repeat {
+            print(foo)
+        } while condition()
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapLoopBodies)
+    }
+
     // MARK: - wrap
 
     func testWrapIfStatement() {
@@ -4574,5 +4606,76 @@ class WrappingTests: RulesTests {
 
         testFormatting(for: input, output, rule: FormatRules.wrapSingleLineComments,
                        options: FormatOptions(maxWidth: 40), exclude: ["docComments"])
+    }
+
+    // MARK: - wrapMultilineConditionalAssignment
+
+    func testWrapIfExpressionAssignment() {
+        let input = """
+        let foo = if let bar {
+            bar
+        } else {
+            baaz
+        }
+        """
+
+        let output = """
+        let foo =
+            if let bar {
+                bar
+            } else {
+                baaz
+            }
+        """
+
+        testFormatting(for: input, [output], rules: [FormatRules.wrapMultilineConditionalAssignment, FormatRules.indent])
+    }
+
+    func testUnwrapsAssignmentOperatorInIfExpressionAssignment() {
+        let input = """
+        let foo
+            = if let bar {
+                bar
+            } else {
+                baaz
+            }
+        """
+
+        let output = """
+        let foo =
+            if let bar {
+                bar
+            } else {
+                baaz
+            }
+        """
+
+        testFormatting(for: input, [output], rules: [FormatRules.wrapMultilineConditionalAssignment, FormatRules.indent])
+    }
+
+    func testUnwrapsAssignmentOperatorInIfExpressionFollowingComment() {
+        let input = """
+        let foo
+            // In order to unwrap the `=` here it has to move it to
+            // before the comment, rather than simply unwrapping it.
+            = if let bar {
+                bar
+            } else {
+                baaz
+            }
+        """
+
+        let output = """
+        let foo =
+            // In order to unwrap the `=` here it has to move it to
+            // before the comment, rather than simply unwrapping it.
+            if let bar {
+                bar
+            } else {
+                baaz
+            }
+        """
+
+        testFormatting(for: input, [output], rules: [FormatRules.wrapMultilineConditionalAssignment, FormatRules.indent])
     }
 }

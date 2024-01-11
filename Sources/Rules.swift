@@ -103,7 +103,7 @@ private let rulesByName: [String: FormatRule] = {
     while changedOrder {
         changedOrder = false
         for value in values {
-            value.orderAfter.forEach { name in
+            for name in value.orderAfter {
                 guard let rule = rules[name] else {
                     preconditionFailure(name)
                 }
@@ -1144,8 +1144,7 @@ public struct _FormatRules {
     public let blankLinesBetweenChainedFunctions = FormatRule(
         help: """
         Remove blank lines between chained functions but keep the linebreaks.
-        """,
-        disabledByDefault: true
+        """
     ) { formatter in
         formatter.forEach(.operator(".", .infix)) { i, _ in
             let endOfLine = formatter.endOfLine(at: i)
@@ -1163,7 +1162,6 @@ public struct _FormatRules {
         help: """
         Insert blank line after import statements.
         """,
-        disabledByDefault: true,
         sharedOptions: ["linebreaks"]
     ) { formatter in
         formatter.forEach(.keyword("import")) { currentImportIndex, _ in
@@ -2362,6 +2360,24 @@ public struct _FormatRules {
                 return formatter.fatalError("Expected {", at: i)
             }
             formatter.wrapStatementBody(at: startIndex)
+        }
+    }
+
+    public let wrapLoopBodies = FormatRule(
+        help: "Wrap the bodies of inline loop statements onto a new line.",
+        orderAfter: ["preferForLoop"],
+        sharedOptions: ["linebreaks", "indent"]
+    ) { formatter in
+        formatter.forEachToken(where: { [
+            .keyword("for"),
+            .keyword("while"),
+            .keyword("repeat"),
+        ].contains($0) }) { i, token in
+            if let startIndex = formatter.index(of: .startOfScope("{"), after: i) {
+                formatter.wrapStatementBody(at: startIndex)
+            } else if token == .keyword("for") {
+                return formatter.fatalError("Expected {", at: i)
+            }
         }
     }
 
@@ -5478,7 +5494,7 @@ public struct _FormatRules {
     public let wrapAttributes = FormatRule(
         help: "Wrap @attributes onto a separate line, or keep them on the same line.",
         options: ["funcattributes", "typeattributes", "varattributes"],
-        sharedOptions: ["linebreaks"]
+        sharedOptions: ["linebreaks", "maxwidth"]
     ) { formatter in
         formatter.forEach(.attribute) { i, _ in
             // Ignore sequential attributes
@@ -5536,6 +5552,20 @@ public struct _FormatRules {
                 if let nextIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: endIndex),
                    formatter.tokens[(endIndex + 1) ..< nextIndex].contains(where: { $0.isLinebreak })
                 {
+                    // If unwrapping the attribute causes the line to exceed the max width,
+                    // leave it as-is. The existing formatting is likely better than how
+                    // this would be re-unwrapped by the wrap rule.
+                    let startOfLine = formatter.startOfLine(at: i)
+                    let endOfLine = formatter.endOfLine(at: i)
+                    let startOfNextLine = formatter.startOfLine(at: nextIndex, excludingIndent: true)
+                    let endOfNextLine = formatter.endOfLine(at: nextIndex)
+                    let combinedLine = formatter.tokens[startOfLine ... endOfLine].map { $0.string }.joined()
+                        + formatter.tokens[startOfNextLine ..< endOfNextLine].map { $0.string }.joined()
+
+                    if formatter.options.maxWidth > 0, combinedLine.count > formatter.options.maxWidth {
+                        return
+                    }
+
                     // Replace the newline with a space so the attribute doesn't
                     // merge with the next token.
                     formatter.replaceTokens(in: (endIndex + 1) ..< nextIndex, with: .space(" "))
@@ -7088,9 +7118,8 @@ public struct _FormatRules {
                   let startOfTypeIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: colonIndex)
             else { return }
 
-            let (typeName, typeRange) = formatter.parseType(at: startOfTypeIndex)
-
-            guard let startOfConditional = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: typeRange.upperBound),
+            guard let (typeName, typeRange) = formatter.parseType(at: startOfTypeIndex),
+                  let startOfConditional = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: typeRange.upperBound),
                   let conditionalBranches = formatter.conditionalBranches(at: startOfConditional)
             else { return }
 
@@ -7388,6 +7417,386 @@ public struct _FormatRules {
             guard formatter.token(at: internalKeywordIndex + 1)?.isSpace == true else { return }
 
             formatter.removeTokens(in: internalKeywordIndex ... (internalKeywordIndex + 1))
+        }
+    }
+
+    public let preferForLoop = FormatRule(
+        help: "Convert functional `forEach` calls to for loops.",
+        options: ["anonymousforeach", "onelineforeach"]
+    ) { formatter in
+        formatter.forEach(.identifier("forEach")) { forEachIndex, _ in
+            // Make sure this is a function call preceded by a `.`
+            guard let functionCallDotIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: forEachIndex),
+                  formatter.tokens[functionCallDotIndex] == .operator(".", .infix),
+                  let indexAfterForEach = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: forEachIndex),
+                  let indexBeforeFunctionCallDot = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: functionCallDotIndex)
+            else { return }
+
+            // Parse either `{ ... }` or `({ ... })`
+            let forEachCallOpenParenIndex: Int?
+            let closureOpenBraceIndex: Int
+            let closureCloseBraceIndex: Int
+            let forEachCallCloseParenIndex: Int?
+
+            switch formatter.tokens[indexAfterForEach] {
+            case .startOfScope("{"):
+                guard let endOfClosureScope = formatter.endOfScope(at: indexAfterForEach) else { return }
+
+                forEachCallOpenParenIndex = nil
+                closureOpenBraceIndex = indexAfterForEach
+                closureCloseBraceIndex = endOfClosureScope
+                forEachCallCloseParenIndex = nil
+
+            case .startOfScope("("):
+                guard let endOfFunctionCall = formatter.endOfScope(at: indexAfterForEach),
+                      let indexAfterOpenParen = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: indexAfterForEach),
+                      formatter.tokens[indexAfterOpenParen] == .startOfScope("{"),
+                      let endOfClosureScope = formatter.endOfScope(at: indexAfterOpenParen)
+                else { return }
+
+                forEachCallOpenParenIndex = indexAfterForEach
+                closureOpenBraceIndex = indexAfterOpenParen
+                closureCloseBraceIndex = endOfClosureScope
+                forEachCallCloseParenIndex = endOfFunctionCall
+
+            default:
+                return
+            }
+
+            // Abort early for single-line loops
+            guard !formatter.options.preserveSingleLineForEach || formatter
+                .tokens[closureOpenBraceIndex ..< closureCloseBraceIndex].contains(where: { $0.isLinebreak })
+            else { return }
+
+            // Ignore closures with capture lists for now since they're rare
+            // in this context and add complexity
+            guard let firstIndexInClosureBody = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: closureOpenBraceIndex),
+                  formatter.tokens[firstIndexInClosureBody] != .startOfScope("[")
+            else { return }
+
+            // Parse the value that `forEach` is being called on
+            let forLoopSubjectRange: ClosedRange<Int>
+            var forLoopSubjectIdentifier: String?
+
+            // Parse a functional chain backwards from the `forEach` token
+            var currentIndex = forEachIndex
+
+            // Returns the start index of the chain component ending at the given index
+            func startOfChainComponent(at index: Int) -> Int? {
+                // The previous item in a dot chain can either be:
+                //  1. an identifier like `foo.`
+                //  2. a function call like `foo(...).`
+                //  3. a subscript like `foo[...].
+                //  4. a trailing closure like `map { ... }`
+                //  5. Some other combination of parens / subscript like `(foo).`
+                //     or even `foo["bar"]()()`.
+                // And any of these can be preceeded by one of the others
+                switch formatter.tokens[index] {
+                case let .identifier(identifierName):
+                    // Allowlist certain dot chain elements that should be ignored.
+                    // For example, in `foos.reversed().forEach { ... }` we want
+                    // `forLoopSubjectIdentifier` to be `foos` rather than `reversed`.
+                    let chainElementsToIgnore = Set([
+                        "reversed", "sorted", "shuffled", "enumerated", "dropFirst", "dropLast",
+                        "map", "flatMap", "compactMap", "filter", "reduce", "lazy",
+                    ])
+
+                    if forLoopSubjectIdentifier == nil || chainElementsToIgnore.contains(forLoopSubjectIdentifier ?? "") {
+                        // Since we have to pick a single identifier to represent the subject of the for loop,
+                        // just use the last identifier in the chain
+                        forLoopSubjectIdentifier = identifierName
+                    }
+
+                    return index
+
+                case .endOfScope(")"), .endOfScope("]"):
+                    let closingParenIndex = index
+                    guard let startOfScopeIndex = formatter.startOfScope(at: closingParenIndex),
+                          let previousNonSpaceNonCommentIndex = formatter.index(of: .nonSpaceOrComment, before: startOfScopeIndex)
+                    else { return nil }
+
+                    // When we find parens for a function call or braces for a subscript,
+                    // continue parsing at the previous non-space non-comment token.
+                    //  - If the previous token is a newline then this isn't a function call
+                    //    and we'd stop parsing. `foo   ()` is a function call but `foo\n()` isn't.
+                    return startOfChainComponent(at: previousNonSpaceNonCommentIndex) ?? startOfScopeIndex
+
+                case .endOfScope("}"):
+                    // Stop parsing if we reach a trailing closure.
+                    // Converting this to a for loop would result in unusual looking syntax like
+                    // `for string in strings.map { $0.uppercased() } { print(string) }`
+                    // which causes a warning to be emitted: "trailing closure in this context is
+                    // confusable with the body of the statement; pass as a parenthesized argument
+                    // to silence this warning".
+                    return nil
+
+                default:
+                    return nil
+                }
+            }
+
+            while let previousDotIndex = formatter.index(of: .nonSpaceOrLinebreak, before: currentIndex),
+                  formatter.tokens[previousDotIndex] == .operator(".", .infix),
+                  let tokenBeforeDotIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: previousDotIndex)
+            {
+                guard let startOfChainComponent = startOfChainComponent(at: tokenBeforeDotIndex) else {
+                    // If we parse a dot we expect to parse at least one additional component in the chain.
+                    // Otherwise we'd have a malformed chain that starts with a dot, so abort.
+                    return
+                }
+
+                currentIndex = startOfChainComponent
+            }
+
+            guard currentIndex != forEachIndex else { return }
+            forLoopSubjectRange = currentIndex ... indexBeforeFunctionCallDot
+
+            // If the chain includes linebreaks, don't convert it to a for loop.
+            //
+            // In this case converting something like:
+            //
+            //  placeholderStrings
+            //    .filter { $0.style == .fooBar }
+            //    .map { $0.uppercased() }
+            //    .forEach { print($0) }
+            //
+            // to:
+            //
+            //  for placeholderString in placeholderStrings
+            //    .filter { $0.style == .fooBar }
+            //    .map { $0.uppercased() } { print($0) }
+            //
+            // would be a pretty obvious downgrade.
+            if formatter.tokens[forLoopSubjectRange].contains(where: \.isLinebreak) {
+                return
+            }
+
+            /// The names of the argument to the `forEach` closure.
+            /// e.g. `["foo"]` in `forEach { foo in ... }`
+            /// or `["foo, bar"]` in `forEach { (foo: Foo, bar: Bar) in ... }`
+            let forEachValueNames: [String]
+            let inKeywordIndex: Int?
+            let isAnonymousClosure: Bool
+
+            if let argumentList = formatter.parseClosureArgumentList(at: closureOpenBraceIndex) {
+                isAnonymousClosure = false
+                forEachValueNames = argumentList.argumentNames
+                inKeywordIndex = argumentList.inKeywordIndex
+            } else {
+                isAnonymousClosure = true
+                inKeywordIndex = nil
+
+                if formatter.options.preserveAnonymousForEach {
+                    return
+                }
+
+                // We can't introduce an identifier that already exists in the loop body
+                // so choose the first eligible option from a set of potential names
+                var eligibleValueNames = ["item", "element", "value"]
+                if let identifier = forLoopSubjectIdentifier?.singularized() {
+                    eligibleValueNames = [identifier] + eligibleValueNames
+                }
+
+                // The chosen name shouldn't already exist in the closure body
+                guard let chosenValueName = eligibleValueNames.first(where: { name in
+                    !formatter.tokens[closureOpenBraceIndex ... closureCloseBraceIndex].contains(where: { $0.string == name })
+                }) else { return }
+
+                forEachValueNames = [chosenValueName]
+            }
+
+            // Validate that the closure body is eligible to be converted to a for loop
+            for closureBodyIndex in closureOpenBraceIndex ... closureCloseBraceIndex {
+                guard !formatter.indexIsWithinNestedClosure(closureBodyIndex, startOfScopeIndex: closureOpenBraceIndex) else { continue }
+
+                // We can only handle anonymous closures that just use $0, since we don't have good names to
+                // use for other arguments like $1, $2, etc. If the closure has an anonymous argument
+                // other than just $0 then we have to ignore it.
+                if formatter.tokens[closureBodyIndex].string.hasPrefix("$"),
+                   let intValue = Int(formatter.tokens[closureBodyIndex].string.dropFirst()),
+                   intValue != 0
+                {
+                    return
+                }
+
+                // We can convert `return`s to `continue`, but only when `return` is on its own line.
+                // It's legal to write something like `return print("foo")` in a `forEach` as long as
+                // you're still returning a `Void` value. Since `continue print("foo")` isn't legal,
+                // we should just ignore this closure.
+                if formatter.tokens[closureBodyIndex] == .keyword("return"),
+                   let tokenAfterReturnKeyword = formatter.next(.nonSpaceOrComment, after: closureBodyIndex),
+                   !tokenAfterReturnKeyword.isLinebreak
+                {
+                    return
+                }
+            }
+
+            // Start updating the `forEach` call to a `for .. in .. {` loop
+            for closureBodyIndex in closureOpenBraceIndex ... closureCloseBraceIndex {
+                guard !formatter.indexIsWithinNestedClosure(closureBodyIndex, startOfScopeIndex: closureOpenBraceIndex) else { continue }
+
+                // The for loop won't have any `$0` identifiers anymore, so we have to
+                // update those to the value at the current loop index
+                if isAnonymousClosure, formatter.tokens[closureBodyIndex].string == "$0" {
+                    formatter.replaceToken(at: closureBodyIndex, with: .identifier(forEachValueNames[0]))
+                }
+
+                // In a `forEach` closure, `return` continues to the next loop iteration.
+                // To get the same behavior in a for loop we convert `return`s to `continue`s.
+                if formatter.tokens[closureBodyIndex] == .keyword("return") {
+                    formatter.replaceToken(at: closureBodyIndex, with: .keyword("continue"))
+                }
+            }
+
+            if let forEachCallCloseParenIndex = forEachCallCloseParenIndex {
+                formatter.removeToken(at: forEachCallCloseParenIndex)
+            }
+
+            // Construct the new for loop
+            var newTokens: [Token] = [
+                .keyword("for"),
+                .space(" "),
+            ]
+
+            let forEachValueNameTokens: [Token]
+            if forEachValueNames.count == 1 {
+                newTokens.append(.identifier(forEachValueNames[0]))
+            } else {
+                newTokens.append(contentsOf: tokenize("(\(forEachValueNames.joined(separator: ", ")))"))
+            }
+
+            newTokens.append(contentsOf: [
+                .space(" "),
+                .keyword("in"),
+                .space(" "),
+            ])
+
+            newTokens.append(contentsOf: formatter.tokens[forLoopSubjectRange])
+
+            newTokens.append(contentsOf: [
+                .space(" "),
+                .startOfScope("{"),
+            ])
+
+            formatter.replaceTokens(
+                in: (forLoopSubjectRange.lowerBound) ... (inKeywordIndex ?? closureOpenBraceIndex),
+                with: newTokens
+            )
+
+            // `forEach` is `rethrows`, so there may be a `try` before the call. Now that we're using `for` instead,
+            // `try` is invalid here and has to be removed.
+            if let tokenIndexBeforeForLoop = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: forLoopSubjectRange.lowerBound),
+               formatter.tokens[tokenIndexBeforeForLoop] == .keyword("try")
+            {
+                formatter.removeTokens(in: tokenIndexBeforeForLoop ..< forLoopSubjectRange.lowerBound)
+            }
+        }
+    }
+
+    public let noExplicitOwnership = FormatRule(
+        help: "Don't use explicit ownership modifiers (borrowing / consuming).",
+        disabledByDefault: true
+    ) { formatter in
+        formatter.forEachToken { keywordIndex, token in
+            guard [.identifier("borrowing"), .identifier("consuming")].contains(token),
+                  let nextTokenIndex = formatter.index(of: .nonSpaceOrLinebreak, after: keywordIndex)
+            else { return }
+
+            // Use of `borrowing` and `consuming` as ownership modifiers
+            // immediately precede a valid type, or the `func` keyword.
+            // You could also simply use these names as a property,
+            // like `let borrowing = foo` or `func myFunc(borrowing foo: Foo)`.
+            // As a simple heuristic to detect the difference, attempt to parse the
+            // following tokens as a type, and require that it doesn't start with lower-case letter.
+            let isValidOwnershipModifier: Bool
+            if formatter.tokens[nextTokenIndex] == .keyword("func") {
+                isValidOwnershipModifier = true
+            }
+
+            else if let type = formatter.parseType(at: nextTokenIndex),
+                    type.name.first?.isLowercase == false
+            {
+                isValidOwnershipModifier = true
+            }
+
+            else {
+                isValidOwnershipModifier = false
+            }
+
+            if isValidOwnershipModifier {
+                formatter.removeTokens(in: keywordIndex ..< nextTokenIndex)
+            }
+        }
+    }
+
+    public let wrapMultilineConditionalAssignment = FormatRule(
+        help: "Wrap multiline conditional assignment expressions after the assignment operator.",
+        disabledByDefault: true,
+        orderAfter: ["conditionalAssignment"],
+        sharedOptions: ["linebreaks"]
+    ) { formatter in
+        formatter.forEach(.keyword) { introducerIndex, introducerToken in
+            guard [.keyword("let"), .keyword("var")].contains(introducerToken),
+                  let identifierIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: introducerIndex),
+                  let identifier = formatter.token(at: identifierIndex),
+                  identifier.isIdentifier
+            else { return }
+
+            // Find the `=` index for this variable, if present
+            let assignmentIndex: Int
+            if let colonIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: identifierIndex),
+               formatter.tokens[colonIndex] == .delimiter(":"),
+               let startOfTypeIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: colonIndex),
+               let typeRange = formatter.parseType(at: startOfTypeIndex)?.range,
+               let tokenAfterType = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: typeRange.upperBound),
+               formatter.tokens[tokenAfterType] == .operator("=", .infix)
+            {
+                assignmentIndex = tokenAfterType
+            }
+
+            else if let tokenAfterIdentifier = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: identifierIndex),
+                    formatter.tokens[tokenAfterIdentifier] == .operator("=", .infix)
+            {
+                assignmentIndex = tokenAfterIdentifier
+            }
+
+            else {
+                return
+            }
+
+            // Verify the RHS of the assignment is an if/switch expression
+            guard let startOfConditionalExpression = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: assignmentIndex),
+                  ["if", "switch"].contains(formatter.tokens[startOfConditionalExpression].string),
+                  let conditionalBranches = formatter.conditionalBranches(at: startOfConditionalExpression),
+                  let lastBranch = conditionalBranches.last
+            else { return }
+
+            // If the entire expression is on a single line, we leave the formatting as-is
+            guard !formatter.onSameLine(startOfConditionalExpression, lastBranch.endOfBranch) else {
+                return
+            }
+
+            // The `=` should be on the same line as the `let`/`var` introducer
+            if !formatter.onSameLine(introducerIndex, assignmentIndex),
+               formatter.last(.nonSpaceOrComment, before: assignmentIndex)?.isLinebreak == true,
+               let previousToken = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: assignmentIndex),
+               formatter.onSameLine(introducerIndex, previousToken)
+            {
+                // Move the assignment operator to follow the previous token.
+                // Also remove any trailing space after the previous position
+                // of the assignment operator.
+                if formatter.tokens[assignmentIndex + 1].isSpaceOrLinebreak {
+                    formatter.removeToken(at: assignmentIndex + 1)
+                }
+
+                formatter.removeToken(at: assignmentIndex)
+                formatter.insert([.space(" "), .operator("=", .infix)], at: previousToken + 1)
+            }
+
+            // And there should be a line break between the `=` and the `if` / `switch` keyword
+            else if !formatter.tokens[(assignmentIndex + 1) ..< startOfConditionalExpression].contains(where: \.isLinebreak) {
+                formatter.insertLinebreak(at: startOfConditionalExpression - 1)
+            }
         }
     }
 }
