@@ -25,7 +25,7 @@ git pull
 tagToMerge=$(git describe --tags `git rev-list --tags --max-count=1`)
 
 # 1) confirm before merge
-currentBranch=$(git-show-current-branch)
+currentBranch=$(git rev-parse --abbrev-ref HEAD) # get current branch
 
 # How to handle yes/no
 # https://www.shellhacks.com/yes-no-bash-script-prompt-confirmation/

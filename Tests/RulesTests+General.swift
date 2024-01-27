@@ -395,7 +395,20 @@ class GeneralTests: RulesTests {
         enum A {}
 
         """
-        let options = FormatOptions(fileHeader: "//\n//  {file}\n//\n//  {created_by}\n//  Copyright © {year} Nick Lockwood. All rights reserved.\n//", fileInfo: FileInfo(filePath: "~/MyFile.swift"))
+
+        let fileHeader: HeaderStrippingMode = """
+        //
+        //  {file}
+        //
+        //  {created_by}
+        //  Copyright © {year} Nick Lockwood. All rights reserved.
+        //
+        """
+
+        let options = FormatOptions(
+            fileHeader: fileHeader,
+            fileInfo: FileInfo(filePath: "~/MyFile.swift")
+        )
         testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
     }
 
@@ -429,7 +442,20 @@ class GeneralTests: RulesTests {
         enum A {}
 
         """
-        let options = FormatOptions(fileHeader: "//\n//  {file}\n//\n//  {created_by}\n//  Copyright © {year} Nick Lockwood. All rights reserved.\n//", fileInfo: FileInfo(filePath: "~/MyFile.swift"))
+
+        let fileHeader: HeaderStrippingMode = """
+        //
+        //  {file}
+        //
+        //  {created_by}
+        //  Copyright © {year} Nick Lockwood. All rights reserved.
+        //
+        """
+
+        let options = FormatOptions(
+            fileHeader: fileHeader,
+            fileInfo: FileInfo(filePath: "~/MyFile.swift")
+        )
         testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
     }
 
@@ -559,6 +585,44 @@ class GeneralTests: RulesTests {
         let input = "// Header comment\nclass Foo {}"
         let output = "// Header comment\n\nclass Foo {}"
         let options = FormatOptions(fileHeader: "Header comment")
+        testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testNoDuplicateHeaderContainingPossibleCommentDirective() {
+        let input = """
+        // Copyright (c) 2010-2023 Foobar
+        //
+        // SPDX-License-Identifier: EPL-2.0
+
+        class Foo {}
+        """
+        let output = """
+        // Copyright (c) 2010-2024 Foobar
+        //
+        // SPDX-License-Identifier: EPL-2.0
+
+        class Foo {}
+        """
+        let options = FormatOptions(fileHeader: "// Copyright (c) 2010-2024 Foobar\n//\n// SPDX-License-Identifier: EPL-2.0")
+        testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testNoDuplicateHeaderContainingCommentDirective() {
+        let input = """
+        // Copyright (c) 2010-2023 Foobar
+        //
+        // swiftformat:disable all
+
+        class Foo {}
+        """
+        let output = """
+        // Copyright (c) 2010-2024 Foobar
+        //
+        // swiftformat:disable all
+
+        class Foo {}
+        """
+        let options = FormatOptions(fileHeader: "// Copyright (c) 2010-2024 Foobar\n//\n// swiftformat:disable all")
         testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
     }
 

@@ -3405,7 +3405,7 @@ public struct _FormatRules {
                     }
                     if formatter.last(.nonSpaceOrCommentOrLinebreak, before: i)?.isOperator(".") == false,
                        formatter.next(.nonSpaceOrCommentOrLinebreak, after: i) != .delimiter(":") ||
-                       formatter.currentScope(at: i) == .startOfScope("[")
+                       [.startOfScope("("), .startOfScope("[")].contains(formatter.currentScope(at: i) ?? .space(""))
                     {
                         if isDeclaration {
                             switch formatter.next(.nonSpaceOrCommentOrLinebreak, after: i) {
@@ -3466,7 +3466,10 @@ public struct _FormatRules {
                     ].contains(scope) {
                         break
                     }
-                    if isConditional, !isGuard {
+                    if isConditional {
+                        if isGuard, wasDeclaration {
+                            pushLocals()
+                        }
                         wasDeclaration = false
                     } else {
                         let _wasDeclaration = wasDeclaration
@@ -4277,11 +4280,8 @@ public struct _FormatRules {
         options: ["header"],
         sharedOptions: ["linebreaks"]
     ) { formatter in
-        guard let headerRange = formatter.headerCommentTokenRange else {
-            return
-        }
-
         var header: String
+
         switch formatter.options.fileHeader {
         case .ignore:
             return
@@ -4402,12 +4402,25 @@ public struct _FormatRules {
             }
         }
 
-        if header.isEmpty {
+        // [created_by] headerTokens needs to be updated after header is fully adjusted
+        var headerTokens: [Token] = tokenize(header)
+        let directives: [String] = headerTokens.compactMap {
+            guard case let .commentBody(body) = $0 else {
+                return nil
+            }
+            return body.commentDirective
+        }
+
+        guard let headerRange = formatter.headerCommentTokenRange(includingDirectives: directives) else {
+            return
+        }
+
+        if headerTokens.isEmpty {
             formatter.removeTokens(in: headerRange)
             return
         }
 
-        var headerTokens = tokenize(header)
+        lastHeaderTokenIndex = headerRange.endIndex - 1
         let endIndex = lastHeaderTokenIndex + headerTokens.count
         if formatter.tokens.endIndex > endIndex, headerTokens == Array(formatter.tokens[
             lastHeaderTokenIndex + 1 ... endIndex
@@ -4442,7 +4455,7 @@ public struct _FormatRules {
         orderAfter: ["fileHeader"]
     ) { formatter in
         guard let fileName = formatter.options.fileInfo.fileName,
-              let headerRange = formatter.headerCommentTokenRange,
+              let headerRange = formatter.headerCommentTokenRange(includingDirectives: ["*"]),
               fileName.hasSuffix(".swift")
         else {
             return
@@ -7395,17 +7408,19 @@ public struct _FormatRules {
         help: "Remove redundant internal access control."
     ) { formatter in
         formatter.forEach(.keyword("internal")) { internalKeywordIndex, _ in
-            let accessControlLevels = ["public", "package", "internal", "private", "fileprivate"]
+            // Don't remove import acl
+            if formatter.next(.nonSpaceOrComment, after: internalKeywordIndex) == .keyword("import") {
+                return
+            }
 
-            // If we're inside an extension, than `internal` is only redundant
-            // if the extension itself is `internal`.
+            // If we're inside an extension, then `internal` is only redundant if the extension itself is `internal`.
             if let startOfScope = formatter.startOfScope(at: internalKeywordIndex),
                let typeKeywordIndex = formatter.indexOfLastSignificantKeyword(at: startOfScope),
                formatter.tokens[typeKeywordIndex] == .keyword("extension"),
                // In the language grammar, the ACL level always directly precedes the
                // `extension` keyword if present.
                let previousToken = formatter.last(.nonSpaceOrCommentOrLinebreak, before: typeKeywordIndex),
-               accessControlLevels.contains(previousToken.string),
+               ["public", "package", "internal", "private", "fileprivate"].contains(previousToken.string),
                previousToken.string != "internal"
             {
                 // The extension has an explicit ACL other than `internal`, so is not internal.

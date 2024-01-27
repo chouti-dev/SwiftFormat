@@ -2,7 +2,7 @@
 //  Formatter.swift
 //  SwiftFormat
 //
-//  Version 0.53.0
+//  Version 0.53.1
 //
 //  Created by Nick Lockwood on 12/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -91,6 +91,9 @@ public class Formatter: NSObject {
             var directive = parts[0]
             if let range = directive.rangeOfCharacter(from: .whitespacesAndNewlines) {
                 directive = String(directive[..<range.lowerBound])
+            }
+            if directive.isEmpty {
+                return fatalError("Expected directive after 'swiftformat:' prefix", at: index)
             }
             return fatalError("Unknown directive swiftformat:\(directive)", at: index)
         }
