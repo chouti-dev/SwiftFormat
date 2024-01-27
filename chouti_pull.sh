@@ -87,7 +87,8 @@ if [ $? -ne 0 ]; then
 fi
 
 # 6) open web to create a new release
-open https://github.com/chouti-dev/SwiftFormat/releases/new?tag=$newTag
+# open "https://github.com/chouti-dev/SwiftFormat/releases/new?tag=0.53.1-chouti&title=Merged%20from%20upstream%20%280.53.1%29&body=Merged%20https://github.com/nicklockwood/SwiftFormat/releases/tag/0.53.1"
+open "https://github.com/chouti-dev/SwiftFormat/releases/new?tag=$newTag&title=Merged%20from%20upstream%20%28$tagToMerge%29&body=Merged%20https://github.com/nicklockwood/SwiftFormat/releases/tag/$tagToMerge"
 
 # --- End ---
 
