@@ -1,13 +1,34 @@
-# ChouTi Additions
-A temp solution for: https://github.com/nicklockwood/SwiftFormat/issues/776
+# SwiftFormat (ChouTi Additions)
 
+## File headers
+
+`{created_by}` - The line prefixed with `//  Created by` in the header comment.
+
+A temporary solution for: https://github.com/nicklockwood/SwiftFormat/issues/776
+
+For example, for the following header comment:
 ```
---header "//\n//  {file}\n//\n//  {created_by}\n//  Copyright © {year} ChouTi. All rights reserved.\n//" 
+//  SomeFile.swift
+//  Copyright © 2019 Foobar Inc. All rights reserved.
+//  Created by John Smith on 01/02/2016.
 ```
-Can preserve this header line:
+
+With the format option:
 ```
-Created by Alice on 07/08/2018.
+--header "//\n//  {file}\n//\n//  {created_by}\n//  Copyright © {year} Foobar Inc. All rights reserved.\n//"
 ```
+
+The header comment will be formatted to:
+```
+//
+//  SomeFile.swift
+//
+//  Created by John Smith on 01/02/2016.
+//  Copyright © 2019 Foobar Inc. All rights reserved.
+//
+```
+
+---
 
 ![](EditorExtension/Application/Assets.xcassets/AppIcon.appiconset/icon_256x256.png)
 
