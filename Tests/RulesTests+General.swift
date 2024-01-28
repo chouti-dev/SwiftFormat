@@ -412,6 +412,89 @@ class GeneralTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
     }
 
+    func testFileHeaderWithPreserveCreatedByComment2() {
+        let input = """
+        //
+        //  AppDelegate.swift
+        //  Module
+        //
+        //  Copyright © 2019 Foo. All rights reserved.
+        //  Created by Nick Lockwood on 12/08/2016.
+        //
+
+        import UIKit
+
+        enum A {}
+
+        """
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+
+        let output = """
+        //
+        //  MyFile.swift
+        //
+        //  Created by Nick Lockwood on 12/08/2016.
+        //  Copyright © \(formatter.string(from: Date())) Nick Lockwood. All rights reserved.
+        //
+
+        import UIKit
+
+        enum A {}
+
+        """
+
+        let fileHeader: HeaderStrippingMode = """
+        //
+        //  {file}
+        //
+        //  {created_by}
+        //  Copyright © {year} Nick Lockwood. All rights reserved.
+        //
+        """
+
+        let options = FormatOptions(
+            fileHeader: fileHeader,
+            fileInfo: FileInfo(filePath: "~/MyFile.swift")
+        )
+        testFormatting(for: input, output, rule: FormatRules.fileHeader, options: options)
+    }
+
+    func testFileHeaderWithPreserveCreatedByComment_incorrectCreatedByOption() {
+        let input = """
+        //
+        //  AppDelegate.swift
+        //  Module
+        //
+        //  Copyright © 2019 Foo. All rights reserved.
+        //  Created by Nick Lockwood on 12/08/2016.
+        //
+
+        import UIKit
+
+        enum A {}
+
+        """
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+
+        let fileHeader: HeaderStrippingMode = """
+        //
+        //  {file}
+        //
+        //  {created_by} Copyright © {year} Nick Lockwood. All rights reserved.
+        //
+        """
+
+        let options = FormatOptions(
+            fileHeader: fileHeader,
+            fileInfo: FileInfo(filePath: "~/MyFile.swift")
+        )
+        XCTAssertThrowsError(try format(input, rules: [FormatRules.fileHeader], options: options))
+    }
+
     func testFileHeaderWithPreserveCreatedByCommentIfNoCreatedLine() {
         let input = """
         //

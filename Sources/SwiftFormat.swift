@@ -507,13 +507,13 @@ private func applyRules(
             let prefix = options.fileHeader.rawValue[lineBegin ..< range.lowerBound]
             if prefix != "//  " {
                 throw FormatError.options(
-                    "Failed to apply {created_by} template in file header as {created_by} should be used in '//  {created_by}\n' exclusively."
+                    "Failed to apply {created_by} template in file header as {created_by} should be used in a separated line."
                 )
             }
             let lineEnd = options.fileHeader.rawValue.index(range.upperBound, offsetBy: 2)
             if options.fileHeader.rawValue[range.upperBound ..< lineEnd] != "\\n" {
                 throw FormatError.options(
-                    "Failed to apply {created_by} template in file header as {created_by} should be used in '//  {created_by}\n' exclusively."
+                    "Failed to apply {created_by} template in file header as {created_by} should be used in a separated line."
                 )
             }
         }
