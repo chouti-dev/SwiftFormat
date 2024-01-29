@@ -1,32 +1,34 @@
-# SwiftFormat (ChouTi Additions)
+# SwiftFormat (ChouTi Addons)
 
 ## File headers
 
-`{created_by}` - The line prefixed with `//  Created by` in the header comment.
+Additional placeholders:
 
-A temporary solution for: https://github.com/nicklockwood/SwiftFormat/issues/776
+- `{created_by}` - The line prefixed with `//  Created by` in the header comment.
+    
+    A temporary solution for: https://github.com/nicklockwood/SwiftFormat/issues/776
 
-For example, for the following header comment:
-```
-//  SomeFile.swift
-//  Copyright © 2019 Foobar Inc. All rights reserved.
-//  Created by John Smith on 01/02/2016.
-```
+    For example, for the following header comment:
+    ```
+    //  SomeFile.swift
+    //  Copyright © 2019 Foobar Inc. All rights reserved.
+    //  Created by John Smith on 01/02/2016.
+    ```
 
-With the format option:
-```
---header "//\n//  {file}\n//\n//  {created_by}\n//  Copyright © {year} Foobar Inc. All rights reserved.\n//"
-```
+    With the format option:
+    ```
+    --header "//\n//  {file}\n//\n//  {created_by}\n//  Copyright © {year} Foobar Inc. All rights reserved.\n//"
+    ```
 
-The header comment will be formatted to:
-```
-//
-//  SomeFile.swift
-//
-//  Created by John Smith on 01/02/2016.
-//  Copyright © 2019 Foobar Inc. All rights reserved.
-//
-```
+    The header comment will be formatted to:
+    ```
+    //
+    //  SomeFile.swift
+    //
+    //  Created by John Smith on 01/02/2016.
+    //  Copyright © 2019 Foobar Inc. All rights reserved.
+    //
+    ```
 
 ---
 
@@ -67,7 +69,6 @@ Table of Contents
     - [Error codes](#error-codes)
     - [Cache](#cache)
     - [File headers](#file-headers)
-- [ChouTi addons](#chouti-addons)
 - [FAQ](#faq)
 - [Known issues](#known-issues)
 - [Tip Jar](#tip-jar)
@@ -857,10 +858,6 @@ Will be formatted as:
 
 **NOTE:** the `{year}` value and `{created}` date format are determined from the current locale and timezone of the machine running the script.
 
-ChouTi addons
----------------
-
-- Supported `{created_by}` - Keeps the original `//  Created by Nick Lockwood on 12/08/2016.` line in header comments.
 
 FAQ
 -----
@@ -929,6 +926,7 @@ Q. I don't want to be surprised by new rules added when I upgrade SwiftFormat. H
 *Q. Can I use the `SwiftFormat.framework` inside another app?*
 
 > A. Yes, the SwiftFormat framework can be included in an app or test target, and used for many kinds of parsing and processing of Swift source code besides formatting. The SwiftFormat framework is available as a [CocoaPod](https://cocoapods.org/pods/SwiftFormat) for easy integration.
+
 
 Known issues
 ---------------

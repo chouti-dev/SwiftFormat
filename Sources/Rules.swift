@@ -4280,8 +4280,8 @@ public struct _FormatRules {
         options: ["header"],
         sharedOptions: ["linebreaks"]
     ) { formatter in
-        var header: String
-
+        var headerTokens = [Token]()
+        var directives = [String]()
         switch formatter.options.fileHeader {
         case .ignore:
             return
@@ -4304,111 +4304,39 @@ public struct _FormatRules {
             {
                 string.replaceSubrange(range, with: yearFormatter(date))
             }
-            header = string
-        }
-        var start = 0
-        var lastHeaderTokenIndex = -1
-        if var startIndex = formatter.index(of: .nonSpaceOrLinebreak, after: -1) {
-            if formatter.tokens[startIndex] == .startOfScope("#!") {
-                guard let endIndex = formatter.index(of: .linebreak, after: startIndex) else {
-                    return
-                }
-                startIndex = formatter.index(of: .nonSpaceOrLinebreak, after: endIndex) ?? endIndex
-                start = startIndex
-                lastHeaderTokenIndex = startIndex - 1
-            }
-            switch formatter.tokens[startIndex] {
-            case .startOfScope("//"):
-                if case let .commentBody(body)? = formatter.next(.nonSpace, after: startIndex) {
-                    formatter.processCommentBody(body, at: startIndex)
-                    if !formatter.isEnabled || (body.hasPrefix("/") && !body.hasPrefix("//")) ||
-                        body.hasPrefix("swift-tools-version")
-                    {
-                        return
-                    } else if body.isCommentDirective {
-                        break
-                    }
-                }
-                var lastIndex = startIndex
-                while let index = formatter.index(of: .linebreak, after: lastIndex) {
-                    switch formatter.token(at: index + 1) ?? .space("") {
-                    case .startOfScope("//"):
-                        if case let .commentBody(body)? = formatter.next(.nonSpace, after: index + 1),
-                           body.isCommentDirective
-                        {
-                            break
-                        }
-                        lastIndex = index
-                        continue
-                    case .linebreak:
-                        lastHeaderTokenIndex = index + 1
-                    case .space where formatter.token(at: index + 2)?.isLinebreak == true:
-                        lastHeaderTokenIndex = index + 2
-                    default:
-                        break
-                    }
-                    break
-                }
-            case .startOfScope("/*"):
-                if case let .commentBody(body)? = formatter.next(.nonSpace, after: startIndex) {
-                    formatter.processCommentBody(body, at: startIndex)
-                    if !formatter.isEnabled || (body.hasPrefix("*") && !body.hasPrefix("**")) {
-                        return
-                    } else if body.isCommentDirective {
-                        break
-                    }
-                }
-                while let endIndex = formatter.index(of: .endOfScope("*/"), after: startIndex) {
-                    lastHeaderTokenIndex = endIndex
-                    if let linebreakIndex = formatter.index(of: .linebreak, after: endIndex) {
-                        lastHeaderTokenIndex = linebreakIndex
-                    }
-                    guard let nextIndex = formatter.index(of: .nonSpace, after: lastHeaderTokenIndex) else {
-                        break
-                    }
-                    guard formatter.tokens[nextIndex] == .startOfScope("/*") else {
-                        if let endIndex = formatter.index(of: .nonSpaceOrLinebreak, after: lastHeaderTokenIndex) {
-                            lastHeaderTokenIndex = endIndex - 1
-                        }
-                        break
-                    }
-                    startIndex = nextIndex
-                }
-            default:
-                break
-            }
-        }
 
-        if let range = header.range(of: "{created_by}") {
             // replace {created_by} with the line "Created by ..." in the original headers if have.
-            var createdByComment: String?
-            let createdByCommentTokenIndex = formatter.index(before: lastHeaderTokenIndex, where: {
-                if case let .commentBody(comment) = $0 {
-                    if comment.hasPrefix("Created by") {
-                        createdByComment = comment
-                        return true
+            if let range = string.range(of: "{created_by}"),
+               let headerRange = formatter.headerCommentTokenRange(includingDirectives: [])
+            {
+                var createdByComment: String?
+                let createdByCommentTokenIndex = formatter.index(before: headerRange.endIndex - 1, where: {
+                    if case let .commentBody(comment) = $0 {
+                        if comment.hasPrefix("Created by") {
+                            createdByComment = comment
+                            return true
+                        }
                     }
+                    return false
+                })
+
+                if let createdByComment = createdByComment {
+                    string.replaceSubrange(range, with: createdByComment)
+                } else {
+                    // remove "//  {created_by}" line
+                    let lineBegin = string.index(range.lowerBound, offsetBy: -4)
+                    let lineEnd = string.index(range.upperBound, offsetBy: 1)
+                    string.replaceSubrange(lineBegin ..< lineEnd, with: "")
                 }
-                return false
-            })
-
-            if let createdByComment = createdByComment {
-                header.replaceSubrange(range, with: createdByComment)
-            } else {
-                // remove "//  {created_by}" line
-                let lineBegin = header.index(range.lowerBound, offsetBy: -4)
-                let lineEnd = header.index(range.upperBound, offsetBy: 1)
-                header.replaceSubrange(lineBegin ..< lineEnd, with: "")
             }
-        }
 
-        // [created_by] headerTokens needs to be updated after header is fully adjusted
-        var headerTokens: [Token] = tokenize(header)
-        let directives: [String] = headerTokens.compactMap {
-            guard case let .commentBody(body) = $0 else {
-                return nil
+            headerTokens = tokenize(string)
+            directives = headerTokens.compactMap {
+                guard case let .commentBody(body) = $0 else {
+                    return nil
+                }
+                return body.commentDirective
             }
-            return body.commentDirective
         }
 
         guard let headerRange = formatter.headerCommentTokenRange(includingDirectives: directives) else {
@@ -4420,7 +4348,7 @@ public struct _FormatRules {
             return
         }
 
-        lastHeaderTokenIndex = headerRange.endIndex - 1
+        var lastHeaderTokenIndex = headerRange.endIndex - 1
         let endIndex = lastHeaderTokenIndex + headerTokens.count
         if formatter.tokens.endIndex > endIndex, headerTokens == Array(formatter.tokens[
             lastHeaderTokenIndex + 1 ... endIndex
