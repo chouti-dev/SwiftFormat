@@ -4305,7 +4305,7 @@ public struct _FormatRules {
                 string.replaceSubrange(range, with: yearFormatter(date))
             }
 
-            // replace {created_by} with the line "Created by ..." in the original headers if have.
+            // replace {created_by} with the line "Created by ..."
             if let range = string.range(of: "{created_by}"),
                let headerRange = formatter.headerCommentTokenRange(includingDirectives: [])
             {

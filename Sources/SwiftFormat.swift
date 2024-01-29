@@ -494,7 +494,7 @@ private func applyRules(
                 "Failed to apply {created} template in file header as file info is unavailable"
             )
         }
-        if options.fileHeader.rawValue.contains("{file}"),
+        if options.fileHeader.rawValue.contains("{file"),
            options.fileInfo.fileName == nil
         {
             throw FormatError.options(
