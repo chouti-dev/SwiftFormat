@@ -217,6 +217,12 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.void)
     }
 
+    func testFunctionThatReturnsAFunctionThatHasTypedThrows() {
+        let input = "(Void) -> Void throws(Foo) -> ()"
+        let output = "(Void) -> () throws(Foo) -> Void"
+        testFormatting(for: input, output, rule: FormatRules.void)
+    }
+
     func testChainOfFunctionsIsNotChanged() {
         let input = "() -> () -> () -> Void"
         testFormatting(for: input, rule: FormatRules.void)
@@ -227,8 +233,18 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.void)
     }
 
+    func testChainOfFunctionsWithTypedThrowsIsNotChanged() {
+        let input = "() -> () throws(Foo) -> () throws(Foo) -> Void"
+        testFormatting(for: input, rule: FormatRules.void)
+    }
+
     func testVoidThrowsIsNotMangled() {
         let input = "(Void) throws -> Void"
+        testFormatting(for: input, rule: FormatRules.void)
+    }
+
+    func testVoidTypedThrowsIsNotMangled() {
+        let input = "(Void) throws(Foo) -> Void"
         testFormatting(for: input, rule: FormatRules.void)
     }
 
@@ -988,6 +1004,35 @@ class SyntaxTests: RulesTests {
         """
 
         testFormatting(for: input, output, rule: FormatRules.enumNamespaces)
+    }
+
+    func testEnumNamespacesNotAppliedToNonFinalClass() {
+        let input = """
+        class Foo {
+            static let = "A"
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.enumNamespaces)
+    }
+
+    func testEnumNamespacesNotAppliedIfObjC() {
+        let input = """
+        @objc(NSFoo)
+        final class Foo {
+            static let = "A"
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.enumNamespaces)
+    }
+
+    func testEnumNamespacesNotAppliedIfMacro() {
+        let input = """
+        @FooBar
+        final class Foo {
+            static let = "A"
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.enumNamespaces)
     }
 
     // MARK: - numberFormatting
@@ -2965,8 +3010,10 @@ class SyntaxTests: RulesTests {
         let input = """
         func foo<Foo>(_: (Foo) -> Void) {}
         func bar<Foo>(_: (Foo) throws -> Void) {}
+        func baz<Foo>(_: (Foo) throws(Bar) -> Void) {}
         func baaz<Foo>(_: (Foo) async -> Void) {}
-        func quux<Foo>(_: (Foo) async throws -> Void) {}
+        func qux<Foo>(_: (Foo) async throws -> Void) {}
+        func quux<Foo>(_: (Foo) async throws(Bar) -> Void) {}
         func qaax<Foo>(_: ([Foo]) -> Void) {}
         func qaax<Foo>(_: ((Foo, Bar)) -> Void) {}
         """
@@ -3884,7 +3931,113 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
-    // MARK: - forLoop
+    func testConvertsSwitchWithDefaultCase() {
+        let input = """
+        let foo: Foo
+        switch condition {
+        case .foo:
+            foo = Foo("foo")
+        case .bar:
+            foo = Foo("bar")
+        default:
+            foo = Foo("default")
+        }
+        """
+
+        let output = """
+        let foo: Foo = switch condition {
+        case .foo:
+            Foo("foo")
+        case .bar:
+            Foo("bar")
+        default:
+            Foo("default")
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["wrapMultilineConditionalAssignment", "redundantType"])
+    }
+
+    func testConvertsSwitchWithUnknownDefaultCase() {
+        let input = """
+        let foo: Foo
+        switch condition {
+        case .foo:
+            foo = Foo("foo")
+        case .bar:
+            foo = Foo("bar")
+        @unknown default:
+            foo = Foo("default")
+        }
+        """
+
+        let output = """
+        let foo: Foo = switch condition {
+        case .foo:
+            Foo("foo")
+        case .bar:
+            Foo("bar")
+        @unknown default:
+            Foo("default")
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.conditionalAssignment, options: options, exclude: ["wrapMultilineConditionalAssignment", "redundantType"])
+    }
+
+    func testPreservesSwitchWithReturnInDefaultCase() {
+        let input = """
+        let foo: Foo
+        switch condition {
+        case .foo:
+            foo = Foo("foo")
+        case .bar:
+            foo = Foo("bar")
+        default:
+            return
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.conditionalAssignment, options: options)
+    }
+
+    func testPreservesSwitchWithReturnInUnknownDefaultCase() {
+        let input = """
+        let foo: Foo
+        switch condition {
+        case .foo:
+            foo = Foo("foo")
+        case .bar:
+            foo = Foo("bar")
+        @unknown default:
+            return
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.conditionalAssignment, options: options)
+    }
+
+    func testDoesntConvertIfStatementWithForLoopInBranch() {
+        let input = """
+        var foo: Foo?
+        if condition {
+            foo = Foo("foo")
+            for foo in foos {
+                print(foo)
+            }
+        } else {
+            foo = Foo("bar")
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.conditionalAssignment, options: options)
+    }
+
+    // MARK: - preferForLoop
 
     func testConvertSimpleForEachToForLoop() {
         let input = """
@@ -4202,19 +4355,44 @@ class SyntaxTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.preferForLoop)
     }
 
-    func testDoesntConvertIfStatementWithForLoopInBranch() {
+    func testForLoopVariableNotUsedIfClashesWithKeyword() {
         let input = """
-        var foo: Foo?
-        if condition {
-            foo = Foo("foo")
-            for foo in foos {
-                print(foo)
-            }
-        } else {
-            foo = Foo("bar")
+        Foo.allCases.forEach {
+            print($0)
         }
         """
-        let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, rule: FormatRules.conditionalAssignment, options: options)
+        let output = """
+        for item in Foo.allCases {
+            print(item)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.preferForLoop)
+    }
+
+    func testTryNotRemovedInThrowingForEach() {
+        let input = """
+        try list().forEach {
+            print($0)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.preferForLoop)
+    }
+
+    func testOptionalTryNotRemovedInThrowingForEach() {
+        let input = """
+        try? list().forEach {
+            print($0)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.preferForLoop)
+    }
+
+    func testAwaitNotRemovedInAsyncForEach() {
+        let input = """
+        await list().forEach {
+            print($0)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.preferForLoop)
     }
 }

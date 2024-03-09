@@ -233,7 +233,7 @@ public struct _FormatRules {
                 }
                 return false
             case "private", "fileprivate", "internal",
-                 "init", "subscript":
+                 "init", "subscript", "throws":
                 return false
             case "await":
                 return formatter.options.swiftVersion >= "5.5" ||
@@ -946,31 +946,31 @@ public struct _FormatRules {
             return false
         }
 
-        formatter.forEachToken(where: { [
-            .keyword("class"),
-            .keyword("struct"),
-        ].contains($0) }) { i, token in
-            guard let next = formatter.next(.nonSpaceOrCommentOrLinebreak, after: i),
-                  // exit if class is a type modifier
-                  !(next.isKeywordOrAttribute || next.isModifierKeyword),
+        formatter.forEachToken(where: { [.keyword("class"), .keyword("struct")].contains($0) }) { i, token in
+            if token == .keyword("class") {
+                guard let next = formatter.next(.nonSpaceOrCommentOrLinebreak, after: i),
+                      // exit if structs only
+                      formatter.options.enumNamespaces != .structsOnly,
+                      // exit if class is a type modifier
+                      !(next.isKeywordOrAttribute || next.isModifierKeyword),
+                      // exit for class as protocol conformance
+                      formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) != .delimiter(":"),
+                      // exit if not closed for extension
+                      formatter.modifiersForDeclaration(at: i, contains: "final"),
+                      // exit if has attribute(s)
+                      !formatter.modifiersForDeclaration(at: i, contains: { $1.hasPrefix("@") })
+                else {
+                    return
+                }
+            }
+            guard let braceIndex = formatter.index(of: .startOfScope("{"), after: i),
                   // exit if import statement
                   formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) != .keyword("import"),
-                  // exit for class as protocol conformance
-                  formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) != .delimiter(":"),
-                  let braceIndex = formatter.index(of: .startOfScope("{"), after: i),
-                  // exit if type is conforming any types
+                  // exit if type is conforming any other types
                   !formatter.tokens[i ... braceIndex].contains(.delimiter(":")),
                   let endIndex = formatter.index(of: .endOfScope("}"), after: braceIndex),
-                  case let .identifier(name)? = formatter.next(.identifier, after: i + 1),
-                  // exit if open for extension
-                  !formatter.modifiersForDeclaration(at: i, contains: "open")
+                  case let .identifier(name)? = formatter.next(.identifier, after: i + 1)
             else {
-                return
-            }
-            switch formatter.options.enumNamespaces {
-            case .structsOnly where token == .keyword("struct"), .always:
-                break
-            case .structsOnly:
                 return
             }
             let range = braceIndex + 1 ..< endIndex
@@ -5966,7 +5966,8 @@ public struct _FormatRules {
         Sorts the body of declarations with // swiftformat:sort
         and declarations between // swiftformat:sort:begin and
         // swiftformat:sort:end comments.
-        """
+        """,
+        sharedOptions: ["organizetypes"]
     ) { formatter in
         formatter.forEachToken(
             where: { $0.isComment && $0.string.contains("swiftformat:sort") }
@@ -5992,20 +5993,28 @@ public struct _FormatRules {
 
             // For `:sort` directives, we sort the declarations
             // between the open and close brace of the following type
-            else if !commentToken.string.contains(":sort:"),
-                    // This part of the rule conflicts with the organizeDeclarations rule.
-                    // Instead, that rule manually implements support for the :sort directive.
-                    !formatter.options.enabledRules.contains(FormatRules.organizeDeclarations.name)
-            {
+            else if !commentToken.string.contains(":sort:") {
                 guard let typeOpenBrace = formatter.index(of: .startOfScope("{"), after: commentIndex),
                       let typeCloseBrace = formatter.endOfScope(at: typeOpenBrace),
                       let firstTypeBodyToken = formatter.index(of: .nonLinebreak, after: typeOpenBrace),
                       let lastTypeBodyToken = formatter.index(of: .nonLinebreak, before: typeCloseBrace),
+                      let declarationKeyword = formatter.lastSignificantKeyword(at: typeOpenBrace),
                       lastTypeBodyToken > typeOpenBrace
                 else { return }
 
-                rangeToSort = typeOpenBrace + 1 ... lastTypeBodyToken
-                numberOfLeadingLinebreaks = firstTypeBodyToken - typeOpenBrace - 1
+                // Sorting the body of a type conflicts with the `organizeDeclaration`
+                // keyword if enabled for this type of declaration. In that case,
+                // defer to the sorting implementation in `organizeDeclarations`.
+                if formatter.options.enabledRules.contains(FormatRules.organizeDeclarations.name),
+                   formatter.options.organizeTypes.contains(declarationKeyword)
+                {
+                    return
+                }
+
+                rangeToSort = firstTypeBodyToken ... lastTypeBodyToken
+                // We don't include any leading linebreaks in the range to sort,
+                // since `firstTypeBodyToken` is the first `nonLinebreak` in the body
+                numberOfLeadingLinebreaks = 0
             } else {
                 return
             }
@@ -7490,6 +7499,19 @@ public struct _FormatRules {
             guard currentIndex != forEachIndex else { return }
             forLoopSubjectRange = currentIndex ... indexBeforeFunctionCallDot
 
+            // If there is a `try` before the `forEach` we cannot know if the subject is async/throwing or the body,
+            // which makes it impossible to know if we should move it or *remove* it, so we must abort (same for await).
+            if let tokenIndexBeforeForLoop = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: currentIndex),
+               var prevToken = formatter.token(at: tokenIndexBeforeForLoop)
+            {
+                if prevToken.isUnwrapOperator {
+                    prevToken = formatter.last(.nonSpaceOrComment, before: tokenIndexBeforeForLoop) ?? .space("")
+                }
+                if [.keyword("try"), .keyword("await")].contains(prevToken) {
+                    return
+                }
+            }
+
             // If the chain includes linebreaks, don't convert it to a for loop.
             //
             // In this case converting something like:
@@ -7529,10 +7551,10 @@ public struct _FormatRules {
                     return
                 }
 
-                // We can't introduce an identifier that already exists in the loop body
-                // so choose the first eligible option from a set of potential names
+                // We can't introduce an identifier that matches a keyword or already exists in
+                // the loop body so choose the first eligible option from a set of potential names
                 var eligibleValueNames = ["item", "element", "value"]
-                if let identifier = forLoopSubjectIdentifier?.singularized() {
+                if var identifier = forLoopSubjectIdentifier?.singularized(), !identifier.isSwiftKeyword {
                     eligibleValueNames = [identifier] + eligibleValueNames
                 }
 
@@ -7621,14 +7643,6 @@ public struct _FormatRules {
                 in: (forLoopSubjectRange.lowerBound) ... (inKeywordIndex ?? closureOpenBraceIndex),
                 with: newTokens
             )
-
-            // `forEach` is `rethrows`, so there may be a `try` before the call. Now that we're using `for` instead,
-            // `try` is invalid here and has to be removed.
-            if let tokenIndexBeforeForLoop = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: forLoopSubjectRange.lowerBound),
-               formatter.tokens[tokenIndexBeforeForLoop] == .keyword("try")
-            {
-                formatter.removeTokens(in: tokenIndexBeforeForLoop ..< forLoopSubjectRange.lowerBound)
-            }
         }
     }
 

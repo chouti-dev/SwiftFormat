@@ -2,7 +2,7 @@
 //  Tokenizer.swift
 //  SwiftFormat
 //
-//  Version 0.53.2
+//  Version 0.53.3
 //
 //  Created by Nick Lockwood on 11/08/2016.
 //  Copyright 2016 Nick Lockwood
@@ -401,7 +401,7 @@ public extension Token {
         if case let .endOfScope(string) = self {
             return ["case", "default"].contains(string)
         }
-        return false
+        return self == .keyword("@unknown") // support `@unknown default` as well
     }
 
     func isOperator(_ string: String) -> Bool {
