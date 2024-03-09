@@ -956,9 +956,7 @@ public struct _FormatRules {
                       // exit for class as protocol conformance
                       formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) != .delimiter(":"),
                       // exit if not closed for extension
-                      formatter.modifiersForDeclaration(at: i, contains: "final"),
-                      // exit if has attribute(s)
-                      !formatter.modifiersForDeclaration(at: i, contains: { $1.hasPrefix("@") })
+                      formatter.modifiersForDeclaration(at: i, contains: "final")
                 else {
                     return
                 }
@@ -966,6 +964,8 @@ public struct _FormatRules {
             guard let braceIndex = formatter.index(of: .startOfScope("{"), after: i),
                   // exit if import statement
                   formatter.last(.nonSpaceOrCommentOrLinebreak, before: i) != .keyword("import"),
+                  // exit if has attribute(s)
+                  !formatter.modifiersForDeclaration(at: i, contains: { $1.hasPrefix("@") }),
                   // exit if type is conforming any other types
                   !formatter.tokens[i ... braceIndex].contains(.delimiter(":")),
                   let endIndex = formatter.index(of: .endOfScope("}"), after: braceIndex),
@@ -3231,7 +3231,7 @@ public struct _FormatRules {
 
             // Make sure this is a type of scope that supports implicit returns
             if formatter.isConditionalStatement(at: startOfScopeIndex) ||
-                ["do", "else", "catch"].contains(formatter.lastSignificantKeyword(at: startOfScopeIndex))
+                ["do", "else", "catch"].contains(formatter.lastSignificantKeyword(at: startOfScopeIndex, excluding: ["throws"]))
             {
                 return
             }
