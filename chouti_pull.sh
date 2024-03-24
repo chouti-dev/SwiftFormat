@@ -48,7 +48,7 @@ fi
 
 # 3) run test
 echo "➡️  run tests"
-xcodebuild -project SwiftFormat.xcodeproj -scheme "SwiftFormat (Framework)" -sdk macosx clean build test | xcbeautify
+xcodebuild -project SwiftFormat.xcodeproj -scheme "SwiftFormat (Framework)" -sdk macosx clean build test
 if [ $? -ne 0 ]; then
   echo "🛑 test failed"
   exit 1
