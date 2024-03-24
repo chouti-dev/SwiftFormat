@@ -2,8 +2,6 @@
 //  Formatter.swift
 //  SwiftFormat
 //
-//  Version 0.53.4
-//
 //  Created by Nick Lockwood on 12/08/2016.
 //  Copyright 2016 Nick Lockwood
 //
@@ -177,7 +175,7 @@ public class Formatter: NSObject {
     // MARK: changes made
 
     /// Change record
-    public struct Change: Equatable, CustomStringConvertible {
+    public struct Change: Equatable {
         public let line: Int
         public let rule: FormatRule
         public let filePath: String?
@@ -186,8 +184,8 @@ public class Formatter: NSObject {
             stripMarkdown(rule.help).replacingOccurrences(of: "\n", with: " ")
         }
 
-        public var description: String {
-            "\(filePath ?? ""):\(line):1: warning: (\(rule.name)) \(help)"
+        public func description(asError: Bool) -> String {
+            "\(filePath ?? ""):\(line):1: \(asError ? "error" : "warning"): (\(rule.name)) \(help)"
         }
     }
 

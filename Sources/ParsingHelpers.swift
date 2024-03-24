@@ -43,8 +43,8 @@ public extension Formatter {
         startOfLine(at: lhs) == startOfLine(at: rhs)
     }
 
-    /// Returns the space at the start of the line containing the specified index
-    func indentForLine(at index: Int) -> String {
+    /// Returns the current space at the start of the line containing the specified index
+    func currentIndentForLine(at index: Int) -> String {
         if case let .space(string)? = token(at: startOfLine(at: index)) {
             return string
         }
@@ -303,7 +303,10 @@ extension Formatter {
                 isType = true
             } else if next(.nonSpaceOrComment, after: endIndex) == .startOfScope("(") {
                 isType = true
-            } else if let prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: index) {
+            } else if var prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: index) {
+                if tokens[prevIndex].isAttribute {
+                    prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: prevIndex) ?? prevIndex
+                }
                 switch tokens[prevIndex] {
                 case .identifier, .endOfScope(")"), .endOfScope("]"),
                      .operator("?", _), .operator("!", _),
@@ -390,7 +393,7 @@ extension Formatter {
             case .endOfScope(")"):
                 guard let startIndex = self.index(of: .startOfScope("("), before: prevIndex),
                       last(.nonSpaceOrCommentOrLinebreak, before: startIndex, if: {
-                          $0.isAttribute || _FormatRules.aclModifiers.contains($0.string)
+                          $0.isAttribute || _FormatRules.allModifiers.contains($0.string)
                       }) != nil
                 else {
                     return false
@@ -922,7 +925,7 @@ extension Formatter {
             if [.endOfScope(")"), .endOfScope("]")].contains(prevToken),
                let startIndex = index(of: .startOfScope, before: prevIndex),
                !tokens[startIndex ..< prevIndex].contains(where: { $0.isLinebreak })
-               || indentForLine(at: startIndex) == indentForLine(at: prevIndex)
+               || currentIndentForLine(at: startIndex) == currentIndentForLine(at: prevIndex)
             {
                 return false
             }
@@ -1299,7 +1302,7 @@ extension Formatter {
     ///  - Any value can be preceded by `try`, `try?`, `try!`, or `await`
     ///  - Any value can be followed by a postfix operator
     ///  - Any value can be followed by an infix operator plus a right-hand-side expression.
-    ///  - Any value can be followed by an arbitrary number of method calls `(...)` or subscripts `[...]`.
+    ///  - Any value can be followed by an arbitrary number of method calls `(...)`, subscripts `[...]`, or generic arguments `<...>`.
     ///  - Any value can be followed by a `.identifier`
     func parseExpressionRange(startingAt startIndex: Int) -> ClosedRange<Int>? {
         // Any expression can start with a prefix operator, or `await`
@@ -1355,8 +1358,8 @@ extension Formatter {
               let nextToken = token(at: nextTokenIndex)
         {
             switch nextToken {
-            // Any expression can be followed by an arbitrary number of method calls `(...)` or subscripts `[...]`.
-            case .startOfScope("("), .startOfScope("["):
+            // Any expression can be followed by an arbitrary number of method calls `(...)`, subscripts `[...]`, or generic arguments `<...>`.
+            case .startOfScope("("), .startOfScope("["), .startOfScope("<"):
                 // If there's a linebreak between an expression and a paren or subscript,
                 // then it's not parsed as a method call and is actually a separate expression
                 if tokens[endOfExpression ..< nextTokenIndex].contains(where: \.isLinebreak) {
@@ -2156,7 +2159,7 @@ extension Formatter {
                    tokens[lineStart] == .operator(".", .infix),
                    self.index(of: .startOfScope, before: index) ?? -1 < lineStart
                 {
-                    return indentForLine(at: lineStart)
+                    return currentIndentForLine(at: lineStart)
                 }
             }
             return options.indent
