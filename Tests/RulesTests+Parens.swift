@@ -203,6 +203,16 @@ class ParensTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantParens)
     }
 
+    func testNonRedundantParensAroundClosureTypeNotRemoved() {
+        let input = """
+        describe("getAlbums") {
+            typealias PhotoCollectionEnumerationHandler = (PhotoCollection) -> Void
+            typealias PhotoEnumerationHandler = (PhotoFetchResultEnumeration) -> Void
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
     // TODO: future enhancement
 //    func testRedundantParensAroundClosureReturnTypeRemoved() {
 //        let input = "typealias Foo = (Int) -> ((Int) -> Bool)"
@@ -521,6 +531,11 @@ class ParensTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.redundantParens)
     }
 
+    func testParensAroundParameterPackEachNotRemoved() {
+        let input = "func f<each V>(_: repeat ((each V).Type, as: (each V) -> String)) {}"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
     func testRedundantParensRemovedAroundOptionalClosureType() {
         let input = "let foo = ((() -> ()))?"
         let output = "let foo = (() -> ())?"
@@ -562,6 +577,12 @@ class ParensTests: RulesTests {
     func testSingleClosureArgumentUnwrapped() {
         let input = "{ (foo) in }"
         let output = "{ foo in }"
+        testFormatting(for: input, output, rule: FormatRules.redundantParens, exclude: ["unusedArguments"])
+    }
+
+    func testSingleMainActorClosureArgumentUnwrapped() {
+        let input = "{ @MainActor (foo) in }"
+        let output = "{ @MainActor foo in }"
         testFormatting(for: input, output, rule: FormatRules.redundantParens, exclude: ["unusedArguments"])
     }
 
@@ -626,7 +647,21 @@ class ParensTests: RulesTests {
 
     func testNoRemoveParensAroundArrayInitializer() {
         let input = "let foo = bar { [Int](foo) }"
-        testFormatting(for: input, rule: FormatRules.spaceAroundParens)
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testNoRemoveParensAroundForIndexInsideClosure() {
+        let input = """
+        let foo = {
+            for (i, token) in bar {}
+        }()
+        """
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testNoRemoveRequiredParensInsideClosure() {
+        let input = "let foo = { _ in (a + b).c }"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 
     // before trailing closure
@@ -998,6 +1033,27 @@ class ParensTests: RulesTests {
 
     func testRequiredParensNotRemovedAroundRepeat() {
         let input = "(repeat (each foo, each bar))"
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    // in async expression
+
+    func testRequiredParensNotRemovedInAsyncLet() {
+        let input = """
+        Task {
+            async let dataTask1: Void = someTask(request)
+            async let dataTask2: Void = someTask(request)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantParens)
+    }
+
+    func testRequiredParensNotRemovedInAsyncLet2() {
+        let input = """
+        Task {
+            let processURL: (URL) async throws -> Void = { _ in }
+        }
+        """
         testFormatting(for: input, rule: FormatRules.redundantParens)
     }
 }

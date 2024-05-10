@@ -1,5 +1,32 @@
 # Change Log
 
+## [0.53.8](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.53.8) (2024-04-22)
+
+- Added `--strict` option to emit non-zero exit code after applying changes in formatting mode
+- The `enumNamespaces` rule is no longer applied to structs with macros that have generic arguments
+- The `opaqueGenericParameters` rule is no longer applied to structs with macros or attributes
+- Fixed another case where `redundantParens` spuriously removed parens inside a closure
+- Fixed bug where `redundantInit` mishandled a `.init` after a ternary operator 
+
+## [0.53.7](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.53.7) (2024-04-14)
+
+- Fixed bug with `redundantParens` where first parens inside a closure were spuriously removed
+- Fixed `wrapEnumCases` rule mangling unindented cases
+- The `wrapEnumCases` rule no longer wraps cases inside inline enum declarations
+- Improved the `redundantInit` metatype heuristic to reduce false positives 
+
+## [0.53.6](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.53.6) (2024-04-11)
+
+- Fixed bug where a space was incorrectly added before a `.` operator inside attribute arguments
+- The `redundantType` rule no longer strips required explicit type from `@Model` class default values
+- Fixed issue where `redundantInit` didn't work on collection types
+- The `redundantParens` rule now correctly handles `@MainActor` closures
+- Fixed bug where required parens were removed around `each X` parameter pack expressions
+- Fixed issue where `--wrapreturntype if-multiline` didn't work with arrays, dictionaries, tuples, or generic types
+- The `spaceAroundParens/Brackets` rules now correctly insert a space after `borrowing`/`consuming` and `isolated`
+- Fixed spurious line breaks inserted between scoped `import` statements
+- Added `--doccomments preserve` option to preserve all doc comments, even if not followed by a declaration
+
 ## [0.53.5](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.53.5) (2024-03-17)
 
 - Fixed bug with trailing comma being inserted into wrapped capture list

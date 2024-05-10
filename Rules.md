@@ -118,7 +118,7 @@ Capitalize acronyms when the first character is capitalized.
 
 Option | Description
 --- | ---
-`--acronyms` | Acronyms to auto-capitalize. Defaults to "ID,URL,UUID".
+`--acronyms` | Acronyms to auto-capitalize. Defaults to "ID,URL,UUID"
 
 <details>
 <summary>Examples</summary>
@@ -546,6 +546,10 @@ Replace consecutive spaces with a single space.
 ## docComments
 
 Use doc comments for API declarations, otherwise use regular comments.
+
+Option | Description
+--- | ---
+`--doccomments` | Doc comments: "before-declarations" (default) or "preserve"
 
 <details>
 <summary>Examples</summary>
@@ -1241,8 +1245,8 @@ Convert functional `forEach` calls to for loops.
 
 Option | Description
 --- | ---
-`--anonymousforeach` | Convert anonymous forEach: "convert" (default) or "ignore".
-`--onelineforeach` | Convert one-line forEach: "convert" or "ignore" (default).
+`--anonymousforeach` | Convert anonymous forEach: "convert" (default) or "ignore"
+`--onelineforeach` | Convert one-line forEach: "convert" or "ignore" (default)
 
 <details>
 <summary>Examples</summary>

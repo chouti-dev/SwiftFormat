@@ -3640,7 +3640,132 @@ class WrappingTests: RulesTests {
         let options = FormatOptions(
             wrapArguments: .beforeFirst,
             closingParenOnSameLine: true,
-            wrapReturnType: .ifMultiline
+            wrapReturnType: .ifMultiline,
+            wrapEffects: .ifMultiline
+        )
+        testFormatting(for: input, [output], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.wrapArguments,
+        ], options: options)
+    }
+
+    func testWrapsMultilineStatementConsistentlyWithEffects() {
+        let input = """
+        func aFunc(
+            one _: Int,
+            two _: Int) async throws -> String {
+            "one"
+        }
+        """
+
+        let output = """
+        func aFunc(
+            one _: Int,
+            two _: Int)
+            async throws -> String
+        {
+            "one"
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true,
+            wrapReturnType: .ifMultiline,
+            wrapEffects: .ifMultiline
+        )
+        testFormatting(for: input, [output], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.wrapArguments,
+        ], options: options)
+    }
+
+    func testWrapsMultilineStatementConsistentlyWithArrayReturnType() {
+        let input = """
+        public func aFunc(
+            one _: Int,
+            two _: Int) -> [String] {
+            ["one"]
+        }
+        """
+
+        let output = """
+        public func aFunc(
+            one _: Int,
+            two _: Int)
+            -> [String]
+        {
+            ["one"]
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true,
+            wrapReturnType: .ifMultiline,
+            wrapEffects: .ifMultiline
+        )
+        testFormatting(for: input, [output], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.wrapArguments,
+        ], options: options)
+    }
+
+    func testWrapsMultilineStatementConsistentlyWithComplexGenericReturnType() {
+        let input = """
+        public func aFunc(
+            one _: Int,
+            two _: Int) throws -> some Collection<String> {
+            ["one"]
+        }
+        """
+
+        let output = """
+        public func aFunc(
+            one _: Int,
+            two _: Int)
+            throws -> some Collection<String>
+        {
+            ["one"]
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true,
+            wrapReturnType: .ifMultiline,
+            wrapEffects: .ifMultiline
+        )
+        testFormatting(for: input, [output], rules: [
+            FormatRules.wrapMultilineStatementBraces,
+            FormatRules.wrapArguments,
+        ], options: options)
+    }
+
+    func testWrapsMultilineStatementConsistentlyWithTuple() {
+        let input = """
+        public func aFunc(
+            one: Int,
+            two: Int) -> (one: String, two: String) {
+            (one: String(one), two: String(two))
+        }
+        """
+
+        let output = """
+        public func aFunc(
+            one: Int,
+            two: Int)
+            -> (one: String, two: String)
+        {
+            (one: String(one), two: String(two))
+        }
+        """
+
+        let options = FormatOptions(
+            wrapArguments: .beforeFirst,
+            closingParenOnSameLine: true,
+            wrapReturnType: .ifMultiline,
+            wrapEffects: .ifMultiline
         )
         testFormatting(for: input, [output], rules: [
             FormatRules.wrapMultilineStatementBraces,
@@ -4517,6 +4642,42 @@ class WrappingTests: RulesTests {
         """
         testFormatting(for: input, rule: FormatRules.wrapEnumCases,
                        exclude: ["hoistPatternLet"])
+    }
+
+    func testNoMangleUnindentedEnumCases() {
+        let input = """
+        enum Foo {
+        case foo, bar
+        }
+        """
+        let output = """
+        enum Foo {
+        case foo
+        case bar
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapEnumCases, exclude: ["indent"])
+    }
+
+    func testNoMangleEnumCaseOnOpeningLine() {
+        let input = """
+        enum SortOrder { case
+            asc(String), desc(String)
+        }
+        """
+        // TODO: improve formatting here
+        let output = """
+        enum SortOrder { case
+            asc(String)
+        case desc(String)
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.wrapEnumCases, exclude: ["indent"])
+    }
+
+    func testNoWrapSingleLineEnumCases() {
+        let input = "enum Foo { case foo, bar }"
+        testFormatting(for: input, rule: FormatRules.wrapEnumCases)
     }
 
     // MARK: wrapSwitchCases
