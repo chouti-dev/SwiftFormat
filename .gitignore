@@ -26,3 +26,6 @@ swiftformat.artifactbundle.zip
 
 # AppCode
 .idea
+
+# Products
+Products/

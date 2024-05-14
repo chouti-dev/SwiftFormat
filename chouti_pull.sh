@@ -54,7 +54,11 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# 4) create a new tag
+# 4) make binary
+echo "➡️  make binary"
+./make-product.sh
+
+# 5) create a new tag
 newTag="$tagToMerge-chouti"
 while true; do
   read -p "$(echo -e '➡️  'create a new tag ${COLOR_GREEN}$newTag${COLOR_RESET}'?' '(y/n) ')" yn
@@ -71,7 +75,7 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# 5) push new tag
+# 6) push new tag
 while true; do
   read -p "$(echo -e '➡️  'push new tag ${COLOR_GREEN}$newTag${COLOR_RESET} to origin'?' '(y/n) ')" yn
   case $yn in
@@ -86,7 +90,7 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# 6) open web to create a new release
+# 7) open web to create a new release
 # open "https://github.com/chouti-dev/SwiftFormat/releases/new?tag=0.53.1-chouti&title=Merged%20from%20upstream%20%280.53.1%29&body=Merged%20https://github.com/nicklockwood/SwiftFormat/releases/tag/0.53.1"
 open "https://github.com/chouti-dev/SwiftFormat/releases/new?tag=$newTag&title=Merged%20from%20upstream%20%28$tagToMerge%29&body=Merged%20https://github.com/nicklockwood/SwiftFormat/releases/tag/$tagToMerge"
 
