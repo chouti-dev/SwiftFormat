@@ -8096,6 +8096,80 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.unusedArguments)
     }
 
+    func testUnusedArgumentWithClosureShadowingParamName() {
+        let input = """
+        func test(foo: Foo) {
+            let foo = {
+                if foo.bar {
+                    baaz
+                } else {
+                    bar
+                }
+            }()
+            print(foo)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedArgumentWithConditionalAssignmentShadowingParamName() {
+        let input = """
+        func test(foo: Foo) {
+            let foo =
+                if foo.bar {
+                    baaz
+                } else {
+                    bar
+                }
+            print(foo)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedArgumentWithSwitchAssignmentShadowingParamName() {
+        let input = """
+        func test(foo: Foo) {
+            let foo =
+                switch foo.bar {
+                case true:
+                    baaz
+                case false:
+                    bar
+                }
+            print(foo)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testUnusedArgumentWithConditionalAssignmentNotShadowingParamName() {
+        let input = """
+        func test(bar: Bar) {
+            let quux =
+                if foo {
+                    bar
+                } else {
+                    baaz
+                }
+            print(quux)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testIssue1694() {
+        let input = """
+        listenForUpdates() { [weak self] update, error in
+            guard let update, error == nil else {
+                return
+            }
+            self?.configure(update)
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["redundantParens"])
+    }
+
     // MARK: redundantClosure
 
     func testRemoveRedundantClosureInSingleLinePropertyDeclaration() {
