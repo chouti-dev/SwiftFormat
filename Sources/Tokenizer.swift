@@ -1783,7 +1783,7 @@ public func tokenize(_ source: String) -> [Token] {
                 switch token {
                 case let .operator(string, _):
                     switch string {
-                    case ".", "==", "?", "!", "&", "->":
+                    case ".", "==", "?", "!", "&", "->", "~":
                         if index(of: .nonSpaceOrCommentOrLinebreak, before: count - 1) == scopeIndex {
                             // These are allowed in a generic, but not as the first character
                             fallthrough
@@ -1799,7 +1799,7 @@ public func tokenize(_ source: String) -> [Token] {
                     convertOpeningChevronToOperator(at: scopeIndex)
                     processToken()
                     return
-                case .endOfScope, .keyword:
+                case .keyword where !token.isAttribute, .endOfScope:
                     // If we encountered a keyword, or closing scope token that wasn't >
                     // then the opening < must have been an operator after all
                     convertOpeningChevronToOperator(at: scopeIndex)

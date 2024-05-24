@@ -341,6 +341,12 @@ class SpacingTests: RulesTests {
         testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
     }
 
+    func testAddSpaceBetweenParenAndSending() {
+        let input = "func foo(_: sending(any Foo)) {}"
+        let output = "func foo(_: sending (any Foo)) {}"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundParens)
+    }
+
     // MARK: - spaceInsideParens
 
     func testSpaceInsideParens() {
@@ -437,6 +443,12 @@ class SpacingTests: RulesTests {
         let output = "func foo(arg _: borrowing [String]) {}"
         testFormatting(for: input, output, rule: FormatRules.spaceAroundBrackets,
                        exclude: ["noExplicitOwnership"])
+    }
+
+    func testAddSpaceBetweenSendingAndStringArray() {
+        let input = "func foo(arg _: sending[String]) {}"
+        let output = "func foo(arg _: sending [String]) {}"
+        testFormatting(for: input, output, rule: FormatRules.spaceAroundBrackets)
     }
 
     // MARK: - spaceInsideBrackets
@@ -828,6 +840,16 @@ class SpacingTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.spaceAroundOperators)
     }
 
+    func testNoSpaceAroundInitWithGenericAndSuppressedConstraint() {
+        let input = "init<T: ~Copyable>()"
+        testFormatting(for: input, rule: FormatRules.spaceAroundOperators)
+    }
+
+    func testGenericBracketAroundAttributeNotConfusedWithLessThan() {
+        let input = "let example = Example<(@MainActor () -> Void)?>(nil)"
+        testFormatting(for: input, rule: FormatRules.spaceAroundOperators)
+    }
+
     func testSpaceAfterOptionalAs() {
         let input = "foo as?[String]"
         let output = "foo as? [String]"
@@ -842,6 +864,11 @@ class SpacingTests: RulesTests {
 
     func testNoSpaceAroundGenerics() {
         let input = "Foo<String>"
+        testFormatting(for: input, rule: FormatRules.spaceAroundOperators)
+    }
+
+    func testNoSpaceAroundGenericsWithSuppressedConstraint() {
+        let input = "Foo<String: ~Copyable>"
         testFormatting(for: input, rule: FormatRules.spaceAroundOperators)
     }
 

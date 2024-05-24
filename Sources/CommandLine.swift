@@ -350,8 +350,21 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
         // add args to environment
         let environment = environment.merging(args) { lhs, _ in lhs }
 
+        // Report URL
+        let reportURL: URL? = try args["report"].map { arg in
+            guard !arg.isEmpty else {
+                throw FormatError.options("--report argument expects a path")
+            }
+            return try parsePath(arg, for: "--output", in: directory)
+        }
+
         // Reporter
-        var reporter: Reporter? = try args["reporter"].map { identifier in
+        let reporter: Reporter = try args["reporter"].flatMap { identifier in
+            if identifier.lowercased() == "default" {
+                // Avoid errors for explicit `default` added to work around bug in 0.53.9
+                print("warning: Passing 'default' for --reporter is deprecated.", as: .warning)
+                return nil
+            }
             guard let reporter = Reporters.reporter(
                 named: identifier,
                 environment: environment
@@ -364,23 +377,9 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
                 throw FormatError.options(message)
             }
             return reporter
-        }
-
-        // Report URL
-        let reportURL: URL? = try args["report"].map { arg in
-            let url = try parsePath(arg, for: "--output", in: directory)
-            if reporter == nil {
-                reporter = Reporters.reporter(for: url, environment: environment)
-                guard reporter != nil else {
-                    throw FormatError
-                        .options("--report requires --reporter to be specified")
-                }
-            }
-            return url
-        }
-
-        // use default reporter if not set
-        reporter = reporter ?? DefaultReporter(environment: environment)
+        } ?? reportURL.flatMap {
+            Reporters.reporter(for: $0, environment: environment)
+        } ?? DefaultReporter(environment: environment)
 
         // Show help
         if args["help"] != nil {
@@ -532,9 +531,9 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
                 throw FormatError.options("--output argument expects a value")
             } else if inputURLs.count > 1 {
                 throw FormatError.options("--output argument is only valid for a single input file or directory")
-            } else if arg == "stdout" {
+            } else if arg.lowercased() == "stdout" {
                 useStdout = true
-                return URL(string: arg)
+                return URL(string: "stdout")
             }
             if args["lint"] != nil {
                 print("warning: --output argument is unused when running in --lint mode", as: .warning)
@@ -542,7 +541,7 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
             return try parsePath(arg, for: "--output", in: directory)
         }
 
-        guard !useStdout || (reporter == nil || reportURL != nil) else {
+        guard !useStdout || (reporter is DefaultReporter || reportURL != nil) else {
             throw FormatError.options("--report file must be specified when --output is stdout")
         }
 
@@ -792,7 +791,7 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
             let inputPaths = inputURLs.map { $0.path }.joined(separator: ", ")
             print("warning: No eligible files found at \(inputPaths).", as: .warning)
         }
-        if let reporter = reporter, let reporterOutput = try reporter.write() {
+        if let reporterOutput = try reporter.write() {
             if let reportURL = reportURL {
                 print("Writing report file to \(reportURL.path)")
                 try reporterOutput.write(to: reportURL, options: .atomic)
@@ -1057,7 +1056,7 @@ func processInput(_ inputURLs: [URL],
                     // Only bother computing this if cache is enabled
                     cachePrefix + (sourceHash ?? computeHash(output))
                 }
-                if outputURL.lastPathComponent.lowercased() == "stdout" {
+                if outputURL.path.components(separatedBy: "/").contains("stdout") {
                     if !dryrun {
                         // Write to stdout
                         print(output, as: .raw)

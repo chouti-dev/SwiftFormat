@@ -261,7 +261,8 @@ public struct _FormatRules {
                  .identifier("any") where formatter.isTypePosition(at: index),
                  .identifier("borrowing") where formatter.isTypePosition(at: index),
                  .identifier("consuming") where formatter.isTypePosition(at: index),
-                 .identifier("isolated") where formatter.isTypePosition(at: index):
+                 .identifier("isolated") where formatter.isTypePosition(at: index),
+                 .identifier("sending") where formatter.isTypePosition(at: index):
                 formatter.insert(.space(" "), at: i)
             case .space:
                 let index = i - 2
@@ -273,7 +274,8 @@ public struct _FormatRules {
                      .identifier("any") where formatter.isTypePosition(at: index),
                      .identifier("borrowing") where formatter.isTypePosition(at: index),
                      .identifier("consuming") where formatter.isTypePosition(at: index),
-                     .identifier("isolated") where formatter.isTypePosition(at: index):
+                     .identifier("isolated") where formatter.isTypePosition(at: index),
+                     .identifier("sending") where formatter.isTypePosition(at: index):
                     break
                 case let .keyword(string) where !spaceAfter(string, index: index):
                     fallthrough
@@ -343,14 +345,16 @@ public struct _FormatRules {
             switch prevToken {
             case .keyword,
                  .identifier("borrowing") where formatter.isTypePosition(at: index),
-                 .identifier("consuming") where formatter.isTypePosition(at: index):
+                 .identifier("consuming") where formatter.isTypePosition(at: index),
+                 .identifier("sending") where formatter.isTypePosition(at: index):
                 formatter.insert(.space(" "), at: i)
             case .space:
                 let index = i - 2
                 if let token = formatter.token(at: index) {
                     switch token {
                     case .identifier("borrowing") where formatter.isTypePosition(at: index),
-                         .identifier("consuming") where formatter.isTypePosition(at: index):
+                         .identifier("consuming") where formatter.isTypePosition(at: index),
+                         .identifier("sending") where formatter.isTypePosition(at: index):
                         break
                     case .identifier, .number, .endOfScope("]"), .endOfScope("}"), .endOfScope(")"):
                         formatter.removeToken(at: i - 1)
@@ -4939,7 +4943,8 @@ public struct _FormatRules {
             guard formatter.options.swiftVersion >= "4.2",
                   let equalIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: i, if: {
                       $0 == .operator("=", .infix)
-                  }), formatter.next(.nonSpaceOrCommentOrLinebreak, after: equalIndex) == .identifier("self")
+                  }), formatter.next(.nonSpaceOrCommentOrLinebreak, after: equalIndex) == .identifier("self"),
+                  formatter.isConditionalStatement(at: i)
             else {
                 return
             }
