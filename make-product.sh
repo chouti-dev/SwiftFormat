@@ -44,6 +44,11 @@ fi
 # renmae ./Products/swiftformat to ./Products/swiftformat-arm64
 mv ./Products/swiftformat ./Products/swiftformat-arm64
 
+# zip the file
+cd ./Products || exit 1
+zip -r ./swiftformat-arm64.zip ./swiftformat-arm64
+cd .. || exit 1
+
 # make x86_64 binary
 swift-build --arch x86_64
 if [ $? -ne 0 ]; then
@@ -54,8 +59,18 @@ fi
 # rename ./Products/swiftformat to ./Products/swiftformat-x86_64
 mv ./Products/swiftformat ./Products/swiftformat-x86_64
 
+# zip the file
+cd ./Products || exit 1
+zip -r ./swiftformat-x86_64.zip ./swiftformat-x86_64
+cd .. || exit 1
+
 # combine arm64 and x86_64 binary
 lipo -create -output ./Products/swiftformat ./Products/swiftformat-arm64 ./Products/swiftformat-x86_64
+
+# zip the file
+cd ./Products || exit 1
+zip -r ./swiftformat.zip ./swiftformat
+cd .. || exit 1
 
 # ===------ END ------===
 
