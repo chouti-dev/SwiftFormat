@@ -360,11 +360,6 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
 
         // Reporter
         let reporter: Reporter = try args["reporter"].flatMap { identifier in
-            if identifier.lowercased() == "default" {
-                // Avoid errors for explicit `default` added to work around bug in 0.53.9
-                print("warning: Passing 'default' for --reporter is deprecated.", as: .warning)
-                return nil
-            }
             guard let reporter = Reporters.reporter(
                 named: identifier,
                 environment: environment
@@ -380,6 +375,11 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
         } ?? reportURL.flatMap {
             Reporters.reporter(for: $0, environment: environment)
         } ?? DefaultReporter(environment: environment)
+
+        // Throw if default reporter is used with explicit url
+        guard reportURL == nil || !(reporter is DefaultReporter) else {
+            throw FormatError.options("--report requires --reporter to be specified")
+        }
 
         // Show help
         if args["help"] != nil {
@@ -492,6 +492,7 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
                 keys: [.creationDateKey, .pathKey]
             )
             var formatOptions = options.formatOptions ?? .default
+
             formatOptions.fileInfo = FileInfo(
                 filePath: resourceValues.path,
                 creationDate: resourceValues.creationDate
@@ -706,9 +707,16 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
                         if !dryrun, (try? String(contentsOf: outputURL)) != output {
                             try write(output, to: outputURL)
                         }
-                    } else {
+                    } else if !lint {
                         // Write to stdout
                         print(dryrun ? input : output, as: .raw)
+                    } else if let reporterOutput = try reporter.write() {
+                        if let reportURL = reportURL {
+                            print("Writing report file to \(reportURL.path)", as: .info)
+                            try reporterOutput.write(to: reportURL, options: .atomic)
+                        } else {
+                            print(String(decoding: reporterOutput, as: UTF8.self), as: .raw)
+                        }
                     }
                     let exitCode: ExitCode
                     if lint, output != input {
@@ -793,7 +801,7 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
         }
         if let reporterOutput = try reporter.write() {
             if let reportURL = reportURL {
-                print("Writing report file to \(reportURL.path)")
+                print("Writing report file to \(reportURL.path)", as: .info)
                 try reporterOutput.write(to: reportURL, options: .atomic)
             } else {
                 print(String(decoding: reporterOutput, as: UTF8.self), as: .raw)

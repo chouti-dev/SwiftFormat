@@ -14,6 +14,7 @@
 * [conditionalAssignment](#conditionalAssignment)
 * [consecutiveBlankLines](#consecutiveBlankLines)
 * [consecutiveSpaces](#consecutiveSpaces)
+* [consistentSwitchCaseSpacing](#consistentSwitchCaseSpacing)
 * [duplicateImports](#duplicateImports)
 * [elseOnSameLine](#elseOnSameLine)
 * [emptyBraces](#emptyBraces)
@@ -55,6 +56,7 @@
 * [redundantSelf](#redundantSelf)
 * [redundantStaticSelf](#redundantStaticSelf)
 * [redundantType](#redundantType)
+* [redundantTypedThrows](#redundantTypedThrows)
 * [redundantVoidReturnType](#redundantVoidReturnType)
 * [semicolons](#semicolons)
 * [sortDeclarations](#sortDeclarations)
@@ -91,6 +93,7 @@
 # Opt-in Rules (disabled by default)
 
 * [acronyms](#acronyms)
+* [blankLineAfterSwitchCase](#blankLineAfterSwitchCase)
 * [blankLinesBetweenImports](#blankLinesBetweenImports)
 * [blockComments](#blockComments)
 * [docComments](#docComments)
@@ -98,6 +101,7 @@
 * [markTypes](#markTypes)
 * [noExplicitOwnership](#noExplicitOwnership)
 * [organizeDeclarations](#organizeDeclarations)
+* [redundantProperty](#redundantProperty)
 * [sortSwitchCases](#sortSwitchCases)
 * [wrapConditionalBodies](#wrapConditionalBodies)
 * [wrapEnumCases](#wrapEnumCases)
@@ -232,6 +236,38 @@ Insert blank line after import statements.
 +
   class Foo {
     // foo
+  }
+```
+
+</details>
+<br/>
+
+## blankLineAfterSwitchCase
+
+Insert a blank line after multiline switch cases (excluding the last case,
+which is followed by a closing brace).
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  func handle(_ action: SpaceshipAction) {
+      switch action {
+      case .engageWarpDrive:
+          navigationComputer.destination = targetedDestination
+          await warpDrive.spinUp()
+          warpDrive.activate()
++
+      case let .scanPlanet(planet):
+          scanner.target = planet
+          scanner.scanAtmosphere()
+          scanner.scanBiosphere()
+          scanner.scanForArticialLife()
++
+      case .handleIncomingEnergyBlast:
+          await energyShields.prepare()
+          energyShields.engage()
+      }
   }
 ```
 
@@ -472,6 +508,10 @@ Option | Description
 
 Assign properties using if / switch expressions.
 
+Option | Description
+--- | ---
+`--condassignment` | Use cond. assignment: "after-property" (default) or "always"
+
 <details>
 <summary>Examples</summary>
 
@@ -485,9 +525,7 @@ Assign properties using if / switch expressions.
 -     bar = "bar"
 +     "bar"
   }
-```
 
-```diff
 - let foo: String
 - switch condition {
 + let foo = switch condition {
@@ -497,6 +535,17 @@ Assign properties using if / switch expressions.
   case false:
 -     foo = "bar"
 +     "bar"
+  }
+
+// With --condassignment always (disabled by default)
+- switch condition {
++ foo.bar = switch condition {
+  case true:
+-     foo.bar = "baaz"
++     "baaz"
+  case false:
+-     foo.bar = "quux"
++     "quux"
   }
 ```
 
@@ -538,6 +587,63 @@ Replace consecutive spaces with a single space.
 ```diff
 - let     foo = 5
 + let foo = 5
+```
+
+</details>
+<br/>
+
+## consistentSwitchCaseSpacing
+
+Ensures consistent spacing among all of the cases in a switch statement.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  func handle(_ action: SpaceshipAction) {
+      switch action {
+      case .engageWarpDrive:
+          navigationComputer.destination = targetedDestination
+          await warpDrive.spinUp()
+          warpDrive.activate()
+
+      case .enableArtificialGravity:
+          artificialGravityEngine.enable(strength: .oneG)
++
+      case let .scanPlanet(planet):
+          scanner.target = planet
+          scanner.scanAtmosphere()
+          scanner.scanBiosphere()
+          scanner.scanForArtificialLife()
+
+      case .handleIncomingEnergyBlast:
+          energyShields.engage()
+      }
+  }
+```
+
+```diff
+  var name: PlanetType {
+  switch self {
+  case .mercury:
+      "Mercury"
+-
+  case .venus:
+      "Venus"
+  case .earth:
+      "Earth"
+  case .mars:
+      "Mars"
+-
+  case .jupiter:
+      "Jupiter"
+  case .saturn:
+      "Saturn"
+  case .uranus:
+      "Uranus"
+  case .neptune:
+      "Neptune"
+  }
 ```
 
 </details>
@@ -737,6 +843,8 @@ Use specified source file header template for all files.
 Option | Description
 --- | ---
 `--header` | Header comments: "strip", "ignore", or the text you wish use
+`--dateformat` | "system" (default), "iso", "dmy", "mdy" or custom
+`--timezone` | "system" (default) or a valid identifier/abbreviation
 
 <details>
 <summary>Examples</summary>
@@ -749,18 +857,81 @@ Token | Description
 `{year}` | Current year
 `{created}` | File creation date
 `{created.year}` | File creation year
+`{author}` | Name and email of the user who first committed the file
+`{author.name}` | Name of the user who first committed the file
+`{author.email}` | Email of the user who first committed the file
 
 **Example**:
 
-`--header \n {file}\n\n Copyright © {created.year} CompanyName.\n`
+`--header \n {file}\n\n Copyright © {created.year} {author.name}.\n`
 
 ```diff
 - // SomeFile.swift
 
 + //
 + //  SomeFile.swift
-+ //  Copyright © 2023 CompanyName.
++ //  Copyright © 2023 Tim Apple.
 + //
+```
+
+You can use the following built-in formats for `--dateformat`:
+
+Token | Description
+--- | ---
+system | Use the local system locale
+iso | ISO 8601 (yyyy-MM-dd)
+dmy | Date/Month/Year (dd/MM/yyyy)
+mdy | Month/Day/Year (MM/dd/yyyy)
+
+Custom formats are defined using
+[Unicode symbols](https://www.unicode.org/reports/tr35/tr35-31/tr35-dates.html#Date_Field_Symbol_Table).
+
+`--dateformat iso`
+
+```diff
+- // Created {created}
++ // Created 2023-08-10
+```
+
+`--dateformat dmy`
+
+```diff
+- // Created {created}
++ // Created 10/08/2023
+```
+
+`--dateformat mdy`
+
+```diff
+- // Created {created}
++ // Created 08/10/2023
+```
+
+`--dateformat 'yyyy.MM.dd.HH.mm'`
+
+```diff
+- // Created {created}
++ // Created 2023.08.10.11.00
+```
+
+Setting a time zone enforces consistent date formatting across environments
+around the world. By default the local system locale is used and for convenience
+`gmt` and `utc` can be used. The time zone can be further customized by
+setting it to a abbreviation/time zone identifier supported by the Swift
+standard library.
+
+`--dateformat 'yyyy-MM-dd HH:mm ZZZZ' --timezone utc`
+
+```diff
+- // Created {created}
++ // Created 2023-08-10 11:00 GMT
+```
+
+`--dateformat 'yyyy-MM-dd HH:mm ZZZZ' --timezone Pacific/Fiji`
+
+```diff
+- // Created 2023-08-10 11:00 GMT
++ // Created 2023-08-10 23:00 GMT+12:00
 ```
 
 </details>
@@ -955,6 +1126,10 @@ Option | Description
 Add `@available(*, unavailable)` attribute to required `init(coder:)` when
 it hasn't been implemented.
 
+Option | Description
+--- | ---
+`--initcodernil` | Replace fatalError with nil in unavailable init?(coder:)
+
 <details>
 <summary>Examples</summary>
 
@@ -1082,6 +1257,9 @@ Option | Description
 + private convenience init()
 ```
 
+**NOTE:** If the `--modifierorder` option isn't set, the default order will be:
+`override`, `private`, `fileprivate`, `internal`, `package`, `public`, `open`, `private(set)`, `fileprivate(set)`, `internal(set)`, `package(set)`, `public(set)`, `open(set)`, `final`, `dynamic`, `optional`, `required`, `convenience`, `indirect`, `isolated`, `nonisolated`, `nonisolated(unsafe)`, `lazy`, `weak`, `unowned`, `static`, `class`, `borrowing`, `consuming`, `mutating`, `nonmutating`, `prefix`, `infix`, `postfix`
+
 </details>
 <br/>
 
@@ -1189,9 +1367,12 @@ Option | Description
 `--classthreshold` | Minimum line count to organize class body. Defaults to 0
 `--enumthreshold` | Minimum line count to organize enum body. Defaults to 0
 `--extensionlength` | Minimum line count to organize extension body. Defaults to 0
+`--organizationmode` | Organize declarations by "visibility" (default) or "type"
 
 <details>
 <summary>Examples</summary>
+
+`--organizationmode visibility` (default)
 
 ```diff
   public class Foo {
@@ -1232,6 +1413,47 @@ Option | Description
 +     // MARK: Private
 +
 +     private let g: Int = 2
++
+ }
+```
+
+`--organizationmode type`
+
+```diff
+  public class Foo {
+-     public func c() -> String {}
+-
+-     public let a: Int = 1
+-     private let g: Int = 2
+-     let e: Int = 2
+-     public let b: Int = 3
+-
+-     public func d() {}
+-     func f() {}
+-     init() {}
+-     deinit() {}
+ }
+
+  public class Foo {
++
++     // MARK: Properties
++
++     public let a: Int = 1
++     public let b: Int = 3
++
++     let e: Int = 2
++
++     private let g: Int = 2
++
++     // MARK: Lifecycle
++
++     init() {}
++     deinit() {}
++
++     // MARK: Functions
++
++     public func c() -> String {}
++     public func d() {}
 +
  }
 ```
@@ -1511,10 +1733,16 @@ Remove redundant `let error` from `catch` clause.
 
 ## redundantNilInit
 
-Remove redundant `nil` default value (Optional vars are nil by default).
+Remove/insert redundant `nil` default value (Optional vars are nil by default).
+
+Option | Description
+--- | ---
+`--nilinit` | "remove" (default) redundant nil or "insert" missing nil
 
 <details>
 <summary>Examples</summary>
+
+`--nilinit remove`
 
 ```diff
 - var foo: Int? = nil
@@ -1529,6 +1757,13 @@ let foo: Int? = nil
 ```diff
 // doesn't affect non-nil initialization
 var foo: Int? = 0
+```
+
+`--nilinit insert`
+
+```diff
+- var foo: Int?
++ var foo: Int? = nil
 ```
 
 </details>
@@ -1631,6 +1866,24 @@ Remove redundant pattern matching parameter syntax.
 </details>
 <br/>
 
+## redundantProperty
+
+Simplifies redundant property definitions that are immediately returned.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  func foo() -> Foo {
+-   let foo = Foo()
+-   return foo
++   return Foo()
+  }
+```
+
+</details>
+<br/>
+
 ## redundantRawValues
 
 Remove redundant raw string values for enum cases.
@@ -1670,7 +1923,7 @@ Remove unneeded `return` keyword.
 +     "foo"
   }
 
-  // Swift 5.9+ (SE-0380)
+  // Swift 5.9+ (SE-0380) and with conditionalAssignment rule enabled
   func foo(_ condition: Bool) -> String {
       if condition {
 -         return "foo"
@@ -1790,6 +2043,28 @@ Option | Description
   } else {
 -     Foo("bar")
 +     .init("foo")
+  }
+```
+
+</details>
+<br/>
+
+## redundantTypedThrows
+
+Converts `throws(any Error)` to `throws`, and converts `throws(Never)` to non-throwing.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- func foo() throws(Never) -> Int {
++ func foo() -> Int {
+      return 0
+  }
+
+- func foo() throws(any Error) -> Int {
++ func foo() throws -> Int {
+      throw MyError.foo
   }
 ```
 
@@ -2061,6 +2336,7 @@ Option | Description
 `--operatorfunc` | Spacing for operator funcs: "spaced" (default) or "no-space"
 `--nospaceoperators` | Comma-delimited list of operators without surrounding space
 `--ranges` | Spacing for ranges: "spaced" (default) or "no-space"
+`--typedelimiter` | "space-after" (default), "spaced" or "no-space"
 
 <details>
 <summary>Examples</summary>
@@ -2440,6 +2716,7 @@ Option | Description
 `--wrapparameters` | Wrap func params: "before-first", "after-first", "preserve"
 `--wrapcollections` | Wrap array/dict: "before-first", "after-first", "preserve"
 `--closingparen` | Closing paren position: "balanced" (default) or "same-line"
+`--callsiteparen` | Closing paren at call sites: "balanced" or "same-line"
 `--wrapreturntype` | Wrap return type: "if-multiline", "preserve" (default)
 `--wrapconditions` | Wrap conditions: "before-first", "after-first", "preserve"
 `--wraptypealiases` | Wrap typealiases: "before-first", "after-first", "preserve"
@@ -2515,7 +2792,10 @@ Option | Description
 --- | ---
 `--funcattributes` | Function @attributes: "preserve", "prev-line", or "same-line"
 `--typeattributes` | Type @attributes: "preserve", "prev-line", or "same-line"
-`--varattributes` | Property @attributes: "preserve", "prev-line", or "same-line"
+`--storedvarattrs` | Stored var @attribs: "preserve", "prev-line", or "same-line"
+`--computedvarattrs` | Computed var @attribs: "preserve", "prev-line", "same-line"
+`--complexattrs` | Complex @attributes: "preserve", "prev-line", or "same-line"
+`--noncomplexattrs` | List of @attributes to exclude from complexattrs rule
 
 <details>
 <summary>Examples</summary>

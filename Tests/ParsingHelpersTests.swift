@@ -126,6 +126,22 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertFalse(formatter.isStartOfClosure(at: 18))
     }
 
+    func testClosureInIfCondition() {
+        let formatter = Formatter(tokenize("""
+        if let btn = btns.first { !$0.isHidden } {}
+        """))
+        XCTAssertTrue(formatter.isStartOfClosure(at: 12))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 21))
+    }
+
+    func testClosureInIfCondition2() {
+        let formatter = Formatter(tokenize("""
+        if let foo, let btn = btns.first { !$0.isHidden } {}
+        """))
+        XCTAssertTrue(formatter.isStartOfClosure(at: 17))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 26))
+    }
+
     // functions
 
     func testFunctionBracesNotTreatedAsClosure() {
@@ -465,6 +481,14 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertFalse(formatter.isStartOfClosure(at: 22))
     }
 
+    func testClosureInsideIfCondition3() {
+        let formatter = Formatter(tokenize("""
+        if baz, let foo = bar(), { x == y }() {}
+        """))
+        XCTAssert(formatter.isStartOfClosure(at: 16))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 28))
+    }
+
     func testClosureAfterGenericType() {
         let formatter = Formatter(tokenize("let foo = Foo<String> {}"))
         XCTAssert(formatter.isStartOfClosure(at: 11))
@@ -574,6 +598,32 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssert(formatter.isStartOfClosure(at: 5))
     }
 
+    func testBraceAfterTypedThrows() {
+        let formatter = Formatter(tokenize("""
+        do throws(Foo) {} catch {}
+        """))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 7))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 12))
+    }
+
+    // MARK: isConditionalStatement
+
+    func testIfConditionContainingClosure() {
+        let formatter = Formatter(tokenize("""
+        if let btn = btns.first { !$0.isHidden } {}
+        """))
+        XCTAssertTrue(formatter.isConditionalStatement(at: 12))
+        XCTAssertTrue(formatter.isConditionalStatement(at: 21))
+    }
+
+    func testIfConditionContainingClosure2() {
+        let formatter = Formatter(tokenize("""
+        if let foo, let btn = btns.first { !$0.isHidden } {}
+        """))
+        XCTAssertTrue(formatter.isConditionalStatement(at: 17))
+        XCTAssertTrue(formatter.isConditionalStatement(at: 26))
+    }
+
     // MARK: isAccessorKeyword
 
     func testDidSet() {
@@ -625,6 +675,18 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssert(formatter.isAccessorKeyword(at: 34))
     }
 
+    func testInit() {
+        let formatter = Formatter(tokenize("""
+        var foo: Int {
+            init {}
+            get {}
+            set {}
+        }
+        """))
+        XCTAssert(formatter.isAccessorKeyword(at: 10))
+        XCTAssert(formatter.isAccessorKeyword(at: 16))
+    }
+
     func testNotGetter() {
         let formatter = Formatter(tokenize("""
         func foo() {
@@ -642,6 +704,15 @@ class ParsingHelpersTests: XCTestCase {
         }
         """))
         XCTAssert(formatter.isAccessorKeyword(at: 10, checkKeyword: false))
+    }
+
+    func testNotSetterInit() {
+        let formatter = Formatter(tokenize("""
+        class Foo {
+            init() { print("") }
+        }
+        """))
+        XCTAssertFalse(formatter.isAccessorKeyword(at: 7))
     }
 
     // MARK: isEnumCase
@@ -1629,6 +1700,14 @@ class ParsingHelpersTests: XCTestCase {
         }
     }
 
+    func testStartOfConditionalStatementConditionContainingUnParenthesizedClosure() {
+        let formatter = Formatter(tokenize("""
+        if let btn = btns.first { !$0.isHidden } {}
+        """))
+        XCTAssertEqual(formatter.startOfConditionalStatement(at: 12), 0)
+        XCTAssertEqual(formatter.startOfConditionalStatement(at: 21), 0)
+    }
+
     // MARK: isStartOfStatement
 
     func testAsyncAfterFuncNotTreatedAsStartOfStatement() {
@@ -1852,7 +1931,10 @@ class ParsingHelpersTests: XCTestCase {
     // MARK: - parseExpressionRange
 
     func testParseIndividualExpressions() {
+        XCTAssert(isSingleExpression(#"Foo()"#))
         XCTAssert(isSingleExpression(#"Foo("bar")"#))
+        XCTAssert(isSingleExpression(#"Foo.init()"#))
+        XCTAssert(isSingleExpression(#"Foo.init("bar")"#))
         XCTAssert(isSingleExpression(#"foo.bar"#))
         XCTAssert(isSingleExpression(#"foo .bar"#))
         XCTAssert(isSingleExpression(#"foo["bar"]("baaz")"#))
@@ -1906,6 +1988,30 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssert(isSingleExpression(#"try await { try await printAsyncThrows(foo) }()"#))
         XCTAssert(isSingleExpression(#"Foo<Bar>()"#))
         XCTAssert(isSingleExpression(#"Foo<Bar, Baaz>(quux: quux)"#))
+        XCTAssert(!isSingleExpression(#"if foo { "foo" } else { "bar" }"#))
+        XCTAssert(!isSingleExpression(#"foo.bar, baaz.quux"#))
+
+        XCTAssert(isSingleExpression(
+            #"if foo { "foo" } else { "bar" }"#,
+            allowConditionalExpressions: true
+        ))
+
+        XCTAssert(isSingleExpression("""
+        if foo {
+          "foo"
+        } else {
+          "bar"
+        }
+        """, allowConditionalExpressions: true))
+
+        XCTAssert(isSingleExpression("""
+        switch foo {
+        case true:
+            "foo"
+        case false:
+            "bar"
+        }
+        """, allowConditionalExpressions: true))
 
         XCTAssert(isSingleExpression("""
         foo
@@ -2016,9 +2122,38 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(parseExpressions(input), expectedExpressions)
     }
 
-    func isSingleExpression(_ string: String) -> Bool {
+    func testParsedExpressionInIfConditionExcludesConditionBody() {
+        let input = """
+        if let bar = foo.bar {
+          print(bar)
+        }
+
+        if foo.contains(where: { $0.isEmpty }) {
+          print("Empty foo")
+        }
+        """
+
+        XCTAssertEqual(parseExpression(in: input, at: 8), "foo.bar")
+        XCTAssertEqual(parseExpression(in: input, at: 25), "foo.contains(where: { $0.isEmpty })")
+    }
+
+    func testParsedExpressionInIfConditionExcludesConditionBody_trailingClosureEdgeCase() {
+        // This code is generally considered an anti-pattern, and outputs the following warning when compiled:
+        // warning: trailing closure in this context is confusable with the body of the statement; pass as a parenthesized argument to silence this warning
+        let input = """
+        if foo.contains { $0.isEmpty } {
+          print("Empty foo")
+        }
+        """
+
+        // We don't bother supporting this, since it would increase the complexity of the parser.
+        // A more correct result would be `foo.contains { $0.isEmpty }`.
+        XCTAssertEqual(parseExpression(in: input, at: 2), "foo.contains")
+    }
+
+    func isSingleExpression(_ string: String, allowConditionalExpressions: Bool = false) -> Bool {
         let formatter = Formatter(tokenize(string))
-        guard let expressionRange = formatter.parseExpressionRange(startingAt: 0) else { return false }
+        guard let expressionRange = formatter.parseExpressionRange(startingAt: 0, allowConditionalExpressions: allowConditionalExpressions) else { return false }
         return expressionRange.upperBound == formatter.tokens.indices.last!
     }
 
@@ -2039,5 +2174,55 @@ class ParsingHelpersTests: XCTestCase {
         }
 
         return expressions
+    }
+
+    func parseExpression(in input: String, at index: Int) -> String {
+        let formatter = Formatter(tokenize(input))
+        guard let expressionRange = formatter.parseExpressionRange(startingAt: index) else { return "" }
+        return formatter.tokens[expressionRange].map { $0.string }.joined()
+    }
+
+    // MARK: isStoredProperty
+
+    func testIsStoredProperty() {
+        XCTAssertTrue(isStoredProperty("var foo: String"))
+        XCTAssertTrue(isStoredProperty("let foo = 42"))
+        XCTAssertTrue(isStoredProperty("let foo: Int = 42"))
+        XCTAssertTrue(isStoredProperty("var foo: Int = 42"))
+        XCTAssertTrue(isStoredProperty("@Environment(\\.myEnvironmentProperty) var foo", at: 7))
+
+        XCTAssertTrue(isStoredProperty("""
+        var foo: String {
+          didSet {
+            print(newValue)
+          }
+        }
+        """))
+
+        XCTAssertTrue(isStoredProperty("""
+        var foo: String {
+          willSet {
+            print(newValue)
+          }
+        }
+        """))
+
+        XCTAssertFalse(isStoredProperty("""
+        var foo: String {
+            "foo"
+        }
+        """))
+
+        XCTAssertFalse(isStoredProperty("""
+        var foo: String {
+            get { "foo" }
+            set { print(newValue} }
+        }
+        """))
+    }
+
+    func isStoredProperty(_ input: String, at index: Int = 0) -> Bool {
+        let formatter = Formatter(tokenize(input))
+        return formatter.isStoredProperty(atIntroducerIndex: index)
     }
 }

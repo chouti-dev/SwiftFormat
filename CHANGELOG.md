@@ -1,5 +1,61 @@
 # Change Log
 
+## [0.54.3](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.54.3) (2024-07-28)
+
+- Fixed issue where `--wrapeffects never` could unexpectedly remove unrelated code
+- Fixed `--condassignment` option (setting this previously had no effect)
+- The `redundantReturn` rule no longer removes conditional `return`s if `conditionalAssignment` is disabled
+- The `redundantObjc` rule now strips implicit `@objc` attribute for `@IBSegueAction` functions
+- Fixed bug where violations for rules that insert new lines were sometimes ignored in lint output
+
+## [0.54.2](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.54.2) (2024-07-22)
+
+- Fixed broken formatter cache, which caused a significant performance regression since 0.54.0
+- The `blankLinesBetweenChainedFunctions` rule now removes blank line after comments in the chain
+- The `blankLinesBetweenChainedFunctions` rule no longer conflicts with `blankLinesAroundMark`
+- Fixed`redundantInternal` removing required `internal` keyword in extensions with `where` clause
+- Fixed another case of spurious `return` removal in conditional blocks
+- Fixed `redundantNilInit` rule inserting `nil` after `as` keyword
+
+## [0.54.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.54.1) (2024-07-10)
+
+- The `--nilInit insert` option is no longer applied to lazy or attributed properties
+- The `blankLinesBetweenChainedFunctions` rule now correctly handles comments in the chain
+- Fixed indenting of wrapped arguments in `--fragment` mode
+- Fixed bug where attributes were mistaken for an accessor in a computer property
+- Fixed indenting of commented code after an opening bracket
+- Fixed spurious removal of `return` in conditional blocks
+- Fixed `--lint` mode reporter output when using `stdin`
+
+## [0.54.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.54.0) (2024-06-11)
+
+- Added `blankLineAfterSwitchCase` rule for inserting blank lines after switch cases
+- Added `consistentSwitchCaseSpacing` rule for ensuring consistent spacing between switch cases
+- Added `redundantProperty` rule for removing variable assignments where value is immediately returned
+- Added `redundantTypedThrows` rule for stripping redundant `Never` or `any Error` `throws` types
+- Setting `--report` without `--reporter` type now raises an error if type can't be inferred
+- Added XML reporter for Checkstyle-compatible lint reporting (use the `--reporter xml` option)
+- Added `--typedelimiter` option for controlling spacing around the colon in type definitions
+- Added `--initcodernil` option for returning `nil` instead of asserting in unavailable `init?(coder:)`
+- The `fileHeader` rule now uses git info for `created` date (if available) instead of file system
+- Added git `author`, `author.name` and `author.email` tokens for file header templates
+- Added `--callsiteparen` option for controlling closing paren placement at function call sites
+- The `wrapAttributes` rule can now be applied differently to computed properties vs stored properties
+- The `wrapAttributes` rule can now be applied differently to complex (parameterized) vs simple attributes
+- Replaced `--varattributes` with `--storedvarattrs`, `--computedvarattrs` and `--complexattrs` options
+- Added `—-nilinit`  option for controlling whether `redundantNilInit` adds or removes explicit `nil`
+- Added ability to organize declarations by type over visibility (use `--organizationmode type`)
+- Fixed bug where enabling `organizeDeclarations` for structs caused `sortDeclarations` to have no effect
+- Fixed bug where if statement body could be incorrectly parsed as a trailing closure
+- Improved attribute handling in `opaqueGenericParameters rule`
+- SwiftFormat now recognizes `init` and `_modify` property accessors
+- Fixed bug with `preferForLoop` rule and tuple argument matching
+- Extended `conditionalAssignment` rule to handle more cases
+- Added `--condassignment after-property` option
+- Fixed await being hoisted outside of macro arguments
+- Fixed unsafe adding/removal of `self` within macros
+- Added `os_log` to `--selfrequired` defaults
+
 ## [0.53.10](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.53.10) (2024-05-18)
 
 - Fixed creation of spurious `stdout` directory when using `--output stdout`

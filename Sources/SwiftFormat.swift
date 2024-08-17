@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.53.10"
+let swiftFormatVersion = "0.54.3"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -180,10 +180,22 @@ public func enumerateFiles(withInputURL inputURL: URL,
         let fileOptions = options.fileOptions ?? .default
         if resourceValues.isRegularFile == true {
             if fileOptions.supportedFileExtensions.contains(inputURL.pathExtension) {
+                let fileHeaderRuleEnabled = options.rules?.contains(FormatRules.fileHeader.name) ?? false
+                let shouldGetGitInfo = fileHeaderRuleEnabled &&
+                    options.formatOptions?.fileHeader.needsGitInfo == true
+
+                let gitInfo = shouldGetGitInfo ? GitFileInfo(url: inputURL) : nil
+
                 let fileInfo = FileInfo(
                     filePath: resourceValues.path,
-                    creationDate: resourceValues.creationDate
+                    creationDate: gitInfo?.creationDate ?? resourceValues.creationDate,
+                    replacements: [
+                        .author: ReplacementType(gitInfo?.author),
+                        .authorName: ReplacementType(gitInfo?.authorName),
+                        .authorEmail: ReplacementType(gitInfo?.authorEmail),
+                    ].compactMapValues { $0 }
                 )
+
                 var options = options
                 options.formatOptions?.fileInfo = fileInfo
                 do {
@@ -488,6 +500,18 @@ private func applyRules(
 
     // Check if required FileInfo is available
     if rules.contains(FormatRules.fileHeader) {
+        let header = options.fileHeader
+        let fileInfo = options.fileInfo
+
+        for key in ReplacementKey.allCases {
+            if !fileInfo.hasReplacement(for: key, options: options), header.hasTemplateKey(key) {
+                throw FormatError.options(
+                    "Failed to apply {\(key.rawValue)} template in file header as required info is unavailable"
+                )
+            }
+        }
+
+        // ChouTi Extended [BEGIN]
         if options.fileHeader.rawValue.contains("{created}"),
            options.fileInfo.creationDate == nil
         {
@@ -518,20 +542,26 @@ private func applyRules(
                 )
             }
         }
+        // ChouTi Extended [END]
     }
 
     // Split tokens into lines
-    func getLines(in tokens: [Token], includingLinebreaks: Bool) -> [Int: ArraySlice<Token>?] {
-        var lines: [Int: ArraySlice<Token>?] = [:]
-        var start = 0, nextLine = 1
+    func getLines(in tokens: [Token], includingLinebreaks: Bool) -> [Int: ArraySlice<Token>] {
+        var lines: [Int: ArraySlice<Token>] = [:]
+        var startIndex = 0, nextLine = 1
         for (i, token) in tokens.enumerated() {
             if case let .linebreak(_, line) = token {
-                lines[line] = tokens[start ..< i + (includingLinebreaks ? 1 : 0)]
+                let endIndex = i + (includingLinebreaks ? 1 : 0)
+                if let existing = lines[line] {
+                    lines[line] = tokens[existing.startIndex ..< endIndex]
+                } else {
+                    lines[line] = tokens[startIndex ..< endIndex]
+                }
                 nextLine = line + 1
-                start = i + 1
+                startIndex = i + 1
             }
         }
-        lines[nextLine] = tokens[start...]
+        lines[nextLine] = tokens[startIndex...]
         return lines
     }
 

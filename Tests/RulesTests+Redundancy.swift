@@ -1419,6 +1419,7 @@ class RedundancyTests: RulesTests {
                 } else {
                     Foo("bar")
                 }
+
             case false:
                 Foo("baaz")
             }
@@ -1435,6 +1436,7 @@ class RedundancyTests: RulesTests {
                 } else {
                     Foo("bar")
                 }
+
             case false:
                 Foo("baaz")
             }
@@ -1456,6 +1458,7 @@ class RedundancyTests: RulesTests {
                 } else {
                     Foo("bar")
                 }
+
             case false:
                 Foo("baaz")
             }
@@ -1472,6 +1475,7 @@ class RedundancyTests: RulesTests {
                 } else {
                     .init("bar")
                 }
+
             case false:
                 .init("baaz")
             }
@@ -1798,71 +1802,96 @@ class RedundancyTests: RulesTests {
     func testRemoveRedundantNilInit() {
         let input = "var foo: Int? = nil\nlet bar: Int? = nil"
         let output = "var foo: Int?\nlet bar: Int? = nil"
-        testFormatting(for: input, output, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveLetNilInitAfterVar() {
         let input = "var foo: Int; let bar: Int? = nil"
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveNonNilInit() {
         let input = "var foo: Int? = 0"
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testRemoveRedundantImplicitUnwrapInit() {
         let input = "var foo: Int! = nil"
         let output = "var foo: Int!"
-        testFormatting(for: input, output, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testRemoveMultipleRedundantNilInitsInSameLine() {
         let input = "var foo: Int? = nil, bar: Int? = nil"
         let output = "var foo: Int?, bar: Int?"
-        testFormatting(for: input, output, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveLazyVarNilInit() {
         let input = "lazy var foo: Int? = nil"
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveLazyPublicPrivateSetVarNilInit() {
         let input = "lazy private(set) public var foo: Int? = nil"
-        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit, options: options,
                        exclude: ["modifierOrder"])
     }
 
     func testNoRemoveCodableNilInit() {
         let input = "struct Foo: Codable, Bar {\n    enum CodingKeys: String, CodingKey {\n        case bar = \"_bar\"\n    }\n\n    var bar: Int?\n    var baz: String? = nil\n}"
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveNilInitWithPropertyWrapper() {
         let input = "@Foo var foo: Int? = nil"
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveNilInitWithLowercasePropertyWrapper() {
         let input = "@foo var foo: Int? = nil"
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveNilInitWithPropertyWrapperWithArgument() {
         let input = "@Foo(bar: baz) var foo: Int? = nil"
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveNilInitWithLowercasePropertyWrapperWithArgument() {
         let input = "@foo(bar: baz) var foo: Int? = nil"
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testRemoveNilInitWithObjcAttributes() {
         let input = "@objc var foo: Int? = nil"
         let output = "@objc var foo: Int?"
-        testFormatting(for: input, output, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveNilInitInStructWithDefaultInit() {
@@ -1871,7 +1900,9 @@ class RedundancyTests: RulesTests {
             var bar: String? = nil
         }
         """
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testRemoveNilInitInStructWithDefaultInitInSwiftVersion5_2() {
@@ -1885,8 +1916,9 @@ class RedundancyTests: RulesTests {
             var bar: String?
         }
         """
+        let options = FormatOptions(nilInit: .remove, swiftVersion: "5.2")
         testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
-                       options: FormatOptions(swiftVersion: "5.2"))
+                       options: options)
     }
 
     func testRemoveNilInitInStructWithCustomInit() {
@@ -1906,7 +1938,9 @@ class RedundancyTests: RulesTests {
             }
         }
         """
-        testFormatting(for: input, output, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveNilInitInViewBuilder() {
@@ -1918,10 +1952,227 @@ class RedundancyTests: RulesTests {
             }
         }
         """
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     func testNoRemoveNilInitInIfStatementInViewBuilder() {
+        let input = """
+        struct TestView: View {
+            var body: some View {
+                if true {
+                    var foo: String? = nil
+                    Text(foo ?? "")
+                } else {
+                    EmptyView()
+                }
+            }
+        }
+        """
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoRemoveNilInitInSwitchStatementInViewBuilder() {
+        let input = """
+        struct TestView: View {
+            var body: some View {
+                switch foo {
+                case .bar:
+                    var foo: String? = nil
+                    Text(foo ?? "")
+
+                default:
+                    EmptyView()
+                }
+            }
+        }
+        """
+        let options = FormatOptions(nilInit: .remove)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    // --nilInit insert
+
+    func testInsertNilInit() {
+        let input = "var foo: Int?\nlet bar: Int? = nil"
+        let output = "var foo: Int? = nil\nlet bar: Int? = nil"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testInsertNilInitBeforeLet() {
+        let input = "var foo: Int?; let bar: Int? = nil"
+        let output = "var foo: Int? = nil; let bar: Int? = nil"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testInsertNilInitAfterLet() {
+        let input = "let bar: Int? = nil; var foo: Int?"
+        let output = "let bar: Int? = nil; var foo: Int? = nil"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNonNilInit() {
+        let input = "var foo: Int? = 0"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testInsertRedundantImplicitUnwrapInit() {
+        let input = "var foo: Int!"
+        let output = "var foo: Int! = nil"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testInsertMultipleRedundantNilInitsInSameLine() {
+        let input = "var foo: Int?, bar: Int?"
+        let output = "var foo: Int? = nil, bar: Int? = nil"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertLazyVarNilInit() {
+        let input = "lazy var foo: Int?"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertLazyPublicPrivateSetVarNilInit() {
+        let input = "lazy private(set) public var foo: Int?"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit, options: options,
+                       exclude: ["modifierOrder"])
+    }
+
+    func testNoInsertCodableNilInit() {
+        let input = "struct Foo: Codable, Bar {\n    enum CodingKeys: String, CodingKey {\n        case bar = \"_bar\"\n    }\n\n    var bar: Int?\n    var baz: String? = nil\n}"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitWithPropertyWrapper() {
+        let input = "@Foo var foo: Int?"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitWithLowercasePropertyWrapper() {
+        let input = "@foo var foo: Int?"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitWithPropertyWrapperWithArgument() {
+        let input = "@Foo(bar: baz) var foo: Int?"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitWithLowercasePropertyWrapperWithArgument() {
+        let input = "@foo(bar: baz) var foo: Int?"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testInsertNilInitWithObjcAttributes() {
+        let input = "@objc var foo: Int?"
+        let output = "@objc var foo: Int? = nil"
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitInStructWithDefaultInit() {
+        let input = """
+        struct Foo {
+            var bar: String?
+        }
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testInsertNilInitInStructWithDefaultInitInSwiftVersion5_2() {
+        let input = """
+        struct Foo {
+            var bar: String?
+            var foo: String? = nil
+        }
+        """
+        let output = """
+        struct Foo {
+            var bar: String? = nil
+            var foo: String? = nil
+        }
+        """
+        let options = FormatOptions(nilInit: .insert, swiftVersion: "5.2")
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testInsertNilInitInStructWithCustomInit() {
+        let input = """
+        struct Foo {
+            var bar: String?
+            var foo: String? = nil
+            init() {
+                bar = "bar"
+                foo = "foo"
+            }
+        }
+        """
+        let output = """
+        struct Foo {
+            var bar: String? = nil
+            var foo: String? = nil
+            init() {
+                bar = "bar"
+                foo = "foo"
+            }
+        }
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitInViewBuilder() {
+        // Not insert `nil` in result builder
+        let input = """
+        struct TestView: View {
+            var body: some View {
+                var foo: String?
+                Text(foo ?? "")
+            }
+        }
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitInIfStatementInViewBuilder() {
+        // Not insert `nil` in result builder
         let input = """
         struct TestView: View {
             var body: some View {
@@ -1934,10 +2185,13 @@ class RedundancyTests: RulesTests {
             }
         }
         """
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
-    func testNoRemoveNilInitInSwitchStatementInViewBuilder() {
+    func testNoInsertNilInitInSwitchStatementInViewBuilder() {
+        // Not insert `nil` in result builder
         let input = """
         struct TestView: View {
             var body: some View {
@@ -1945,13 +2199,81 @@ class RedundancyTests: RulesTests {
                 case .bar:
                     var foo: String?
                     Text(foo ?? "")
+
                 default:
                     EmptyView()
                 }
             }
         }
         """
-        testFormatting(for: input, rule: FormatRules.redundantNilInit)
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitInSingleLineComputedProperty() {
+        let input = """
+        var bar: String? { "some string" }
+        var foo: String? { nil }
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitInMultilineComputedProperty() {
+        let input = """
+        var foo: String? {
+            print("some")
+        }
+
+        var bar: String? {
+            nil
+        }
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitInCustomGetterAndSetterProperty() {
+        let input = """
+        var _foo: String? = nil
+        var foo: String? {
+            set { _foo = newValue }
+            get { newValue }
+        }
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testInsertNilInitInInstancePropertyWithBody() {
+        let input = """
+        var foo: String? {
+            didSet { print(foo) }
+        }
+        """
+
+        let output = """
+        var foo: String? = nil {
+            didSet { print(foo) }
+        }
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, output, rule: FormatRules.redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitInAs() {
+        let input = """
+        let json: Any = ["key": 1]
+        var jsonObject = json as? [String: Int]
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantNilInit,
+                       options: options)
     }
 
     // MARK: - redundantLet
@@ -2045,6 +2367,7 @@ class RedundancyTests: RulesTests {
                     let _ = {
                         foo = "\\(max)"
                     }()
+
                 default:
                     EmptyView()
                 }
@@ -2569,7 +2892,7 @@ class RedundancyTests: RulesTests {
             return bar
         }()
         """
-        testFormatting(for: input, rule: FormatRules.redundantReturn)
+        testFormatting(for: input, rule: FormatRules.redundantReturn, exclude: ["redundantProperty"])
     }
 
     func testNoRemoveReturnInForWhereLoop() {
@@ -2692,7 +3015,58 @@ class RedundancyTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.redundantReturn,
-                       options: FormatOptions(swiftVersion: "5.1"))
+                       options: FormatOptions(swiftVersion: "5.1"), exclude: ["redundantProperty"])
+    }
+
+    func testNoRemoveRequiredReturnInIfClosure() {
+        let input = """
+        func findButton() -> Button? {
+            let btns = [top, content, bottom]
+            if let btn = btns.first { !$0.isHidden && $0.alpha > 0.01 } {
+                return btn
+            }
+            return btns.first
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.1")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testNoRemoveRequiredReturnInIfClosure2() {
+        let input = """
+        func findButton() -> Button? {
+            let btns = [top, content, bottom]
+            if let foo, let btn = btns.first { !$0.isHidden && $0.alpha > 0.01 } {
+                return btn
+            }
+            return btns.first
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.1")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testRemoveRedundantReturnInIfClosure() {
+        let input = """
+        func findButton() -> Button? {
+            let btns = [top, content, bottom]
+            if let btn = btns.first { return !$0.isHidden && $0.alpha > 0.01 } {
+                print("hello")
+            }
+            return btns.first
+        }
+        """
+        let output = """
+        func findButton() -> Button? {
+            let btns = [top, content, bottom]
+            if let btn = btns.first { !$0.isHidden && $0.alpha > 0.01 } {
+                print("hello")
+            }
+            return btns.first
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.1")
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
     }
 
     func testDisableNextRedundantReturn() {
@@ -2768,7 +3142,30 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
+    }
+
+    func testNoRemoveRedundantIfStatementReturnInFunction() {
+        let input = """
+        func foo(condition: Bool) -> String {
+            if condition {
+                return "foo"
+            } else if otherCondition {
+                if anotherCondition {
+                    return "bar"
+                } else {
+                    return "baaz"
+                }
+            } else {
+                return "quux"
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options,
+                       exclude: ["conditionalAssignment"])
     }
 
     func testRedundantIfStatementReturnInClosure() {
@@ -2791,7 +3188,24 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
+    }
+
+    func testNoRemoveRedundantIfStatementReturnInClosure() {
+        let input = """
+        let closure: (Bool) -> String = { condition in
+            if condition {
+                return "foo"
+            } else {
+                return "bar"
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options,
+                       exclude: ["conditionalAssignment"])
     }
 
     func testNoRemoveReturnInConsecutiveIfStatements() {
@@ -2829,7 +3243,10 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure, FormatRules.indent], options: options, exclude: ["wrapMultilineConditionalAssignment"])
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment,
+                               FormatRules.redundantClosure, FormatRules.indent],
+                       options: options, exclude: ["wrapMultilineConditionalAssignment"])
     }
 
     func testRedundantSwitchStatementReturnInFunction() {
@@ -2854,7 +3271,25 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
+    }
+
+    func testNoRemoveRedundantSwitchStatementReturnInFunction() {
+        let input = """
+        func foo(condition: Bool) -> String {
+            switch condition {
+            case true:
+                return "foo"
+            case false:
+                return "bar"
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: FormatRules.redundantReturn, options: options,
+                       exclude: ["conditionalAssignment"])
     }
 
     func testClosureAroundConditionalAssignmentNotRedundantForExplicitReturn() {
@@ -2870,7 +3305,8 @@ class RedundancyTests: RulesTests {
         }()
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, rule: FormatRules.redundantClosure, options: options, exclude: ["redundantReturn"])
+        testFormatting(for: input, rule: FormatRules.redundantClosure, options: options,
+                       exclude: ["redundantReturn"])
     }
 
     func testNonRedundantSwitchStatementReturnInFunction() {
@@ -2910,7 +3346,9 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
     }
 
     func testRedundantSwitchStatementReturnInFunctionWithComment() {
@@ -2920,6 +3358,7 @@ class RedundancyTests: RulesTests {
             case true:
                 // foo
                 return "foo"
+
             default:
                 /* bar */
                 return "bar"
@@ -2932,6 +3371,7 @@ class RedundancyTests: RulesTests {
             case true:
                 // foo
                 "foo"
+
             default:
                 /* bar */
                 "bar"
@@ -2939,7 +3379,9 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
     }
 
     func testNonRedundantSwitchStatementReturnInFunctionWithDefault() {
@@ -3002,6 +3444,7 @@ class RedundancyTests: RulesTests {
                         return "baaz"
                     }
                 }
+
             case false:
                 return "quux"
             }
@@ -3021,13 +3464,16 @@ class RedundancyTests: RulesTests {
                         "baaz"
                     }
                 }
+
             case false:
                 "quux"
             }
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
     }
 
     func testRedundantSwitchStatementReturnWithAssociatedValueMatchingInFunction() {
@@ -3056,7 +3502,9 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
     }
 
     func testRedundantReturnDoesntFailToTerminateOnLongSwitch() {
@@ -3149,7 +3597,9 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
     }
 
     func testNoRemoveDebugReturnFollowedBySwitch() {
@@ -3225,7 +3675,9 @@ class RedundancyTests: RulesTests {
         """
 
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
     }
 
     func testRemovesReturnFromIfExpressionConditionalCastInSwift5_10() {
@@ -3250,6 +3702,60 @@ class RedundancyTests: RulesTests {
         """
 
         let options = FormatOptions(swiftVersion: "5.10")
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
+    }
+
+    func testRemovesRedundantReturnBeforeIfExpression() {
+        let input = """
+        func foo() -> Foo {
+            return if condition {
+                Foo.foo()
+            } else {
+                Foo.bar()
+            }
+        }
+        """
+
+        let output = """
+        func foo() -> Foo {
+            if condition {
+                Foo.foo()
+            } else {
+                Foo.bar()
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testRemovesRedundantReturnBeforeSwitchExpression() {
+        let input = """
+        func foo() -> Foo {
+            return switch condition {
+            case true:
+                Foo.foo()
+            case false:
+                Foo.bar()
+            }
+        }
+        """
+
+        let output = """
+        func foo() -> Foo {
+            switch condition {
+            case true:
+                Foo.foo()
+            case false:
+                Foo.bar()
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
         testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
     }
 
@@ -3915,6 +4421,16 @@ class RedundancyTests: RulesTests {
         let input = """
         func testFoo() {
             expect(Foo.validations[self.bar]).to(equal(1))
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.4")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testNoRemoveSelfInOSLogFunction() {
+        let input = """
+        func testFoo() {
+            os_log("error: \\(self.bar) is nil")
         }
         """
         let options = FormatOptions(swiftVersion: "5.4")
@@ -5167,7 +5683,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.4")
-        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options, exclude: ["redundantProperty"])
     }
 
     func testDisableRedundantSelfDirective() {
@@ -5181,7 +5697,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.4")
-        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options, exclude: ["redundantProperty"])
     }
 
     func testDisableRedundantSelfDirective2() {
@@ -5196,7 +5712,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.4")
-        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options, exclude: ["redundantProperty"])
     }
 
     func testSelfInsertDirective() {
@@ -5210,7 +5726,7 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.4")
-        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options, exclude: ["redundantProperty"])
     }
 
     func testNoRemoveVariableShadowedLaterInScopeInOlderSwiftVersions() {
@@ -5326,6 +5842,18 @@ class RedundancyTests: RulesTests {
         """
         let options = FormatOptions(swiftVersion: "5.4")
         testFormatting(for: input, output, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testNoRemoveSelfInMacro() {
+        let input = """
+        struct MyStruct {
+            private var __myVar: String
+            var myVar: String {
+                @storageRestrictions(initializes: self.__myVar)
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantSelf)
     }
 
     // explicitSelf = .insert
@@ -5945,6 +6473,38 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
     }
 
+    func testNoInsertSelfInMacro() {
+        let input = """
+        struct MyStruct {
+            private var __myVar: String
+            var myVar: String {
+                @storageRestrictions(initializes: __myVar)
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .insert)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testNoInsertSelfBeforeBinding() {
+        let input = """
+        struct MyView: View {
+            @Environment(ViewModel.self) var viewModel
+
+            var body: some View {
+                @Bindable var viewModel = self.viewModel
+                ZStack {
+                    MySubview(
+                        navigationPath: $viewModel.navigationPath
+                    )
+                }
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .insert, swiftVersion: "5.10")
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
     // explicitSelf = .initOnly
 
     func testPreserveSelfInsideClassInit() {
@@ -6195,6 +6755,50 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
     }
 
+    func testPropertyInitNotInterpretedAsTypeInit() {
+        let input = """
+        struct MyStruct {
+            private var __myVar: String
+            var myVar: String {
+                @storageRestrictions(initializes: __myVar)
+                init(initialValue) {
+                    __myVar = initialValue
+                }
+                set {
+                    __myVar = newValue
+                }
+                get {
+                    __myVar
+                }
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .initOnly)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
+    func testPropertyInitNotInterpretedAsTypeInit2() {
+        let input = """
+        struct MyStruct {
+            private var __myVar: String
+            var myVar: String {
+                @storageRestrictions(initializes: __myVar)
+                init {
+                    __myVar = newValue
+                }
+                set {
+                    __myVar = newValue
+                }
+                get {
+                    __myVar
+                }
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .initOnly)
+        testFormatting(for: input, rule: FormatRules.redundantSelf, options: options)
+    }
+
     // parsing bugs
 
     func testSelfRemovalParsingBug() {
@@ -6331,6 +6935,7 @@ class RedundancyTests: RulesTests {
                             print(self.bar)
                         }
                     }
+
                 case .failure:
                     if self.bar {
                         print(self.bar)
@@ -6358,6 +6963,7 @@ class RedundancyTests: RulesTests {
                     }
                 }
                 self.method()
+
             case .failure:
                 break
             }
@@ -6388,6 +6994,7 @@ class RedundancyTests: RulesTests {
                     case .value:
                         print("value")
                     }
+
                 case .failure:
                     guard self.bar else {
                         print(self.bar)
@@ -7247,7 +7854,7 @@ class RedundancyTests: RulesTests {
             return parser
         }
         """
-        testFormatting(for: input, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["redundantProperty"])
     }
 
     func testShadowedClosureArgument2() {
@@ -7257,7 +7864,7 @@ class RedundancyTests: RulesTests {
             return input
         }
         """
-        testFormatting(for: input, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["redundantProperty"])
     }
 
     func testUnusedPropertyWrapperArgument() {
@@ -7658,7 +8265,7 @@ class RedundancyTests: RulesTests {
             return bar
         }
         """
-        testFormatting(for: input, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["redundantProperty"])
     }
 
     func testTryAwaitArgumentNotMarkedUnused() {
@@ -7669,7 +8276,7 @@ class RedundancyTests: RulesTests {
             return bar
         }
         """
-        testFormatting(for: input, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["redundantProperty"])
     }
 
     func testTypedTryAwaitArgumentNotMarkedUnused() {
@@ -7680,7 +8287,7 @@ class RedundancyTests: RulesTests {
             return bar
         }
         """
-        testFormatting(for: input, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["redundantProperty"])
     }
 
     func testConditionalIfLetMarkedAsUnused() {
@@ -8180,7 +8787,7 @@ class RedundancyTests: RulesTests {
             return parameter
         }
         """
-        testFormatting(for: input, rule: FormatRules.unusedArguments)
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["redundantProperty"])
     }
 
     // MARK: redundantClosure
@@ -8354,7 +8961,7 @@ class RedundancyTests: RulesTests {
             bar: bar)
         """
 
-        let options = FormatOptions(wrapArguments: .beforeFirst, closingParenOnSameLine: true)
+        let options = FormatOptions(wrapArguments: .beforeFirst, closingParenPosition: .sameLine)
         testFormatting(for: input, [output],
                        rules: [FormatRules.redundantClosure, FormatRules.wrapArguments],
                        options: options)
@@ -8373,7 +8980,7 @@ class RedundancyTests: RulesTests {
                              bar: bar)
         """
 
-        let options = FormatOptions(wrapArguments: .afterFirst, closingParenOnSameLine: true)
+        let options = FormatOptions(wrapArguments: .afterFirst, closingParenPosition: .sameLine)
         testFormatting(for: input, [output],
                        rules: [FormatRules.redundantClosure, FormatRules.wrapArguments],
                        options: options)
@@ -8628,7 +9235,9 @@ class RedundancyTests: RulesTests {
             }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment,
+                               FormatRules.redundantClosure],
                        options: options, exclude: ["indent", "wrapMultilineConditionalAssignment"])
     }
 
@@ -8650,7 +9259,9 @@ class RedundancyTests: RulesTests {
             }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment,
+                               FormatRules.redundantClosure],
                        options: options, exclude: ["indent", "wrapMultilineConditionalAssignment"])
     }
 
@@ -9166,8 +9777,11 @@ class RedundancyTests: RulesTests {
         """
 
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, [output], rules: [FormatRules.redundantReturn, FormatRules.redundantClosure],
-                       options: options, exclude: ["indent", "blankLinesBetweenScopes", "wrapMultilineConditionalAssignment"])
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment,
+                               FormatRules.redundantClosure],
+                       options: options,
+                       exclude: ["indent", "blankLinesBetweenScopes", "wrapMultilineConditionalAssignment"])
     }
 
     func testRemovesRedundantClosureWithGenericExistentialTypes() {
@@ -9217,7 +9831,9 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
     }
 
     func testRedundantSwitchStatementReturnInFunctionWithSingleWhereClause() {
@@ -9249,7 +9865,9 @@ class RedundancyTests: RulesTests {
         }
         """
         let options = FormatOptions(swiftVersion: "5.9")
-        testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+        testFormatting(for: input, [output],
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
     }
 
     // MARK: - redundantOptionalBinding
@@ -9508,6 +10126,21 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantInternal)
     }
 
+    func testPreservesInternalInPublicExtensionWithWhereClause() {
+        let input = """
+        public extension SomeProtocol where SomeAssociatedType == SomeOtherType {
+            internal func fun1() {}
+            func fun2() {}
+        }
+
+        public extension OtherProtocol<GenericArgument> {
+            internal func fun1() {}
+            func fun2() {}
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.redundantInternal)
+    }
+
     // MARK: - noExplicitOwnership
 
     func testRemovesOwnershipKeywordsFromFunc() {
@@ -9560,5 +10193,211 @@ class RedundancyTests: RulesTests {
         """
 
         testFormatting(for: input, output, rule: FormatRules.noExplicitOwnership)
+    }
+
+    // MARK: - redundantProperty
+
+    func testRemovesRedundantProperty() {
+        let input = """
+        func foo() -> Foo {
+            let foo = Foo(bar: bar, baaz: baaz)
+            return foo
+        }
+        """
+
+        let output = """
+        func foo() -> Foo {
+            return Foo(bar: bar, baaz: baaz)
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.redundantProperty, exclude: ["redundantReturn"])
+    }
+
+    func testRemovesRedundantPropertyWithIfExpression() {
+        let input = """
+        func foo() -> Foo {
+            let foo =
+                if condition {
+                    Foo.foo()
+                } else {
+                    Foo.bar()
+                }
+
+            return foo
+        }
+        """
+
+        let output = """
+        func foo() -> Foo {
+            if condition {
+                Foo.foo()
+            } else {
+                Foo.bar()
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, [output], rules: [FormatRules.redundantProperty, FormatRules.redundantReturn, FormatRules.indent], options: options)
+    }
+
+    func testRemovesRedundantPropertyWithSwitchExpression() {
+        let input = """
+        func foo() -> Foo {
+            let foo: Foo
+            switch condition {
+            case true:
+                foo = Foo(bar)
+            case false:
+                foo = Foo(baaz)
+            }
+
+            return foo
+        }
+        """
+
+        let output = """
+        func foo() -> Foo {
+            switch condition {
+            case true:
+                Foo(bar)
+            case false:
+                Foo(baaz)
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, [output], rules: [FormatRules.conditionalAssignment, FormatRules.redundantProperty, FormatRules.redundantReturn, FormatRules.indent], options: options)
+    }
+
+    func testRemovesRedundantPropertyWithComments() {
+        let input = """
+        func foo() -> Foo {
+            // There's a comment before this property
+            let foo = Foo(bar: bar, baaz: baaz)
+            // And there's a comment after the property
+            return foo
+        }
+        """
+
+        let output = """
+        func foo() -> Foo {
+            // There's a comment before this property
+            return Foo(bar: bar, baaz: baaz)
+            // And there's a comment after the property
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.redundantProperty, exclude: ["redundantReturn"])
+    }
+
+    func testRemovesRedundantPropertyFollowingOtherProperty() {
+        let input = """
+        func foo() -> Foo {
+            let bar = Bar(baaz: baaz)
+            let foo = Foo(bar: bar)
+            return foo
+        }
+        """
+
+        let output = """
+        func foo() -> Foo {
+            let bar = Bar(baaz: baaz)
+            return Foo(bar: bar)
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.redundantProperty)
+    }
+
+    func testPreservesPropertyWhereReturnIsNotRedundant() {
+        let input = """
+        func foo() -> Foo {
+            let foo = Foo(bar: bar, baaz: baaz)
+            return foo.with(quux: quux)
+        }
+
+        func bar() -> Foo {
+            let bar = Bar(baaz: baaz)
+            return bar.baaz
+        }
+
+        func baaz() -> Foo {
+            let bar = Bar(baaz: baaz)
+            print(bar)
+            return bar
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.redundantProperty)
+    }
+
+    func testPreservesUnwrapConditionInIfStatement() {
+        let input = """
+        func foo() -> Foo {
+            let foo = Foo(bar: bar, baaz: baaz)
+
+            if let foo = foo.nestedFoo {
+                print(foo)
+            }
+
+            return foo
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.redundantProperty)
+    }
+
+    // MARK: - redundantTypedThrows
+
+    func testRemovesRedundantNeverTypeThrows() {
+        let input = """
+        func foo() throws(Never) -> Int {
+            0
+        }
+        """
+
+        let output = """
+        func foo() -> Int {
+            0
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "6.0")
+        testFormatting(for: input, output, rule: FormatRules.redundantTypedThrows, options: options)
+    }
+
+    func testRemovesRedundantAnyErrorTypeThrows() {
+        let input = """
+        func foo() throws(any Error) -> Int {
+            throw MyError.foo
+        }
+        """
+
+        let output = """
+        func foo() throws -> Int {
+            throw MyError.foo
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "6.0")
+        testFormatting(for: input, output, rule: FormatRules.redundantTypedThrows, options: options)
+    }
+
+    func testDontRemovesNonRedundantErrorTypeThrows() {
+        let input = """
+        func bar() throws(BarError) -> Foo {
+            throw .foo
+        }
+
+        func foo() throws(Error) -> Int {
+            throw MyError.foo
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "6.0")
+        testFormatting(for: input, rule: FormatRules.redundantTypedThrows, options: options)
     }
 }

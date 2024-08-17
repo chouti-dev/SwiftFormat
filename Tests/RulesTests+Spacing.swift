@@ -1262,6 +1262,63 @@ class SpacingTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.spaceAroundOperators, options: options)
     }
 
+    func testSpaceAroundDataTypeDelimiterLeadingAdded() {
+        let input = "class Implementation: ImplementationProtocol {}"
+        let output = "class Implementation : ImplementationProtocol {}"
+        let options = FormatOptions(typeDelimiterSpacing: .spaced)
+        testFormatting(
+            for: input,
+            output,
+            rule: FormatRules.spaceAroundOperators,
+            options: options
+        )
+    }
+
+    func testSpaceAroundDataTypeDelimiterLeadingTrailingAdded() {
+        let input = "class Implementation:ImplementationProtocol {}"
+        let output = "class Implementation : ImplementationProtocol {}"
+        let options = FormatOptions(typeDelimiterSpacing: .spaced)
+        testFormatting(
+            for: input,
+            output,
+            rule: FormatRules.spaceAroundOperators,
+            options: options
+        )
+    }
+
+    func testSpaceAroundDataTypeDelimiterLeadingTrailingNotModified() {
+        let input = "class Implementation : ImplementationProtocol {}"
+        let options = FormatOptions(typeDelimiterSpacing: .spaced)
+        testFormatting(
+            for: input,
+            rule: FormatRules.spaceAroundOperators,
+            options: options
+        )
+    }
+
+    func testSpaceAroundDataTypeDelimiterTrailingAdded() {
+        let input = "class Implementation:ImplementationProtocol {}"
+        let output = "class Implementation: ImplementationProtocol {}"
+
+        let options = FormatOptions(typeDelimiterSpacing: .spaceAfter)
+        testFormatting(
+            for: input,
+            output,
+            rule: FormatRules.spaceAroundOperators,
+            options: options
+        )
+    }
+
+    func testSpaceAroundDataTypeDelimiterLeadingNotAdded() {
+        let input = "class Implementation: ImplementationProtocol {}"
+        let options = FormatOptions(typeDelimiterSpacing: .spaceAfter)
+        testFormatting(
+            for: input,
+            rule: FormatRules.spaceAroundOperators,
+            options: options
+        )
+    }
+
     // MARK: - spaceAroundComments
 
     func testSpaceAroundCommentInParens() {
@@ -1590,5 +1647,525 @@ class SpacingTests: RulesTests {
         """
         let options = FormatOptions(emptyBracesSpacing: .linebreak)
         testFormatting(for: input, rule: FormatRules.emptyBraces, options: options)
+    }
+
+    // MARK: - blankLineAfterSwitchCase
+
+    func testAddsBlankLineAfterMultilineSwitchCases() {
+        let input = """
+        func handle(_ action: SpaceshipAction) {
+            switch action {
+            // The warp drive can be engaged by pressing a button on the control panel
+            case .engageWarpDrive:
+                navigationComputer.destination = targetedDestination
+                await warpDrive.spinUp()
+                warpDrive.activate()
+            // Triggered automatically whenever we detect an energy blast was fired in our direction
+            case .handleIncomingEnergyBlast:
+                await energyShields.prepare()
+                energyShields.engage()
+            }
+        }
+        """
+
+        let output = """
+        func handle(_ action: SpaceshipAction) {
+            switch action {
+            // The warp drive can be engaged by pressing a button on the control panel
+            case .engageWarpDrive:
+                navigationComputer.destination = targetedDestination
+                await warpDrive.spinUp()
+                warpDrive.activate()
+
+            // Triggered automatically whenever we detect an energy blast was fired in our direction
+            case .handleIncomingEnergyBlast:
+                await energyShields.prepare()
+                energyShields.engage()
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLineAfterSwitchCase)
+    }
+
+    func testRemovesBlankLineAfterLastSwitchCase() {
+        let input = """
+        func handle(_ action: SpaceshipAction) {
+            switch action {
+            case .engageWarpDrive:
+                navigationComputer.destination = targetedDestination
+                await warpDrive.spinUp()
+                warpDrive.activate()
+
+            case let .scanPlanet(planet):
+                scanner.target = planet
+                scanner.scanAtmosphere()
+                scanner.scanBiosphere()
+                scanner.scanForArticialLife()
+
+            case .handleIncomingEnergyBlast:
+                await energyShields.prepare()
+                energyShields.engage()
+
+            }
+        }
+        """
+
+        let output = """
+        func handle(_ action: SpaceshipAction) {
+            switch action {
+            case .engageWarpDrive:
+                navigationComputer.destination = targetedDestination
+                await warpDrive.spinUp()
+                warpDrive.activate()
+
+            case let .scanPlanet(planet):
+                scanner.target = planet
+                scanner.scanAtmosphere()
+                scanner.scanBiosphere()
+                scanner.scanForArticialLife()
+
+            case .handleIncomingEnergyBlast:
+                await energyShields.prepare()
+                energyShields.engage()
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLineAfterSwitchCase)
+    }
+
+    func testDoesntAddBlankLineAfterSingleLineSwitchCase() {
+        let input = """
+        var planetType: PlanetType {
+            switch self {
+            case .mercury, .venus, .earth, .mars:
+                // The terrestrial planets are smaller and have a solid, rocky surface
+                .terrestrial
+            case .jupiter, .saturn, .uranus, .neptune:
+                // The gas giants are huge and lack a solid surface
+                .gasGiant
+            }
+        }
+
+        var planetType: PlanetType {
+            switch self {
+            // The terrestrial planets are smaller and have a solid, rocky surface
+            case .mercury, .venus, .earth, .mars:
+                .terrestrial
+            // The gas giants are huge and lack a solid surface
+            case .jupiter, .saturn, .uranus, .neptune:
+                .gasGiant
+            }
+        }
+
+        var name: PlanetType {
+            switch self {
+            // The planet closest to the sun
+            case .mercury:
+                "Mercury"
+            case .venus:
+                "Venus"
+            // The best planet, where everything cool happens
+            case .earth:
+                "Earth"
+            // This planet is entirely inhabited by robots.
+            // There are cool landers, rovers, and even a helicopter.
+            case .mars:
+                "Mars"
+            case .jupiter:
+                "Jupiter"
+            case .saturn:
+                // Other planets have rings, but satun's are the best.
+                // It's rings are the only once that are usually visible in photos.
+                "Saturn"
+            case .uranus:
+                /*
+                 * The pronunciation of this planet's name is subject of scholarly debate
+                 */
+                "Uranus"
+            case .neptune:
+                "Neptune"
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.blankLineAfterSwitchCase, exclude: ["sortSwitchCases", "wrapSwitchCases", "blockComments"])
+    }
+
+    func testMixedSingleLineAndMultiLineCases() {
+        let input = """
+        switch action {
+        case .engageWarpDrive:
+            navigationComputer.destination = targetedDestination
+            await warpDrive.spinUp()
+            warpDrive.activate()
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+        case let .scanPlanet(planet):
+            scanner.target = planet
+            scanner.scanAtmosphere()
+            scanner.scanBiosphere()
+            scanner.scanForArtificialLife()
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+
+        let output = """
+        switch action {
+        case .engageWarpDrive:
+            navigationComputer.destination = targetedDestination
+            await warpDrive.spinUp()
+            warpDrive.activate()
+
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+        case let .scanPlanet(planet):
+            scanner.target = planet
+            scanner.scanAtmosphere()
+            scanner.scanBiosphere()
+            scanner.scanForArtificialLife()
+
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.blankLineAfterSwitchCase, exclude: ["consistentSwitchCaseSpacing"])
+    }
+
+    func testAllowsBlankLinesAfterSingleLineCases() {
+        let input = """
+        switch action {
+        case .engageWarpDrive:
+            warpDrive.engage()
+
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+
+        case let .scanPlanet(planet):
+            scanner.scan(planet)
+
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.blankLineAfterSwitchCase)
+    }
+
+    // MARK: - consistentSwitchCaseSpacing
+
+    func testInsertsBlankLinesToMakeSwitchStatementSpacingConsistent1() {
+        let input = """
+        switch action {
+        case .engageWarpDrive:
+            navigationComputer.destination = targetedDestination
+            await warpDrive.spinUp()
+            warpDrive.activate()
+
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+        case let .scanPlanet(planet):
+            scanner.target = planet
+            scanner.scanAtmosphere()
+            scanner.scanBiosphere()
+            scanner.scanForArtificialLife()
+
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+
+        let output = """
+        switch action {
+        case .engageWarpDrive:
+            navigationComputer.destination = targetedDestination
+            await warpDrive.spinUp()
+            warpDrive.activate()
+
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+
+        case let .scanPlanet(planet):
+            scanner.target = planet
+            scanner.scanAtmosphere()
+            scanner.scanBiosphere()
+            scanner.scanForArtificialLife()
+
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.consistentSwitchCaseSpacing)
+    }
+
+    func testInsertsBlankLinesToMakeSwitchStatementSpacingConsistent2() {
+        let input = """
+        switch action {
+        case .engageWarpDrive:
+            navigationComputer.destination = targetedDestination
+            await warpDrive.spinUp()
+            warpDrive.activate()
+
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+
+        let output = """
+        switch action {
+        case .engageWarpDrive:
+            navigationComputer.destination = targetedDestination
+            await warpDrive.spinUp()
+            warpDrive.activate()
+
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.consistentSwitchCaseSpacing)
+    }
+
+    func testInsertsBlankLinesToMakeSwitchStatementSpacingConsistent3() {
+        let input = """
+        var name: PlanetType {
+            switch self {
+            // The planet closest to the sun
+            case .mercury:
+                "Mercury"
+            // Similar to Earth but way more deadly
+            case .venus:
+                "Venus"
+
+            // The best planet, where everything cool happens
+            case .earth:
+                "Earth"
+
+            // This planet is entirely inhabited by robots.
+            // There are cool landers, rovers, and even a helicopter.
+            case .mars:
+                "Mars"
+
+            // The biggest planet with the most moons
+            case .jupiter:
+                "Jupiter"
+
+            // Other planets have rings, but satun's are the best.
+            case .saturn:
+                "Saturn"
+            case .uranus:
+                "Uranus"
+            case .neptune:
+                "Neptune"
+            }
+        }
+        """
+
+        let output = """
+        var name: PlanetType {
+            switch self {
+            // The planet closest to the sun
+            case .mercury:
+                "Mercury"
+
+            // Similar to Earth but way more deadly
+            case .venus:
+                "Venus"
+
+            // The best planet, where everything cool happens
+            case .earth:
+                "Earth"
+
+            // This planet is entirely inhabited by robots.
+            // There are cool landers, rovers, and even a helicopter.
+            case .mars:
+                "Mars"
+
+            // The biggest planet with the most moons
+            case .jupiter:
+                "Jupiter"
+
+            // Other planets have rings, but satun's are the best.
+            case .saturn:
+                "Saturn"
+
+            case .uranus:
+                "Uranus"
+
+            case .neptune:
+                "Neptune"
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.consistentSwitchCaseSpacing)
+    }
+
+    func testRemovesBlankLinesToMakeSwitchStatementConsistent() {
+        let input = """
+        var name: PlanetType {
+            switch self {
+            // The planet closest to the sun
+            case .mercury:
+                "Mercury"
+
+            case .venus:
+                "Venus"
+            // The best planet, where everything cool happens
+            case .earth:
+                "Earth"
+            // This planet is entirely inhabited by robots.
+            // There are cool landers, rovers, and even a helicopter.
+            case .mars:
+                "Mars"
+            case .jupiter:
+                "Jupiter"
+            // Other planets have rings, but satun's are the best.
+            case .saturn:
+                "Saturn"
+            case .uranus:
+                "Uranus"
+            case .neptune:
+                "Neptune"
+            }
+        }
+        """
+
+        let output = """
+        var name: PlanetType {
+            switch self {
+            // The planet closest to the sun
+            case .mercury:
+                "Mercury"
+            case .venus:
+                "Venus"
+            // The best planet, where everything cool happens
+            case .earth:
+                "Earth"
+            // This planet is entirely inhabited by robots.
+            // There are cool landers, rovers, and even a helicopter.
+            case .mars:
+                "Mars"
+            case .jupiter:
+                "Jupiter"
+            // Other planets have rings, but satun's are the best.
+            case .saturn:
+                "Saturn"
+            case .uranus:
+                "Uranus"
+            case .neptune:
+                "Neptune"
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: FormatRules.consistentSwitchCaseSpacing)
+    }
+
+    func testSingleLineAndMultiLineSwitchCase1() {
+        let input = """
+        switch planetType {
+        case .terrestrial:
+            if options.treatPlutoAsPlanet {
+                [.mercury, .venus, .earth, .mars, .pluto]
+            } else {
+                [.mercury, .venus, .earth, .mars]
+            }
+        case .gasGiant:
+            [.jupiter, .saturn, .uranus, .neptune]
+        }
+        """
+
+        let output = """
+        switch planetType {
+        case .terrestrial:
+            if options.treatPlutoAsPlanet {
+                [.mercury, .venus, .earth, .mars, .pluto]
+            } else {
+                [.mercury, .venus, .earth, .mars]
+            }
+
+        case .gasGiant:
+            [.jupiter, .saturn, .uranus, .neptune]
+        }
+        """
+
+        testFormatting(for: input, [output], rules: [FormatRules.blankLineAfterSwitchCase, FormatRules.consistentSwitchCaseSpacing])
+    }
+
+    func testSingleLineAndMultiLineSwitchCase2() {
+        let input = """
+        switch planetType {
+        case .gasGiant:
+            [.jupiter, .saturn, .uranus, .neptune]
+        case .terrestrial:
+            if options.treatPlutoAsPlanet {
+                [.mercury, .venus, .earth, .mars, .pluto]
+            } else {
+                [.mercury, .venus, .earth, .mars]
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.consistentSwitchCaseSpacing)
+    }
+
+    func testSwitchStatementWithSingleMultilineCase_blankLineAfterSwitchCaseEnabled() {
+        let input = """
+        switch action {
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+        case .engageWarpDrive:
+            navigationComputer.destination = targetedDestination
+            await warpDrive.spinUp()
+            warpDrive.activate()
+        case let .scanPlanet(planet):
+            scanner.scan(planet)
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+
+        let output = """
+        switch action {
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+
+        case .engageWarpDrive:
+            navigationComputer.destination = targetedDestination
+            await warpDrive.spinUp()
+            warpDrive.activate()
+
+        case let .scanPlanet(planet):
+            scanner.scan(planet)
+
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+
+        testFormatting(for: input, [output], rules: [FormatRules.consistentSwitchCaseSpacing, FormatRules.blankLineAfterSwitchCase])
+    }
+
+    func testSwitchStatementWithSingleMultilineCase_blankLineAfterSwitchCaseDisabled() {
+        let input = """
+        switch action {
+        case .enableArtificialGravity:
+            artificialGravityEngine.enable(strength: .oneG)
+        case .engageWarpDrive:
+            navigationComputer.destination = targetedDestination
+            await warpDrive.spinUp()
+            warpDrive.activate()
+        case let .scanPlanet(planet):
+            scanner.scan(planet)
+        case .handleIncomingEnergyBlast:
+            energyShields.engage()
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.consistentSwitchCaseSpacing, exclude: ["blankLineAfterSwitchCase"])
     }
 }
