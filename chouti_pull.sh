@@ -20,9 +20,8 @@ git fetch git@github.com:nicklockwood/SwiftFormat.git --tags
 git pull
 
 # 1) get the tag to merge
-# Getting latest tag on git repository
-# https://gist.github.com/rponte/fdc0724dd984088606b0
-tagToMerge=$(git describe --tags `git rev-list --tags --max-count=1`)
+# Getting latest stable tag on git repository
+tagToMerge=$(git tag --sort=-v:refname | grep -E '^[0-9]+\.[0-9]+(\.[0-9]+)?$' | head -n 1)
 
 # 1) confirm before merge
 currentBranch=$(git rev-parse --abbrev-ref HEAD) # get current branch
