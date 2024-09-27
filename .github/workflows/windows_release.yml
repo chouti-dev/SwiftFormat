@@ -22,42 +22,59 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - branch: swift-5.9.2-release
-            tag: 5.9.2-RELEASE
-
-          - branch: development
-            tag: DEVELOPMENT-SNAPSHOT-2023-06-05-a
+          - target-triple: x86_64-unknown-windows-msvc
+            product-arch: amd64
+          - target-triple: aarch64-unknown-windows-msvc
+            product-arch: arm64
 
     steps:
       - uses: compnerd/gha-setup-swift@main
         with:
-          tag: ${{ matrix.tag }}
-          branch: ${{ matrix.branch }}
+          tag: 5.10.1-RELEASE # The 5.10 installer is the first that includes the Swift runtime msm files.
+          branch: swift-5.10.1-release
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.revision }}
 
-      - run: swift build -c release -Xswiftc -gnone
+      - run: swift build -c release --triple ${{ matrix.target-triple }} -Xswiftc -gnone
 
-      - uses: microsoft/setup-msbuild@v1.3.1
+      - uses: microsoft/setup-msbuild@v2.0.0
 
-      - run: msbuild -nologo -restore Platforms\Windows\SwiftFormat.wixproj -p:Configuration=Release -p:ProductVersion=${{ github.event.inputs.version }} -p:SWIFTFORMAT_BUILD=${{ github.workspace }}\.build\release -p:OutputPath=${{ github.workspace }}\artifacts -p:RunWixToolsOutOfProc=true
+      - shell: pwsh
+        run: |
+          # Bundle the Swift runtime if the version we're using ships with a redistributable
+          $SwiftExePath = (& where.exe swift.exe)
+          if (-not ($SwiftExePath -match "(.+)\\Toolchains\\(\d+\.\d+\.\d+)[^\\]*\\.*")) {
+            throw "Unexpected Swift installation path format"
+          }
 
-      - run: |
-          $MSI_PATH = cygpath -m ${{ github.workspace }}\artifacts\SwiftFormat.msi
-          Echo MSI_PATH=$MSI_PATH | Out-File -FilePath ${env:GITHUB_ENV} -Encoding utf8 -Append
-          
+          $SwiftInstallRoot = $Matches[1]
+          $SwiftRuntimeVersion = $Matches[2]
+          $SwiftRedistDir = "$SwiftInstallRoot\Redistributables\$SwiftRuntimeVersion"
+          if (-not (Test-Path $SwiftRedistDir)) {
+            throw "Swift redistributable not found at $SwiftRedistDir"
+          }
+
+          & msbuild -nologo -restore Platforms\Windows\SwiftFormat.wixproj `
+            -p:Configuration=Release `
+            -p:ProductArchitecture=${{ matrix.product-arch }} `
+            -p:ProductVersion=${{ github.event.inputs.version }} `
+            -p:SwiftFormatBuildDir=${{ github.workspace }}\.build\${{ matrix.target-triple }}\release `
+            -p:SwiftRedistDir=$SwiftRedistDir `
+            -p:OutputPath=${{ github.workspace }}\artifacts `
+            -p:RunWixToolsOutOfProc=true
+
       - name: 'Upload EXE'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: swiftformat_windows.exe
-          path: .build/x86_64-unknown-windows-msvc/release/swiftformat.exe
+          name: swiftformat.${{ matrix.product-arch }}.exe
+          path: .build/${{ matrix.target-triple }}/release/swiftformat.exe
           retention-days: 5
 
       - name: 'Upload MSI'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: SwiftFormat.msi
-          path: ${{ env.MSI_PATH }}
+          name: SwiftFormat.${{ matrix.product-arch }}.msi
+          path: artifacts\SwiftFormat.msi
           retention-days: 5

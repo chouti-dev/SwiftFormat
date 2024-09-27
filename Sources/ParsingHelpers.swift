@@ -168,8 +168,8 @@ public extension Formatter {
         }
         guard startToken == .startOfScope("{") else {
             var endIndex: Int? = startIndex
-            while let index = endIndex, !tokens[index].isEndOfScope(startToken) {
-                endIndex = self.index(after: index, where: {
+            while let i = endIndex, i < index || !tokens[i].isEndOfScope(startToken) {
+                endIndex = self.index(after: i, where: {
                     $0.isEndOfScope(startToken) || $0 == .endOfScope("#endif")
                 })
             }
@@ -361,7 +361,7 @@ extension Formatter {
                     {
                         isType = true
                     }
-                case .operator("->", _), .startOfScope("<"):
+                case .operator("->", _), .startOfScope("<"), .keyword("extension"):
                     isType = true
                 case .startOfScope("["), .startOfScope("("):
                     guard let type = scopeType(at: prevIndex) else {
@@ -698,6 +698,16 @@ extension Formatter {
     /// Returns true if the token at the specified index is part of a conditional statement
     func isConditionalStatement(at i: Int, excluding: Set<String> = []) -> Bool {
         startOfConditionalStatement(at: i, excluding: excluding) != nil
+    }
+
+    /// Returns true if the token at the specified index is part of a conditional assignment
+    /// (e.g. an if or switch expression following an `=` token)
+    func isConditionalAssignment(at i: Int) -> Bool {
+        guard let startOfConditional = startOfConditionalStatement(at: i),
+              let previousToken = lastToken(before: startOfConditional, where: { !$0.isSpaceOrCommentOrLinebreak })
+        else { return false }
+
+        return previousToken.isOperator("=")
     }
 
     /// If the token at the specified index is part of a conditional statement, returns the index of the first
@@ -1086,7 +1096,8 @@ extension Formatter {
                 return false
             }
             if let prevToken = last(.nonSpaceOrCommentOrLinebreak, before: i),
-               prevToken == .keyword("return") || prevToken.isOperator(ofType: .infix)
+               prevToken == .keyword("return") || prevToken.isOperator(ofType: .infix) ||
+               currentScope(at: i)?.isMultilineStringDelimiter == true
             {
                 return false
             }
@@ -2186,12 +2197,7 @@ extension Formatter {
     /// and the type (global, type, or local)
     func declarationIndexAndScope(at i: Int) -> (index: Int?, scope: DeclarationScope) {
         // Declarations which have `DeclarationScope.type`
-        let typeDeclarations = Set(["class", "actor", "struct", "enum", "extension"])
-
-        // Declarations which have `DeclarationScope.local`
-        let localDeclarations = Set(["let", "var", "func", "subscript", "init", "deinit"])
-
-        let allDeclarationScopes = typeDeclarations.union(localDeclarations)
+        let typeDeclarations = Set(["class", "actor", "struct", "enum", "protocol", "extension"])
 
         // back track through tokens until we find a startOfScope("{") that isDeclarationTypeKeyword
         //  - we have to skip scopes that sit between this token and the its actual start of scope,
@@ -2223,10 +2229,9 @@ extension Formatter {
             }
         }
 
-        // If this declaration isn't within any scope,
-        // it must be a global.
+        // If this declaration isn't within any scope, it must be a global.
         guard let startOfScopeIndex = startOfScope else {
-            return (nil, .global)
+            return (nil, isConditionalStatement(at: i) ? .local : .global)
         }
 
         // Code within closures and conditionals is always local
@@ -2234,16 +2239,17 @@ extension Formatter {
             return (nil, .local)
         }
 
-        guard let declarationKeywordIndex = index(before: startOfScopeIndex, where: {
-            allDeclarationScopes.contains($0.string)
-        }) else {
-            return (nil, .global)
+        guard let declarationKeywordIndex = indexOfLastSignificantKeyword(
+            at: startOfScopeIndex, excluding: ["where"]
+        ) else {
+            // Probably a contextual keyword like get, set, didSet, willSet, etc
+            return (nil, .local)
         }
 
         if typeDeclarations.contains(tokens[declarationKeywordIndex].string) {
             return (declarationKeywordIndex, .type)
         } else {
-            return (nil, .local)
+            return (declarationKeywordIndex, .local)
         }
     }
 

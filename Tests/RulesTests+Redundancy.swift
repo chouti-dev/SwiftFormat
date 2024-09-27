@@ -2558,6 +2558,27 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.redundantVoidReturnType, options: options)
     }
 
+    func testRemoveRedundantVoidInProtocolDeclaration() {
+        let input = """
+        protocol Foo {
+            func foo() -> Void
+            func bar() -> ()
+            var baz: Int { get }
+            func bazz() -> ( )
+        }
+        """
+
+        let output = """
+        protocol Foo {
+            func foo()
+            func bar()
+            var baz: Int { get }
+            func bazz()
+        }
+        """
+        testFormatting(for: input, output, rule: FormatRules.redundantVoidReturnType)
+    }
+
     // MARK: - redundantReturn
 
     func testRemoveRedundantReturnInClosure() {
@@ -3757,6 +3778,53 @@ class RedundancyTests: RulesTests {
 
         let options = FormatOptions(swiftVersion: "5.9")
         testFormatting(for: input, output, rule: FormatRules.redundantReturn, options: options)
+    }
+
+    func testReturnNotRemovedFromSwitchBodyWithOpaqueReturnType() {
+        // https://github.com/nicklockwood/SwiftFormat/issues/1819
+        let input = """
+        extension View {
+            func foo() -> some View {
+                if #available(iOS 16.0, *) {
+                    return self.scrollIndicators(.hidden)
+                } else {
+                    return self
+                }
+            }
+
+            func bar() -> (some View) {
+                if #available(iOS 16.0, *) {
+                    return self.scrollIndicators(.hidden)
+                } else {
+                    return self
+                }
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input,
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
+    }
+
+    func testReturnNotRemovedFromCatchWhere() {
+        // https://github.com/nicklockwood/SwiftFormat/issues/1843
+        let input = """
+        func decodeError(from data: Data, urlResponse: HTTPURLResponse) -> Error {
+            do {
+                let decoder = JSONDecoder()
+                return try decoder.decode(T.self, from: data)
+            } catch where urlResponse.statusCode >= 400 {
+                return CustomError() // <- return removed here, introducing a compile time error.
+            } catch {
+                return error
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input,
+                       rules: [FormatRules.redundantReturn, FormatRules.conditionalAssignment],
+                       options: options)
     }
 
     // MARK: - redundantBackticks
@@ -8765,6 +8833,32 @@ class RedundancyTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 
+    func testIssue1688_1() {
+        let input = #"""
+        func urlTestContains(path: String, strict _: Bool = true) -> Bool {
+            let path = if path.hasSuffix("/") { path } else { "\(path)/" }
+
+            return false
+        }
+        """#
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["wrapConditionalBodies"])
+    }
+
+    func testIssue1688_2() {
+        let input = """
+        enum Sample {
+            func invite(lang: String, randomValue: Int) -> String {
+                let flag: String? = if randomValue > 0 { "hello" } else { nil }
+
+                let lang = if let flag { flag } else { lang }
+
+                return lang
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["wrapConditionalBodies", "redundantProperty"])
+    }
+
     func testIssue1694() {
         let input = """
         listenForUpdates() { [weak self] update, error in
@@ -8788,6 +8882,72 @@ class RedundancyTests: RulesTests {
         }
         """
         testFormatting(for: input, rule: FormatRules.unusedArguments, exclude: ["redundantProperty"])
+    }
+
+    func testArgumentUsedInsideMultilineStringLiteral() {
+        // https://github.com/nicklockwood/SwiftFormat/issues/1847
+        let input = #"""
+        public func foo(message: String = "hi") {
+            let message =
+                """
+                Message: \(message)
+                """
+            print(message)
+        }
+        """#
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testArgumentUsedInsideMultilineStringLiteral2() {
+        let input = #"""
+        func foo(message: String) {
+            let message =
+                """
+                \(1 + 1)
+                Message: \(message)
+                """
+            print(message)
+        }
+        """#
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func testArgumentUsedInsideMultilineArrayLiteral() {
+        let input = #"""
+        func foo(message: String) {
+            let message = [
+                message,
+            ]
+            print(message)
+        }
+        """#
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
+    }
+
+    func test1850() {
+        let input = """
+        init(a3: A42.ID) {
+            a15.a22
+                .sink {
+                    Task {
+                        switch a23.a27 {
+                        #if !A34
+                            case .a35:
+                                A31.a32(.a33(.a34Failed))
+                        #endif
+                        case .a36:
+                            break
+                        }
+                    }
+                }
+                .store(in: &a14)
+
+            if a4.a57 == nil {
+                a51 = a3.a.b?.a54
+            }
+        }
+        """
+        testFormatting(for: input, rule: FormatRules.unusedArguments)
     }
 
     // MARK: redundantClosure

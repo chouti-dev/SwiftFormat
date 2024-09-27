@@ -352,7 +352,8 @@ public struct _FormatRules {
                 let index = i - 2
                 if let token = formatter.token(at: index) {
                     switch token {
-                    case .identifier("borrowing") where formatter.isTypePosition(at: index),
+                    case .identifier("as"), .identifier("is"), // not treated as keywords inside macro
+                         .identifier("borrowing") where formatter.isTypePosition(at: index),
                          .identifier("consuming") where formatter.isTypePosition(at: index),
                          .identifier("sending") where formatter.isTypePosition(at: index):
                         break
@@ -1827,20 +1828,21 @@ public struct _FormatRules {
             case .linebreak:
                 // Detect linewrap
                 let nextTokenIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: i)
+                let _nextToken = nextTokenIndex.map { formatter.tokens[$0] } ?? .space("")
                 let linewrapped = lastNonSpaceOrLinebreakIndex > -1 && (
                     !formatter.isEndOfStatement(at: lastNonSpaceOrLinebreakIndex, in: scopeStack.last) ||
                         (nextTokenIndex.map { formatter.isTrailingClosureLabel(at: $0) } == true) ||
                         !(nextTokenIndex == nil || [
                             .endOfScope("}"), .endOfScope("]"), .endOfScope(")"),
-                        ].contains(formatter.tokens[nextTokenIndex!]) ||
+                        ].contains(_nextToken) || _nextToken.isStringBody ||
                             formatter.isStartOfStatement(at: nextTokenIndex!, in: scopeStack.last) || (
-                                ((formatter.tokens[nextTokenIndex!].isIdentifier && !(formatter.tokens[nextTokenIndex!] == .identifier("async") && formatter.currentScope(at: nextTokenIndex!) != .startOfScope("("))) || [
+                                ((_nextToken.isIdentifier && !(_nextToken == .identifier("async") && formatter.currentScope(at: nextTokenIndex!) != .startOfScope("("))) || [
                                     .keyword("try"), .keyword("await"),
-                                ].contains(formatter.tokens[nextTokenIndex!])) &&
+                                ].contains(_nextToken)) &&
                                     formatter.last(.nonSpaceOrCommentOrLinebreak, before: nextTokenIndex!).map {
                                         $0 != .keyword("return") && !$0.isOperator(ofType: .infix)
                                     } ?? false) || (
-                                formatter.tokens[nextTokenIndex!] == .delimiter(",") && [
+                                _nextToken == .delimiter(",") && [
                                     "<", "[", "(", "case",
                                 ].contains(formatter.currentScope(at: nextTokenIndex!)?.string ?? "")
                             )
@@ -1868,8 +1870,7 @@ public struct _FormatRules {
                         case .endOfScope(")")?:
                             return !formatter.options.xcodeIndentation
                         default:
-                            return formatter.lastIndex(of: .startOfScope,
-                                                       in: i ..< endOfNextLine) == nil
+                            return formatter.lastIndex(of: .startOfScope, in: i ..< endOfNextLine) == nil
                         }
                     default:
                         return false
@@ -3179,8 +3180,13 @@ public struct _FormatRules {
                 return
             }
 
-            guard formatter.next(.nonSpaceOrCommentOrLinebreak, after: endIndex) == .startOfScope("{")
-            else { return }
+            guard let nextToken = formatter.next(.nonSpaceOrCommentOrLinebreak, after: endIndex) else { return }
+
+            let isInProtocol = nextToken == .endOfScope("}") || (nextToken.isKeywordOrAttribute && nextToken != .keyword("in"))
+
+            // After a `Void` we could see the start of a function's body, or if the function is inside a protocol declaration
+            // we can find a keyword related to other declarations or the end scope of the protocol definition.
+            guard nextToken == .startOfScope("{") || isInProtocol else { return }
 
             guard let prevIndex = formatter.index(of: .endOfScope(")"), before: i),
                   let parenIndex = formatter.index(of: .startOfScope("("), before: prevIndex),
@@ -3189,7 +3195,14 @@ public struct _FormatRules {
             else {
                 return
             }
-            formatter.removeTokens(in: i ..< formatter.index(of: .nonSpace, after: endIndex)!)
+
+            let startRemoveIndex: Int
+            if isInProtocol, formatter.token(at: i - 1)?.isSpace == true {
+                startRemoveIndex = i - 1
+            } else {
+                startRemoveIndex = i
+            }
+            formatter.removeTokens(in: startRemoveIndex ..< formatter.index(of: .nonSpace, after: endIndex)!)
         }
     }
 
@@ -3305,14 +3318,28 @@ public struct _FormatRules {
             }
 
             // Make sure this is a type of scope that supports implicit returns
+            let lastKeyword = isClosure ? "" : formatter.lastSignificantKeyword(
+                at: startOfScopeIndex,
+                excluding: ["throws", "where"]
+            )
             if !isClosure, formatter.isConditionalStatement(at: startOfScopeIndex, excluding: ["where"]) ||
-                ["do", "else", "catch"].contains(formatter.lastSignificantKeyword(at: startOfScopeIndex, excluding: ["throws"]))
+                ["do", "else", "catch"].contains(lastKeyword)
             {
                 return
             }
 
             // Only strip return from conditional block if conditionalAssignment rule is enabled
-            let stripConditionalReturn = formatter.options.enabledRules.contains("conditionalAssignment")
+            var stripConditionalReturn = formatter.options.enabledRules.contains("conditionalAssignment")
+
+            // Don't strip return if type is opaque
+            // (https://github.com/nicklockwood/SwiftFormat/issues/1819)
+            if stripConditionalReturn,
+               lastKeyword == "func",
+               let arrowIndex = formatter.index(of: .operator("->", .infix), before: startOfScopeIndex),
+               formatter.tokens[arrowIndex ..< startOfScopeIndex].contains(.identifier("some"))
+            {
+                stripConditionalReturn = false
+            }
 
             // Make sure the body only has a single statement
             guard formatter.blockBodyHasSingleStatement(
@@ -3507,6 +3534,14 @@ public struct _FormatRules {
                             return
                         }
                     }
+                case .keyword("if"), .keyword("switch"):
+                    guard formatter.isConditionalAssignment(at: i),
+                          let conditinalBranches = formatter.conditionalBranches(at: i),
+                          let endIndex = conditinalBranches.last?.endOfBranch
+                    else { fallthrough }
+
+                    removeUsed(from: &argNames, with: &associatedData,
+                               locals: locals, in: i + 1 ..< endIndex)
                 case .startOfScope("{"):
                     guard let endIndex = formatter.endOfScope(at: i) else {
                         return formatter.fatalError("Expected }", at: i)
@@ -4384,9 +4419,7 @@ public struct _FormatRules {
 
             for (key, replacement) in formatter.options.fileInfo.replacements {
                 if let replacementStr = replacement.resolve(file, options) {
-                    while let range = string.range(of: "{\(key.rawValue)}") {
-                        string.replaceSubrange(range, with: replacementStr)
-                    }
+                    string = string.replacingOccurrences(of: key.placeholder, with: replacementStr)
                 }
             }
 
@@ -6703,12 +6736,27 @@ public struct _FormatRules {
             }
 
             // Parse the return type if present
+            var arrowTokenIndex: Int?
             var returnTypeTokens: [Token]?
-            if let returnIndex = formatter.index(of: .operator("->", .infix), after: paramListEndIndex),
-               returnIndex < openBraceIndex, returnIndex < whereTokenIndex ?? openBraceIndex
+            if let arrowIndex = formatter.index(of: .operator("->", .infix), after: paramListEndIndex),
+               arrowIndex < openBraceIndex, arrowIndex < whereTokenIndex ?? openBraceIndex
             {
-                let returnTypeRange = (returnIndex + 1) ..< (whereTokenIndex ?? openBraceIndex)
+                arrowTokenIndex = arrowIndex
+                let returnTypeRange = (arrowIndex + 1) ..< (whereTokenIndex ?? openBraceIndex)
                 returnTypeTokens = Array(formatter.tokens[returnTypeRange])
+            }
+
+            // Parse thrown error type if present
+            var errorTypeTokens: [Token]?
+            if let throwsIndex = formatter.index(of: .keyword("throws"), after: paramListEndIndex),
+               throwsIndex < arrowTokenIndex ?? whereTokenIndex ?? openBraceIndex,
+               let openParenIndex = formatter.index(of: .nonSpace, after: throwsIndex, if: {
+                   $0 == .startOfScope("(")
+               }),
+               let closeParenIndex = formatter.endOfScope(at: openParenIndex)
+            {
+                let errorTypeRange = (openParenIndex + 1) ..< closeParenIndex
+                errorTypeTokens = Array(formatter.tokens[errorTypeRange])
             }
 
             let genericParameterListRange = (genericSignatureStartIndex + 1) ..< genericSignatureEndIndex
@@ -6787,6 +6835,14 @@ public struct _FormatRules {
                 // so have to mark the generic type as ineligible if it appears in the return type.
                 if let returnTypeTokens = returnTypeTokens,
                    returnTypeTokens.contains(where: { $0.string == genericType.name })
+                {
+                    genericType.eligibleToRemove = false
+                    continue
+                }
+
+                // https://github.com/nicklockwood/SwiftFormat/issues/1845
+                if let errorTypeTokens = errorTypeTokens,
+                   errorTypeTokens.contains(.identifier(genericType.name))
                 {
                     genericType.eligibleToRemove = false
                     continue
@@ -7809,13 +7865,13 @@ public struct _FormatRules {
                     return
                 }
 
-                // We can convert `return`s to `continue`, but only when `return` is on its own line.
+                // We can convert `return`s to `continue`, but only when `return` is the last token in the scope.
                 // It's legal to write something like `return print("foo")` in a `forEach` as long as
                 // you're still returning a `Void` value. Since `continue print("foo")` isn't legal,
                 // we should just ignore this closure.
                 if formatter.tokens[closureBodyIndex] == .keyword("return"),
                    let tokenAfterReturnKeyword = formatter.next(.nonSpaceOrComment, after: closureBodyIndex),
-                   !tokenAfterReturnKeyword.isLinebreak
+                   !(tokenAfterReturnKeyword.isLinebreak || tokenAfterReturnKeyword == .endOfScope("}"))
                 {
                     return
                 }

@@ -1634,6 +1634,42 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(formatter.declarationScope(at: 66), .type) // instanceMember3
     }
 
+    func testDeclarationScope_protocol() {
+        let input = """
+        protocol Bar {
+            var foo { get }
+        }
+        """
+
+        let formatter = Formatter(tokenize(input))
+        XCTAssertEqual(formatter.declarationScope(at: 7), .type)
+    }
+
+    func testDeclarationScope_doCatch() {
+        let input = """
+        do {
+            let decoder = JSONDecoder()
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            return error
+        }
+        """
+
+        let formatter = Formatter(tokenize(input))
+        XCTAssertEqual(formatter.declarationScope(at: 5), .local)
+    }
+
+    func testDeclarationScope_ifLet() {
+        let input = """
+        if let foo = bar {
+            return foo
+        }
+        """
+
+        let formatter = Formatter(tokenize(input))
+        XCTAssertEqual(formatter.declarationScope(at: 2), .local)
+    }
+
     // MARK: spaceEquivalentToWidth
 
     func testSpaceEquivalentToWidth() {
@@ -2224,5 +2260,13 @@ class ParsingHelpersTests: XCTestCase {
     func isStoredProperty(_ input: String, at index: Int = 0) -> Bool {
         let formatter = Formatter(tokenize(input))
         return formatter.isStoredProperty(atIntroducerIndex: index)
+    }
+
+    // MARK: scopeType
+
+    func testScopeTypeForArrayExtension() {
+        let input = "extension [Int] {}"
+        let formatter = Formatter(tokenize(input))
+        XCTAssertEqual(formatter.scopeType(at: 2), .arrayType)
     }
 }
