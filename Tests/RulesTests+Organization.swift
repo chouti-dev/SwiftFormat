@@ -2272,6 +2272,30 @@ class OrganizationTests: RulesTests {
         testFormatting(for: input, rule: FormatRules.extensionAccessControl)
     }
 
+    func testExtensionAccessControlRuleTerminatesInFileWithConditionalCompilation() {
+        let input = """
+        #if os(Linux)
+            #error("Linux is currently not supported")
+        #endif
+        """
+
+        testFormatting(for: input, rule: FormatRules.extensionAccessControl)
+    }
+
+    func testExtensionAccessControlRuleTerminatesInFileWithEmptyType() {
+        let input = """
+        struct Foo {
+            // This type is empty
+        }
+
+        extension Foo {
+            // This extension is empty
+        }
+        """
+
+        testFormatting(for: input, rule: FormatRules.extensionAccessControl)
+    }
+
     // MARK: markTypes
 
     func testAddsMarkBeforeTypes() {
@@ -4184,6 +4208,56 @@ class OrganizationTests: RulesTests {
         let options = FormatOptions(indent: "  ", organizeTypes: ["struct"])
         testFormatting(for: input, output, rule: FormatRules.organizeDeclarations,
                        options: options, exclude: ["blankLinesAtStartOfScope"])
+    }
+
+    func testDoesntAddUnexpectedBlankLinesDueToBlankLinesWithSpaces() {
+        // The blank lines in this input code are indented with four spaces.
+        // Done using string interpolation in the input code to make this
+        // more clear, and to prevent the spaces from being removed automatically.
+        let input = """
+        public class TestClass {
+            var variable01 = 1
+            var variable02 = 2
+            var variable03 = 3
+            var variable04 = 4
+            var variable05 = 5
+        \("    ")
+            public func foo() {}
+        \("    ")
+            func bar() {}
+        \("    ")
+            private func baz() {}
+        }
+        """
+
+        let output = """
+        public class TestClass {
+
+            // MARK: Public
+
+            public func foo() {}
+        \("    ")
+            // MARK: Internal
+
+            var variable01 = 1
+            var variable02 = 2
+            var variable03 = 3
+            var variable04 = 4
+            var variable05 = 5
+        \("    ")
+            func bar() {}
+        \("    ")
+            // MARK: Private
+
+            private func baz() {}
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: FormatRules.organizeDeclarations,
+            exclude: ["blankLinesAtStartOfScope", "blankLinesAtEndOfScope", "consecutiveBlankLines", "trailingSpace", "consecutiveSpaces", "indent"]
+        )
     }
 
     // MARK: - sortTypealiases
