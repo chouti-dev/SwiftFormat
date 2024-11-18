@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.54.6"
+let swiftFormatVersion = "0.55.0"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -41,12 +41,35 @@ public let swiftFormatConfigurationFile = ".swiftformat"
 /// The standard Swift version file name
 public let swiftVersionFile = ".swift-version"
 
-/// Supported Swift versions
+/// Supported Swift compiler versions
 public let swiftVersions = [
     "3.x", "4.0", "4.1", "4.2",
     "5.0", "5.1", "5.2", "5.3", "5.4", "5.5", "5.6", "5.7", "5.8", "5.9", "5.10",
     "6.0",
 ]
+
+/// Supported Swift language modes
+public let languageModes = [
+    "4", "4.2", "5", "6",
+]
+
+/// The default language mode for the given Swift compiler version
+func defaultLanguageMode(for compilerVersion: Version) -> Version {
+    switch compilerVersion {
+    case "4.0" ..< "4.2":
+        return "4"
+    case "4.2":
+        return "4.2"
+    case "5.0" ..< "6.0":
+        return "5"
+    case "6.0"...:
+        // The default language mode in Swift 6.0 is Swift 5 mode.
+        // https://developer.apple.com/documentation/swift/adoptingswift6
+        return "5"
+    default:
+        return .undefined
+    }
+}
 
 /// An enumeration of the types of error that may be thrown by SwiftFormat
 public enum FormatError: Error, CustomStringConvertible, LocalizedError, CustomNSError {
@@ -180,21 +203,9 @@ public func enumerateFiles(withInputURL inputURL: URL,
         let fileOptions = options.fileOptions ?? .default
         if resourceValues.isRegularFile == true {
             if fileOptions.supportedFileExtensions.contains(inputURL.pathExtension) {
-                let fileHeaderRuleEnabled = options.rules?.contains(FormatRules.fileHeader.name) ?? false
-                let shouldGetGitInfo = fileHeaderRuleEnabled &&
-                    options.formatOptions?.fileHeader.needsGitInfo == true
-
-                let gitInfo = shouldGetGitInfo ? GitFileInfo(url: inputURL) : nil
-
-                let fileInfo = FileInfo(
-                    filePath: resourceValues.path,
-                    creationDate: gitInfo?.creationDate ?? resourceValues.creationDate,
-                    replacements: [
-                        .author: ReplacementType(gitInfo?.author),
-                        .authorName: ReplacementType(gitInfo?.authorName),
-                        .authorEmail: ReplacementType(gitInfo?.authorEmail),
-                    ].compactMapValues { $0 }
-                )
+                let fileInfo = collectFileInfo(inputURL: inputURL,
+                                               options: options,
+                                               resourceValues: resourceValues)
 
                 var options = options
                 options.formatOptions?.fileInfo = fileInfo
@@ -267,6 +278,24 @@ public func enumerateFiles(withInputURL inputURL: URL,
         }
     }
     return errors
+}
+
+func collectFileInfo(inputURL: URL, options: Options, resourceValues: URLResourceValues) -> FileInfo {
+    let fileHeaderRuleEnabled = options.rules?.contains(FormatRule.fileHeader.name) ?? false
+    let shouldGetGitInfo = fileHeaderRuleEnabled &&
+        options.formatOptions?.fileHeader.needsGitInfo == true
+
+    let gitInfo = shouldGetGitInfo ? GitFileInfo(url: inputURL) : nil
+
+    return FileInfo(
+        filePath: resourceValues.path,
+        creationDate: gitInfo?.creationDate ?? resourceValues.creationDate,
+        replacements: [
+            .author: ReplacementType(gitInfo?.author),
+            .authorName: ReplacementType(gitInfo?.authorName),
+            .authorEmail: ReplacementType(gitInfo?.authorEmail),
+        ].compactMapValues { $0 }
+    )
 }
 
 /// Process configuration in all directories in specified path.
@@ -448,7 +477,7 @@ public func parsingError(for tokens: [Token], options: FormatOptions) -> FormatE
 
 /// Convert a token array back into a string
 public func sourceCode(for tokens: [Token]?) -> String {
-    (tokens ?? []).map { $0.string }.joined()
+    (tokens ?? []).map(\.string).joined()
 }
 
 /// Apply specified rules to a token array and optionally capture list of changes
@@ -491,17 +520,17 @@ private func applyRules(
 
     // Infer shared options
     var options = options
-    options.enabledRules = Set(rules.map { $0.name })
+    options.enabledRules = Set(rules.map(\.name))
     let sharedOptions = FormatRules
         .sharedOptionsForRules(rules)
         .compactMap { Descriptors.byName[$0] }
         .filter { $0.defaultArgument == $0.fromOptions(options) }
-        .map { $0.propertyName }
+        .map(\.propertyName)
 
     inferFormatOptions(sharedOptions, from: tokens, into: &options)
 
     // Check if required FileInfo is available
-    if rules.contains(FormatRules.fileHeader) {
+    if rules.contains(.fileHeader) {
         let header = options.fileHeader
         let fileInfo = options.fileInfo
 
@@ -612,7 +641,9 @@ private func applyRules(
                     return false
                 }
                 last = change
-                if newLines[change.line] == oldLines[change.line] {
+                // Filter out lines that haven't changed from their corresponding original line
+                // in the input code, unless the change was explicitly marked as a move.
+                if !change.isMove, newLines[change.line] == oldLines[change.line] {
                     return false
                 }
                 return true
@@ -624,7 +655,7 @@ private func applyRules(
     }
     let formatter = Formatter(tokens, options: options, trackChanges: true, range: range)
     rules.sorted().forEach { $0.apply(with: formatter) }
-    let rulesApplied = Set(formatter.changes.map { $0.rule.name }).sorted()
+    let rulesApplied = Set(formatter.changes.map(\.rule.name)).sorted()
     if rulesApplied.isEmpty {
         throw FormatError.writing("Failed to terminate")
     }
@@ -643,18 +674,19 @@ private func applyRules(
 public func format(
     _ tokens: [Token], rules: [FormatRule] = FormatRules.default,
     options: FormatOptions = .default, range: Range<Int>? = nil
-) throws -> [Token] {
-    try applyRules(rules, to: tokens, with: options, trackChanges: false, range: range).tokens
+) throws -> (tokens: [Token], changes: [Formatter.Change]) {
+    try applyRules(rules, to: tokens, with: options, trackChanges: true, range: range)
 }
 
 /// Format code with specified rules and options
 public func format(
     _ source: String, rules: [FormatRule] = FormatRules.default,
     options: FormatOptions = .default, lineRange: ClosedRange<Int>? = nil
-) throws -> String {
+) throws -> (output: String, changes: [Formatter.Change]) {
     let tokens = tokenize(source)
     let range = lineRange.map { tokenRange(forLineRange: $0, in: tokens) }
-    return try sourceCode(for: format(tokens, rules: rules, options: options, range: range))
+    let output = try format(tokens, rules: rules, options: options, range: range)
+    return (sourceCode(for: output.tokens), output.changes)
 }
 
 /// Lint a pre-parsed token array

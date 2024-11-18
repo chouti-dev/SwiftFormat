@@ -126,8 +126,8 @@ public enum WrapEffects: String, CaseIterable {
     case never
 }
 
-/// Annotation which should be kept when removing a redundant type
-public enum RedundantType: String, CaseIterable {
+/// Argument type for whether explciti or inferred properties are preferred
+public enum PropertyTypes: String, CaseIterable {
     /// Preserves the type as a part of the property definition:
     /// `let foo: Foo = Foo()` becomes `let foo: Foo = .init()`
     case explicit
@@ -163,6 +163,13 @@ public enum TernaryOperatorWrapMode: String, CaseIterable {
 /// Whether or not to remove `-> Void` from closures
 public enum ClosureVoidReturn: String, CaseIterable {
     case remove
+    case preserve
+}
+
+/// Whether to insert, remove, or preserve spaces around operators
+public enum OperatorSpacingMode: String, CaseIterable {
+    case insert = "spaced"
+    case remove = "no-space"
     case preserve
 }
 
@@ -581,8 +588,8 @@ public struct FormatOptions: CustomStringConvertible {
     public var indent: String
     public var linebreak: String
     public var allowInlineSemicolons: Bool
-    public var spaceAroundRangeOperators: Bool
-    public var spaceAroundOperatorDeclarations: Bool
+    public var spaceAroundRangeOperators: OperatorSpacingMode
+    public var spaceAroundOperatorDeclarations: OperatorSpacingMode
     public var useVoid: Bool
     public var indentCase: Bool
     public var trailingCommas: Bool
@@ -653,9 +660,17 @@ public struct FormatOptions: CustomStringConvertible {
     public var organizeEnumThreshold: Int
     public var organizeExtensionThreshold: Int
     public var organizationMode: DeclarationOrganizationMode
+    public var visibilityOrder: [String]?
+    public var typeOrder: [String]?
+    public var customVisibilityMarks: Set<String>
+    public var customTypeMarks: Set<String>
+    public var blankLineAfterSubgroups: Bool
+    public var alphabeticallySortedDeclarationPatterns: Set<String>
     public var yodaSwap: YodaMode
     public var extensionACLPlacement: ExtensionACLPlacement
-    public var redundantType: RedundantType
+    public var propertyTypes: PropertyTypes
+    public var preservedSymbols: Set<String>
+    public var inferredTypesInConditionalExpressions: Bool
     public var emptyBracesSpacing: EmptyBracesSpacing
     public var acronyms: Set<String>
     public var indentStrings: Bool
@@ -674,6 +689,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var dateFormat: DateFormat
     public var timeZone: FormatTimeZone
     public var nilInit: NilInitType
+    public var preservedPrivateDeclarations: Set<String>
 
     /// Deprecated
     public var indentComments: Bool
@@ -682,6 +698,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var fragment: Bool
     public var ignoreConflictMarkers: Bool
     public var swiftVersion: Version
+    public var languageMode: Version
     public var fileInfo: FileInfo
     public var timeout: TimeInterval
 
@@ -695,8 +712,8 @@ public struct FormatOptions: CustomStringConvertible {
                 indent: String = "    ",
                 linebreak: String = "\n",
                 allowInlineSemicolons: Bool = true,
-                spaceAroundRangeOperators: Bool = true,
-                spaceAroundOperatorDeclarations: Bool = true,
+                spaceAroundRangeOperators: OperatorSpacingMode = .insert,
+                spaceAroundOperatorDeclarations: OperatorSpacingMode = .insert,
                 useVoid: Bool = true,
                 indentCase: Bool = false,
                 trailingCommas: Bool = true,
@@ -768,9 +785,17 @@ public struct FormatOptions: CustomStringConvertible {
                 organizeEnumThreshold: Int = 0,
                 organizeExtensionThreshold: Int = 0,
                 organizationMode: DeclarationOrganizationMode = .visibility,
+                visibilityOrder: [String]? = nil,
+                typeOrder: [String]? = nil,
+                customVisibilityMarks: Set<String> = [],
+                customTypeMarks: Set<String> = [],
+                blankLineAfterSubgroups: Bool = true,
+                alphabeticallySortedDeclarationPatterns: Set<String> = [],
                 yodaSwap: YodaMode = .always,
                 extensionACLPlacement: ExtensionACLPlacement = .onExtension,
-                redundantType: RedundantType = .inferLocalsOnly,
+                propertyTypes: PropertyTypes = .inferLocalsOnly,
+                preservedSymbols: Set<String> = ["Package"],
+                inferredTypesInConditionalExpressions: Bool = false,
                 emptyBracesSpacing: EmptyBracesSpacing = .noSpace,
                 acronyms: Set<String> = ["ID", "URL", "UUID"],
                 indentStrings: Bool = false,
@@ -789,10 +814,12 @@ public struct FormatOptions: CustomStringConvertible {
                 dateFormat: DateFormat = .system,
                 timeZone: FormatTimeZone = .system,
                 nilInit: NilInitType = .remove,
+                preservedPrivateDeclarations: Set<String> = [],
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
                 swiftVersion: Version = .undefined,
+                languageMode: Version? = nil,
                 fileInfo: FileInfo = FileInfo(),
                 timeout: TimeInterval = 1)
     {
@@ -873,9 +900,17 @@ public struct FormatOptions: CustomStringConvertible {
         self.organizeEnumThreshold = organizeEnumThreshold
         self.organizeExtensionThreshold = organizeExtensionThreshold
         self.organizationMode = organizationMode
+        self.visibilityOrder = visibilityOrder
+        self.typeOrder = typeOrder
+        self.customVisibilityMarks = customVisibilityMarks
+        self.customTypeMarks = customTypeMarks
+        self.blankLineAfterSubgroups = blankLineAfterSubgroups
+        self.alphabeticallySortedDeclarationPatterns = alphabeticallySortedDeclarationPatterns
         self.yodaSwap = yodaSwap
         self.extensionACLPlacement = extensionACLPlacement
-        self.redundantType = redundantType
+        self.propertyTypes = propertyTypes
+        self.preservedSymbols = preservedSymbols
+        self.inferredTypesInConditionalExpressions = inferredTypesInConditionalExpressions
         self.emptyBracesSpacing = emptyBracesSpacing
         self.acronyms = acronyms
         self.indentStrings = indentStrings
@@ -894,10 +929,12 @@ public struct FormatOptions: CustomStringConvertible {
         self.dateFormat = dateFormat
         self.timeZone = timeZone
         self.nilInit = nilInit
+        self.preservedPrivateDeclarations = preservedPrivateDeclarations
         // Doesn't really belong here, but hard to put elsewhere
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers
         self.swiftVersion = swiftVersion
+        self.languageMode = languageMode ?? defaultLanguageMode(for: swiftVersion)
         self.fileInfo = fileInfo
         self.timeout = timeout
     }
@@ -988,7 +1025,7 @@ public struct Options {
     public static let `default` = Options(
         fileOptions: .default,
         formatOptions: .default,
-        rules: Set(FormatRules.byName.keys).subtracting(FormatRules.disabledByDefault),
+        rules: defaultRules,
         configURL: nil,
         lint: false
     )

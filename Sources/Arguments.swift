@@ -76,7 +76,7 @@ extension String {
                 }
                 return $0.distance < $1.distance
             }
-            .map { $0.0 }
+            .map(\.0)
     }
 
     /// The Damerau-Levenshtein edit-distance between two strings
@@ -214,7 +214,8 @@ func parseCommaDelimitedList(_ string: String) -> [String] {
 }
 
 /// Parse a comma-delimited string into an array of rules
-let allRules = Set(FormatRules.byName.keys)
+let allRules = Set(FormatRules.all.map(\.name))
+let defaultRules = Set(FormatRules.default.map(\.name))
 func parseRules(_ rules: String) throws -> [String] {
     try parseCommaDelimitedList(rules).flatMap { proposedName -> [String] in
         let lowercaseName = proposedName.lowercased()
@@ -439,14 +440,14 @@ func argumentsFor(_ options: Options, excludingDefaults: Bool = false) -> [Strin
         do {
             if !fileOptions.excludedGlobs.isEmpty {
                 // TODO: find a better alternative to stringifying url
-                args["exclude"] = fileOptions.excludedGlobs.map { $0.description }.sorted().joined(separator: ",")
+                args["exclude"] = fileOptions.excludedGlobs.map(\.description).sorted().joined(separator: ",")
             }
             arguments.remove("exclude")
         }
         do {
             if !fileOptions.unexcludedGlobs.isEmpty {
                 // TODO: find a better alternative to stringifying url
-                args["unexclude"] = fileOptions.unexcludedGlobs.map { $0.description }.sorted().joined(separator: ",")
+                args["unexclude"] = fileOptions.unexcludedGlobs.map(\.description).sorted().joined(separator: ",")
             }
             arguments.remove("unexclude")
         }
@@ -466,10 +467,15 @@ func argumentsFor(_ options: Options, excludingDefaults: Bool = false) -> [Strin
             else {
                 continue
             }
-            // Special case for swiftVersion
+            // Special case for swiftVersion and languageMode
             // TODO: find a better solution for this
             if descriptor.argumentName == Descriptors.swiftVersion.argumentName,
                value == Version.undefined.rawValue
+            {
+                continue
+            }
+            if descriptor.argumentName == Descriptors.languageMode.argumentName,
+               value == defaultLanguageMode(for: formatOptions.swiftVersion).rawValue
             {
                 continue
             }
@@ -480,8 +486,6 @@ func argumentsFor(_ options: Options, excludingDefaults: Bool = false) -> [Strin
         args["lint"] = ""
     }
     if let rules = options.rules {
-        let defaultRules = allRules.subtracting(FormatRules.disabledByDefault)
-
         let enabled = rules.subtracting(defaultRules)
         if !enabled.isEmpty {
             args["enable"] = enabled.sorted().joined(separator: ",")
@@ -528,7 +532,7 @@ public func rulesFor(_ args: [String: String], lint: Bool) throws -> Set<String>
     var rules = allRules
     rules = try args["rules"].map {
         try Set(parseRules($0))
-    } ?? rules.subtracting(FormatRules.disabledByDefault)
+    } ?? rules.subtracting(FormatRules.disabledByDefault.map(\.name))
     try args["disable"].map {
         try rules.subtract(parseRules($0))
     }
@@ -645,8 +649,8 @@ let rulesArguments = [
     "rules",
 ]
 
-let formattingArguments = Descriptors.formatting.map { $0.argumentName }
-let internalArguments = Descriptors.internal.map { $0.argumentName }
+let formattingArguments = Descriptors.formatting.map(\.argumentName)
+let internalArguments = Descriptors.internal.map(\.argumentName)
 let optionsArguments = fileArguments + rulesArguments + formattingArguments + internalArguments
 
 let commandLineArguments = [
@@ -675,8 +679,7 @@ let commandLineArguments = [
     "ruleinfo",
     "dateformat",
     "timezone",
+    "outputtokens",
 ] + optionsArguments
 
-let deprecatedArguments = Descriptors.all.compactMap {
-    $0.isDeprecated ? $0.argumentName : nil
-}
+let deprecatedArguments = Descriptors.deprecated.map(\.argumentName)

@@ -9,9 +9,6 @@
 import XCTest
 @testable import SwiftFormat
 
-private let projectDirectory = URL(fileURLWithPath: #file)
-    .deletingLastPathComponent().deletingLastPathComponent()
-
 class OptionDescriptorTests: XCTestCase {
     private typealias OptionArgumentMapping<T> = (optionValue: T, argumentValue: String)
 
@@ -153,7 +150,7 @@ class OptionDescriptorTests: XCTestCase {
     }
 
     func testAllPropertiesHaveDescriptor() {
-        let allDescriptors = Set(Descriptors.all.map { $0.propertyName })
+        let allDescriptors = Set(Descriptors.all.map(\.propertyName))
         for property in FormatOptions.default.allOptions.keys {
             XCTAssert(
                 allDescriptors.contains(property),
@@ -285,6 +282,66 @@ class OptionDescriptorTests: XCTestCase {
         var options = FormatOptions()
         let swiftLintDefaults = "override,acl,setterACL,dynamic,mutators,lazy,final,required,convenience,typeMethods,owned"
         XCTAssertNoThrow(try descriptor.toOptions(swiftLintDefaults, &options))
+    }
+
+    func testVisibilityOrder() {
+        let argument = "instanceLifecycle, beforeMarks, open, public, package, internal, private, fileprivate"
+
+        let descriptor = Descriptors.visibilityOrder
+        var options = FormatOptions()
+        XCTAssertNoThrow(try descriptor.toOptions(argument, &options))
+    }
+
+    func testVisibilityOrderUnparseableArgument() {
+        let argument = "_instanceLifecycle, lifecycle, open, public, package, internal, private, fileprivate"
+
+        let descriptor = Descriptors.visibilityOrder
+        var options = FormatOptions()
+        XCTAssertThrowsError(try descriptor.toOptions(argument, &options))
+    }
+
+    func testVisibilityOrderMissingEssentials() {
+        let argument = "beforemarks, lifecycle, open, public, internal, private, fileprivate"
+
+        let descriptor = Descriptors.visibilityOrder
+        var options = FormatOptions()
+        XCTAssertThrowsError(try descriptor.toOptions(argument, &options))
+    }
+
+    func testTypeOrder() {
+        let argument = "beforeMarks, nestedType, instanceProperty, instanceLifecycle, instanceMethod"
+
+        let descriptor = Descriptors.typeOrder
+        var options = FormatOptions()
+        XCTAssertNoThrow(try descriptor.toOptions(argument, &options))
+    }
+
+    func testTypeOrderUnparseableArgument() {
+        let argument = "_beforeMarks, nestedType, instanceProperty, instanceLifecycle, instanceMethod"
+
+        let descriptor = Descriptors.typeOrder
+        var options = FormatOptions()
+        XCTAssertThrowsError(try descriptor.toOptions(argument, &options))
+    }
+
+    func testAcceptsAirbnbSwiftStyleGuideVisibilityOrder() {
+        // The `visibilityorder` configuration used in Airbnb's Swift Style Guide,
+        // as defined here: https://github.com/airbnb/swift#subsection-organization
+        let argument = "beforeMarks,instanceLifecycle,open,public,package,internal,private,fileprivate"
+
+        let descriptor = Descriptors.visibilityOrder
+        var options = FormatOptions()
+        XCTAssertNoThrow(try descriptor.toOptions(argument, &options))
+    }
+
+    func testAcceptsAirbnbSwiftStyleGuideTypeOrder() {
+        // The `typeorder` configuration used in Airbnb's Swift Style Guide,
+        // as defined here: https://github.com/airbnb/swift#subsection-organization
+        let argument = "nestedType,staticProperty,staticPropertyWithBody,classPropertyWithBody,instanceProperty,instancePropertyWithBody,staticMethod,classMethod,instanceMethod"
+
+        let descriptor = Descriptors.typeOrder
+        var options = FormatOptions()
+        XCTAssertNoThrow(try descriptor.toOptions(argument, &options))
     }
 
     func testFormatOptionsDescriptionConsistency() {
