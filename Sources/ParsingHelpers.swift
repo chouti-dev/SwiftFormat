@@ -207,9 +207,7 @@ public extension Formatter {
                 break
             case .keyword("as"):
                 wasOperator = true
-                if case let .operator(name, .postfix)? = self.token(at: i + 1),
-                   ["?", "!"].contains(name)
-                {
+                if self.token(at: i + 1)?.isUnwrapOperator == true {
                     i += 1
                 }
             case .number, .identifier:
@@ -404,9 +402,15 @@ extension Formatter {
     func modifiersForDeclaration(at index: Int, contains: (Int, String) -> Bool) -> Bool {
         var index = index
         while var prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: index) {
-            let token = tokens[prevIndex]
-            switch token {
-            case _ where token.isModifierKeyword || token.isAttribute:
+            switch tokens[prevIndex] {
+            case let token where token.isModifierKeyword || token.isAttribute:
+                if case .identifier = token,
+                   let nextToken = last(.nonSpaceOrCommentOrLinebreak, before: prevIndex),
+                   nextToken == .keyword("case") || nextToken.isOperator(ofType: .infix) || nextToken.isOperator(ofType: .prefix)
+                {
+                    // Part of previous declaration
+                    return false
+                }
                 if contains(prevIndex, token.string) {
                     return true
                 }
@@ -1036,23 +1040,17 @@ extension Formatter {
             }
             fallthrough
         case .keyword("try"), .keyword("await"):
-            guard let prevToken = last(.nonSpaceOrComment, before: i) else {
+            guard let prevToken = last(.nonSpaceOrCommentOrLinebreak, before: i) else {
                 return true
             }
-            guard prevToken.isLinebreak else {
+            switch prevToken {
+            case .number, .operator(_, .postfix), .endOfScope, .identifier,
+                 .startOfScope("{"), .startOfScope(":"), .delimiter(";"),
+                 .keyword("in") where lastSignificantKeyword(at: i) != "for":
+                return true
+            default:
                 return false
             }
-            if let prevToken = last(.nonSpaceOrCommentOrLinebreak, before: i) {
-                switch prevToken {
-                case .number, .operator(_, .postfix), .endOfScope, .identifier,
-                     .startOfScope("{"), .delimiter(";"),
-                     .keyword("in") where lastSignificantKeyword(at: i) != "for":
-                    return true
-                default:
-                    return false
-                }
-            }
-            return true
         case .keyword:
             return true
         default:
@@ -1312,9 +1310,7 @@ extension Formatter {
         //   let foo: String/*bar*/? // not allowed
         //
         let nextTokenIndex = baseType.range.upperBound + 1
-        if let nextToken = token(at: nextTokenIndex),
-           ["?", "!"].contains(nextToken.string)
-        {
+        if token(at: nextTokenIndex)?.isUnwrapOperator == true {
             let typeRange = baseType.range.lowerBound ... nextTokenIndex
             return (name: tokens[typeRange].stringExcludingLinebreaks, range: typeRange)
         }
@@ -2197,6 +2193,18 @@ extension Formatter {
         }
 
         guard !andTokenIndices.isEmpty else { return nil }
+
+        // Quick fix for types we don't support yet
+        let firstRange = tokens[equalsIndex ..< andTokenIndices[0]]
+        guard !firstRange.contains(where: {
+            ["any", "[", "(", ":"].contains($0.string)
+        }), firstRange.filter({
+            $0 == .startOfScope("<")
+        }).count == firstRange.filter({
+            $0 == .endOfScope(">")
+        }).count else {
+            return nil
+        }
 
         return (equalsIndex, andTokenIndices, type.range.upperBound)
     }
