@@ -716,8 +716,15 @@ extension Formatter {
     /// If the token at the specified index is part of a conditional statement, returns the index of the first
     /// token in the statement (e.g. `if`, `guard`, `while`, etc.), otherwise returns nil
     func startOfConditionalStatement(at i: Int, excluding: Set<String> = []) -> Int? {
-        guard var index = indexOfLastSignificantKeyword(at: i, excluding: excluding.union(["else", "where"])) else {
+        guard var index = indexOfLastSignificantKeyword(at: i, excluding: excluding.union(["else"])) else {
             return nil
+        }
+
+        if tokens[index] == .keyword("where") {
+            if self.index(of: .endOfScope("case"), before: index) != nil {
+                return nil
+            }
+            index = indexOfLastSignificantKeyword(at: index, excluding: ["where"]) ?? index
         }
 
         if tokens[index] == .keyword("case"), let i = self.index(
@@ -744,8 +751,10 @@ extension Formatter {
             default:
                 return nil
             }
-        case "if", "guard", "while", "for", "case", "switch":
+        case "if", "guard", "while", "for", "case":
             return index
+        case "switch":
+            return next(.startOfScope, after: i) == .startOfScope(":") ? nil : index
         default:
             return nil
         }
@@ -1032,9 +1041,16 @@ extension Formatter {
         case .startOfScope where token.isStringDelimiter && !treatingCollectionKeysAsStart,
              .number where !treatingCollectionKeysAsStart, .identifier:
             if !treatingCollectionKeysAsStart,
-               let prevToken = last(.nonSpaceOrCommentOrLinebreak, before: i), [
+               let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: i),
+               case let prevToken = tokens[prevIndex], [
                    .delimiter(","), .startOfScope("["), .startOfScope("(")
-               ].contains(prevToken)
+               ].contains(prevToken) || (
+                   [
+                       .operator("?", .postfix), .operator("!", .postfix),
+                   ].contains(prevToken) && [
+                       .keyword("try"), .keyword("as"),
+                   ].contains(last(.nonSpaceOrComment, before: prevIndex) ?? .space(""))
+               )
             {
                 return false
             }
@@ -1090,7 +1106,7 @@ extension Formatter {
         }
         switch prevToken {
         case .identifier, .operator(_, .postfix),
-             .endOfScope("]"), .endOfScope(")"), .endOfScope("}"),
+             .endOfScope("]"), .endOfScope(")"), .endOfScope(">"), .endOfScope("}"),
              .endOfScope where prevToken.isStringDelimiter:
             return true
         default:
@@ -1282,7 +1298,7 @@ extension Formatter {
     ///  - `[...]`
     ///  - `(...)`
     ///  - `Foo<...>`
-    ///  - `(...) -> ...`
+    ///  - `(...) (async|throws|throws(Error)) -> ...`
     ///  - `...?`
     ///  - `...!`
     ///  - `any ...`
@@ -1296,11 +1312,15 @@ extension Formatter {
     ///  - `(type) & (type)`
     func parseType(
         at startOfTypeIndex: Int,
-        excludeLowercaseIdentifiers: Bool = false
-    )
-        -> (name: String, range: ClosedRange<Int>)?
-    {
-        guard let baseType = parseNonOptionalType(at: startOfTypeIndex, excludeLowercaseIdentifiers: excludeLowercaseIdentifiers) else { return nil }
+        excludeLowercaseIdentifiers: Bool = false,
+        excludeProtocolCompositions: Bool = false
+    ) -> (name: String, range: ClosedRange<Int>)? {
+        guard let baseType = parseNonOptionalType(
+            at: startOfTypeIndex,
+            excludeLowercaseIdentifiers: excludeLowercaseIdentifiers,
+            excludeProtocolCompositions: excludeProtocolCompositions
+        )
+        else { return nil }
 
         // Any type can be optional, so check for a trailing `?` or `!`.
         // There cannot be any other tokens between the type and the operator:
@@ -1316,7 +1336,13 @@ extension Formatter {
         }
 
         // Any type can be followed by a `.` or `&` which can then continue the type
-        let continuationOperators: [Token] = [.operator(".", .infix), .operator("&", .infix)]
+        let continuationOperators: [Token]
+        if excludeProtocolCompositions {
+            continuationOperators = [.operator(".", .infix)]
+        } else {
+            continuationOperators = [.operator(".", .infix), .operator("&", .infix)]
+        }
+
         if let nextTokenIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: baseType.range.upperBound),
            continuationOperators.contains(tokens[nextTokenIndex]),
            let followingToken = index(of: .nonSpaceOrCommentOrLinebreak, after: nextTokenIndex),
@@ -1331,17 +1357,25 @@ extension Formatter {
 
     private func parseNonOptionalType(
         at startOfTypeIndex: Int,
-        excludeLowercaseIdentifiers: Bool
-    )
-        -> (name: String, range: ClosedRange<Int>)?
-    {
+        excludeLowercaseIdentifiers: Bool,
+        excludeProtocolCompositions: Bool
+    ) -> (name: String, range: ClosedRange<Int>)? {
         let startToken = tokens[startOfTypeIndex]
+
+        /// Helpers that calls `parseType` with all of the optional params passed in by default
+        func parseType(at index: Int) -> (name: String, range: ClosedRange<Int>)? {
+            self.parseType(
+                at: index,
+                excludeLowercaseIdentifiers: excludeLowercaseIdentifiers,
+                excludeProtocolCompositions: excludeProtocolCompositions
+            )
+        }
 
         // Parse types of the form `[...]`
         if startToken == .startOfScope("["), let endOfScope = endOfScope(at: startOfTypeIndex) {
             // Validate that the inner type is also valid
             guard let innerTypeStartIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfTypeIndex),
-                  let innerType = parseType(at: innerTypeStartIndex, excludeLowercaseIdentifiers: excludeLowercaseIdentifiers),
+                  let innerType = parseType(at: innerTypeStartIndex),
                   let indexAfterType = index(of: .nonSpaceOrCommentOrLinebreak, after: innerType.range.upperBound)
             else { return nil }
 
@@ -1350,7 +1384,7 @@ extension Formatter {
             if indexAfterType != endOfScope {
                 guard tokens[indexAfterType] == .delimiter(":"),
                       let secondTypeIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: indexAfterType),
-                      let secondType = parseType(at: secondTypeIndex, excludeLowercaseIdentifiers: excludeLowercaseIdentifiers),
+                      let secondType = parseType(at: secondTypeIndex),
                       let indexAfterSecondType = index(of: .nonSpaceOrCommentOrLinebreak, after: secondType.range.upperBound),
                       indexAfterSecondType == endOfScope
                 else { return nil }
@@ -1362,8 +1396,23 @@ extension Formatter {
 
         // Parse types of the form `(...)` or `(...) -> ...`
         if startToken == .startOfScope("("), let endOfScope = endOfScope(at: startOfTypeIndex) {
-            // Parse types of the form `(...) -> ...`
-            if let closureReturnIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfScope),
+            // Parse types of the form `(...) (async|throws|throws(Error)) -> ...`.
+            // Look for the `->` token, skipping over any `async`, `throws`, or `throws(Error)`s.
+            let allowedTokensBeforeReturnArrow: [Token] = [.keyword("throws"), .identifier("async"), .startOfScope("(")]
+            var searchIndex = endOfScope
+            while let nextToken = index(of: .nonSpaceOrCommentOrLinebreak, after: searchIndex),
+                  allowedTokensBeforeReturnArrow.contains(tokens[nextToken])
+            {
+                // Skip over any tokens inside parens
+                if tokens[nextToken].isStartOfScope, let endOfScope = self.endOfScope(at: nextToken) {
+                    searchIndex = endOfScope
+                } else {
+                    searchIndex = nextToken
+                }
+            }
+
+            // If we find a return arrow, this is a closure with a return type.
+            if let closureReturnIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: searchIndex),
                tokens[closureReturnIndex] == .operator("->", .infix),
                let returnTypeIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: closureReturnIndex),
                let returnTypeRange = parseType(at: returnTypeIndex)?.range
@@ -2185,28 +2234,25 @@ extension Formatter {
     {
         guard let equalsIndex = index(of: .operator("=", .infix), after: typealiasIndex),
               let startOfType = index(of: .nonSpaceOrCommentOrLinebreak, after: equalsIndex),
-              let type = parseType(at: startOfType)
+              let fullProtocolCompositionType = parseType(at: startOfType)
         else { return nil }
 
-        let andTokenIndices = type.range.filter { index in
-            tokens[index] == .operator("&", .infix)
+        var andTokenIndices: [Int] = []
+        var currentIndex = startOfType
+
+        while let nextType = parseType(at: currentIndex, excludeProtocolCompositions: true),
+              let nextAndToken = index(of: .nonSpaceOrCommentOrLinebreak, after: nextType.range.upperBound),
+              tokens[nextAndToken] == .operator("&", .infix),
+              let tokenAfterAndToken = index(of: .nonSpaceOrCommentOrLinebreak, after: nextAndToken)
+        {
+            andTokenIndices.append(nextAndToken)
+            currentIndex = tokenAfterAndToken
         }
 
+        // If we didn't find any `&` tokens then this isn't a protocol composition typealias.
         guard !andTokenIndices.isEmpty else { return nil }
 
-        // Quick fix for types we don't support yet
-        let firstRange = tokens[equalsIndex ..< andTokenIndices[0]]
-        guard !firstRange.contains(where: {
-            ["any", "[", "(", ":"].contains($0.string)
-        }), firstRange.filter({
-            $0 == .startOfScope("<")
-        }).count == firstRange.filter({
-            $0 == .endOfScope(">")
-        }).count else {
-            return nil
-        }
-
-        return (equalsIndex, andTokenIndices, type.range.upperBound)
+        return (equalsIndex, andTokenIndices, fullProtocolCompositionType.range.upperBound)
     }
 
     /// Parses the external parameter labels of the function with its `(` start of scope

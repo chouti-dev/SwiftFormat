@@ -4110,4 +4110,101 @@ class IndentTests: XCTestCase {
         let options = FormatOptions(wrapTernaryOperators: .beforeOperators, maxWidth: 60)
         testFormatting(for: input, rule: .indent, options: options)
     }
+
+    func testIndentSwitchCaseWhere() {
+        let input = """
+        switch testKey {
+            case "organization"
+            where testValues.map(String.init).compactMap { try? Entity.ID($0, format: .number) }
+            .contains(Self.sessionInteractor.stage.value?.membership?.organization.id ?? .zero): // 2
+                continue
+
+            case "user"
+            where testValues.map(String.init).compactMap { try? Entity.ID($0, format: .number) }
+            .contains(Self.sessionInteractor.stage.value?.session?.user.id ?? .zero): // 3
+                continue
+        }
+        """
+
+        let options = FormatOptions(indentCase: true)
+        testFormatting(for: input, rule: .indent, options: options, exclude: [.wrap])
+    }
+
+    func testGuardElseIndentAfterParenthesizedExpression() {
+        let input = """
+        func format() {
+            guard
+                let result = foo(
+                    bar: 5,
+                    baz: 6
+                )
+            else {
+                return
+            }
+
+            print(result)
+        }
+        """
+        testFormatting(for: input, rule: .indent)
+    }
+
+    func testGuardElseIndentAfterSwitchExpression() {
+        let input = """
+        func format(foo: String?) {
+            guard
+                let result =
+                    switch foo {
+                    case .none: "none"
+                    case .some: "some"
+                    }
+            else {
+                return
+            }
+
+            print(result)
+        }
+        """
+        testFormatting(for: input, rule: .indent)
+    }
+
+    func testGuardElseIndentAfterIfExpression() {
+        let input = """
+        func format(foo: Bool) {
+            guard
+                let result =
+                    if foo {
+                        bar
+                    } else {
+                        nil
+                    }
+            else {
+                return
+            }
+
+            print(result)
+        }
+        """
+        testFormatting(for: input, rule: .indent)
+    }
+
+    func testIfElseIndentAfterSwitchExpression() {
+        let input = """
+        func format(foo: String?) {
+            if
+                let result =
+                    switch foo {
+                    case .none: "none"
+                    case .some: "some"
+                    }
+            {
+                return true
+            } else {
+                return false
+            }
+
+            print(result)
+        }
+        """
+        testFormatting(for: input, rule: .indent)
+    }
 }
