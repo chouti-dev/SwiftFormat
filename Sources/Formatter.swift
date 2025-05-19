@@ -44,6 +44,7 @@ public class Formatter: NSObject {
     private var ruleDisabled = false
     private var tempOptions: FormatOptions?
     private var wasNextDirective = false
+    private var autoUpdatingReferences = [WeakAutoUpdatingReference]()
 
     /// Formatting range
     public var range: Range<Int>?
@@ -179,6 +180,7 @@ public class Formatter: NSObject {
         public let line: Int
         public let rule: FormatRule
         public let filePath: String?
+        public let isMove: Bool
 
         public var help: String {
             stripMarkdown(rule.help).replacingOccurrences(of: "\n", with: " ")
@@ -195,16 +197,19 @@ public class Formatter: NSObject {
     /// Should formatter track changes?
     private let trackChanges: Bool
 
-    private func trackChange(at index: Int) {
+    private func trackChange(at index: Int, isMove: Bool = false) {
         guard trackChanges else { return }
         changes.append(Change(
             line: originalLine(at: index),
             rule: currentRule ?? .none,
-            filePath: options.fileInfo.filePath
+            filePath: options.fileInfo.filePath,
+            isMove: isMove
         ))
     }
 
     private func updateRange(at index: Int, delta: Int) {
+        autoUpdatingReferences.updateRanges(at: index, delta: delta)
+
         guard let range = range, range.contains(index) else {
             return
         }
@@ -217,7 +222,13 @@ public class Formatter: NSObject {
 
     func fatalError(_ error: String, at tokenIndex: Int) {
         let line = originalLine(at: tokenIndex)
-        errors.append(.parsing(error + " on line \(line)"))
+        var message = error + " on line \(line)"
+
+        if let currentRuleName = currentRule?.name {
+            message = "[\(currentRuleName)] \(message)"
+        }
+
+        errors.append(.parsing(message))
         ruleDisabled = true
     }
 }
@@ -247,8 +258,13 @@ public extension Formatter {
 
     /// Replaces the token at the specified index with a new token
     func replaceToken(at index: Int, with token: Token) {
+        replaceToken(at: index, with: token, isMove: false)
+    }
+
+    /// Replaces the token at the specified index with a new token
+    private func replaceToken(at index: Int, with token: Token, isMove: Bool) {
         if trackChanges, token.string != tokens[index].string {
-            trackChange(at: index)
+            trackChange(at: index, isMove: isMove)
         }
         tokens[index] = token
     }
@@ -256,14 +272,22 @@ public extension Formatter {
     /// Replaces the tokens in the specified range with new tokens
     @discardableResult
     func replaceTokens(in range: Range<Int>, with tokens: ArraySlice<Token>) -> Int {
+        replaceTokens(in: range, with: tokens, isMove: false)
+    }
+
+    /// Replaces the tokens in the specified range with new tokens
+    @discardableResult
+    private func replaceTokens(in range: Range<Int>, with tokens: ArraySlice<Token>, isMove: Bool) -> Int {
         let max = min(range.count, tokens.count)
         for i in 0 ..< max {
-            replaceToken(at: range.lowerBound + i, with: tokens[tokens.startIndex + i])
+            replaceToken(at: range.lowerBound + i, with: tokens[tokens.startIndex + i], isMove: isMove)
         }
         if range.count > max {
-            removeTokens(in: range.dropFirst(max))
+            for index in range.dropFirst(max).reversed() {
+                removeToken(at: index, isMove: isMove)
+            }
         } else if tokens.count > max {
-            insert(tokens.dropFirst(max), at: range.lowerBound + max)
+            insert(tokens.dropFirst(max), at: range.lowerBound + max, isMove: isMove)
         }
         return tokens.count - range.count
     }
@@ -307,9 +331,50 @@ public extension Formatter {
         replaceTokens(in: range.lowerBound ..< range.upperBound + 1, with: token)
     }
 
+    /// Replaces all of the tokens in the given range with the given new tokens,
+    /// diffing the lines and tracking lines that move without changes.
+    func diffAndReplaceTokens(in rangeToUpdate: ClosedRange<Int>, with updatedTokens: [Token]) {
+        guard #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) else {
+            // Swift's diffing implementation is only available in macOS 10.15+
+            replaceTokens(in: rangeToUpdate, with: updatedTokens)
+            return
+        }
+
+        // The diffing implementation below is zero-indexed related to the formatter,
+        // so the range we diff also needs to be zero-indexed.
+        let diffRange = 0 ... rangeToUpdate.upperBound
+        let originalTokens = Array(tokens[diffRange])
+        let updatedTokens = Array(tokens[0 ..< rangeToUpdate.lowerBound]) + updatedTokens
+
+        let originalLines = originalTokens.lines
+        let updatedLines = updatedTokens.lines
+        let difference = updatedLines.difference(from: originalLines).inferringMoves()
+
+        for step in difference {
+            switch step {
+            case let .insert(lineIndex, line, movedFromLineIndex):
+                let lineRanges = tokens.lineRanges
+                if lineIndex >= lineRanges.count {
+                    insert(line, at: tokens.endIndex, isMove: movedFromLineIndex != nil)
+                } else {
+                    insert(line, at: lineRanges[lineIndex].lowerBound, isMove: movedFromLineIndex != nil)
+                }
+
+            case let .remove(lineIndex, _, movedToLineIndex):
+                for index in tokens.lineRanges[lineIndex].reversed() {
+                    removeToken(at: index, isMove: movedToLineIndex != nil)
+                }
+            }
+        }
+    }
+
     /// Removes the token at the specified index
     func removeToken(at index: Int) {
-        trackChange(at: index)
+        removeToken(at: index, isMove: false)
+    }
+
+    private func removeToken(at index: Int, isMove: Bool) {
+        trackChange(at: index, isMove: isMove)
         updateRange(at: index, delta: -1)
         tokens.remove(at: index)
         if enumerationIndex >= index {
@@ -342,6 +407,41 @@ public extension Formatter {
         }
     }
 
+    /// Moves the tokens in the given range to the new index.
+    /// Handles additional internal bookkeeping so this change produces
+    /// `Formatter.Change`s that represent moves and won't be filtered out
+    /// as redundant.
+    func moveTokens(in range: ClosedRange<Int>, to newIndex: Int) {
+        let tokensToMove = tokens[range]
+        var newIndex = newIndex
+
+        for index in range.reversed() {
+            removeToken(at: index, isMove: true)
+
+            if index < newIndex {
+                newIndex -= 1
+            }
+        }
+
+        insert(ArraySlice(tokensToMove), at: newIndex, isMove: true)
+    }
+
+    /// Moves the tokens in the given range to the new index.
+    /// Handles additional internal bookkeeping so this change produces
+    /// `Formatter.Change`s that represent moves and won't be filtered out
+    /// as redundant.
+    func moveTokens(in range: Range<Int>, to index: Int) {
+        moveTokens(in: ClosedRange(range), to: index)
+    }
+
+    /// Moves the tokens in the given range to the new index.
+    /// Handles additional internal bookkeeping so this change produces
+    /// `Formatter.Change`s that represent moves and won't be filtered out
+    /// as redundant.
+    func moveToken(at originalIndex: Int, to newIndex: Int) {
+        moveTokens(in: originalIndex ... originalIndex, to: newIndex)
+    }
+
     /// Removes the last token
     func removeLastToken() {
         trackChange(at: tokens.endIndex - 1)
@@ -351,8 +451,12 @@ public extension Formatter {
 
     /// Inserts an array of tokens at the specified index
     func insert(_ tokens: ArraySlice<Token>, at index: Int) {
+        insert(tokens, at: index, isMove: false)
+    }
+
+    private func insert(_ tokens: ArraySlice<Token>, at index: Int, isMove: Bool) {
         if tokens.isEmpty { return }
-        trackChange(at: index)
+        trackChange(at: index, isMove: isMove)
         updateRange(at: index, delta: tokens.count)
         self.tokens.insert(contentsOf: tokens, at: index)
         if enumerationIndex >= index {
@@ -607,6 +711,36 @@ public extension Formatter {
         return 1
     }
 
+    /// Indents before the token with the appropriate amount of indentation. Returns difference in tokens.
+    @discardableResult
+    func wrapLine(before tokenIndex: Int) -> Int {
+        var result = 0
+        result += insertSpace(currentIndentForLine(at: tokenIndex), at: tokenIndex)
+        insertLinebreak(at: tokenIndex)
+        result += 1
+
+        // Remove any trailing whitespace that is now orphaned on the previous line
+        if tokens[tokenIndex - 1].is(.space) {
+            removeToken(at: tokenIndex - 1)
+            result -= 1
+        }
+        return result
+    }
+
+    /// Removes linebreaks and space before the token, but not if a line comment is encountered. Returns difference in tokens..
+    @discardableResult
+    func unwrapLine(before tokenIndex: Int, preservingComments: Bool) -> Int {
+        // search backward and replace whitespace with a single " "
+        // if we find a line comment (// ...) do not make this change
+        let tokenType = preservingComments ? TokenType.nonSpaceOrLinebreak : TokenType.nonSpaceOrCommentOrLinebreak
+        guard let notWhitespace = index(of: tokenType, before: tokenIndex) else { return 0 }
+
+        if preservingComments, tokens[notWhitespace].isCommentBody { return 0 }
+
+        let rangeToReplace = (notWhitespace + 1) ..< tokenIndex
+        return replaceTokens(in: rangeToReplace, with: [.space(" ")])
+    }
+
     /// Returns a linebreak token suitable for insertion at the specified index
     func linebreakToken(for index: Int) -> Token {
         let lineNumber: Int
@@ -616,6 +750,41 @@ public extension Formatter {
             lineNumber = originalLine(at: index)
         }
         return .linebreak(options.linebreak, lineNumber)
+    }
+
+    /// Formatting linebreaks
+    /// Setting `linebreaksCount` linebreaks in `indexes`
+    func leaveOrSetLinebreaksInIndexes(_ indexes: Set<Int>, linebreaksCount: Int) {
+        var alreadyHasLinebreaksCount = 0
+        for index in indexes {
+            guard let token = token(at: index) else {
+                return
+            }
+            if token.isLinebreak {
+                if alreadyHasLinebreaksCount == linebreaksCount {
+                    removeToken(at: index)
+                } else {
+                    alreadyHasLinebreaksCount += 1
+                }
+            }
+        }
+        if alreadyHasLinebreaksCount != linebreaksCount,
+           let firstIndex = indexes.first
+        {
+            insertLinebreak(at: firstIndex)
+        }
+    }
+
+    /// Registers the given reference to receive range updates as tokens are modified
+    /// in this formatter. The registration is automatically cleared after the reference
+    /// is deallocated.
+    internal func registerAutoUpdatingReference(_ reference: AutoUpdatingReference) {
+        autoUpdatingReferences.append(WeakAutoUpdatingReference(reference: reference))
+    }
+
+    /// Unregisters the given reference so it will no longer be notified of modifications.
+    internal func unregisterAutoUpdatingReference(_ reference: AutoUpdatingReference) {
+        autoUpdatingReferences.removeAll(where: { $0.reference === reference })
     }
 }
 
@@ -630,5 +799,153 @@ extension String {
                 index(range.lowerBound, offsetBy: 1, limitedBy: endIndex) ?? endIndex
         }
         return result
+    }
+}
+
+private extension Collection where Element == Token, Index == Int {
+    /// Ranges of lines within this array of tokens
+    var lineRanges: [ClosedRange<Int>] {
+        var lineRanges: [ClosedRange<Int>] = []
+        var currentLine: ClosedRange<Int>?
+
+        for (index, token) in zip(indices, self) {
+            if currentLine == nil {
+                currentLine = index ... index
+            } else {
+                currentLine = currentLine!.lowerBound ... index
+            }
+
+            if token.isLinebreak {
+                lineRanges.append(currentLine!)
+                currentLine = nil
+            }
+        }
+
+        if let currentLine = currentLine {
+            lineRanges.append(currentLine)
+        }
+
+        return lineRanges
+    }
+
+    /// All of the lines within this array of tokens
+    var lines: [SubSequence] {
+        lineRanges.map { lineRange in
+            self[lineRange]
+        }
+    }
+}
+
+/// A type that references an auto-updating subrange of indicies in a `Formatter`
+protocol AutoUpdatingReference: AnyObject {
+    var range: ClosedRange<Int> { get set }
+}
+
+private struct WeakAutoUpdatingReference {
+    weak var reference: AutoUpdatingReference?
+}
+
+/// An auto-updating index within an associated `Formatter`
+final class AutoUpdatingIndex: AutoUpdatingReference, CustomStringConvertible {
+    var index: Int
+    let formatter: Formatter
+
+    var range: ClosedRange<Int> {
+        get { index ... index }
+        set { index = newValue.lowerBound }
+    }
+
+    var description: String {
+        index.description
+    }
+
+    init(index: Int, formatter: Formatter) {
+        self.index = index
+        self.formatter = formatter
+        formatter.registerAutoUpdatingReference(self)
+    }
+
+    deinit {
+        formatter.unregisterAutoUpdatingReference(self)
+    }
+}
+
+// An auto-updating subrange of indicies in a `Formatter`
+final class AutoUpdatingRange: AutoUpdatingReference, CustomStringConvertible {
+    var range: ClosedRange<Int>
+    let formatter: Formatter
+
+    var lowerBound: Int {
+        range.lowerBound
+    }
+
+    var upperBound: Int {
+        range.upperBound
+    }
+
+    var description: String {
+        range.description
+    }
+
+    init(range: ClosedRange<Int>, formatter: Formatter) {
+        self.range = range
+        self.formatter = formatter
+        formatter.registerAutoUpdatingReference(self)
+    }
+
+    deinit {
+        formatter.unregisterAutoUpdatingReference(self)
+    }
+}
+
+extension Array where Element == WeakAutoUpdatingReference {
+    /// Updates the `range` value of the index references in this array
+    /// to account for the given addition or removal of tokens.
+    mutating func updateRanges(at modifiedIndex: Int, delta: Int) {
+        for (tokenIndex, reference) in zip(indices, self).reversed() {
+            guard let reference = reference.reference else {
+                // If we encounter a reference that no longer exists
+                // (the weak reference is nil), clean up the entry.
+                remove(at: tokenIndex)
+                continue
+            }
+
+            var startIndex = reference.range.lowerBound
+            var endIndex = reference.range.upperBound
+
+            if modifiedIndex < startIndex {
+                startIndex += delta
+                endIndex += delta
+            } else if modifiedIndex <= endIndex {
+                endIndex += delta
+            } else {
+                // The modification comes after this declaration
+                // so doesn't invalidate the indices.
+            }
+
+            // Defend against a potential crash here if `endIndex` is less than `startIndex`.
+            guard startIndex <= endIndex else {
+                reference.range = startIndex ... startIndex
+                continue
+            }
+
+            reference.range = startIndex ... endIndex
+        }
+    }
+}
+
+extension Int {
+    /// Creates a dynamic auto-updating index value from this existing index value,
+    /// tracking token changes in the given formatter.
+    func autoUpdating(in formatter: Formatter) -> AutoUpdatingIndex {
+        AutoUpdatingIndex(index: self, formatter: formatter)
+    }
+}
+
+extension ClosedRange<Int> {
+    /// Creates a dynamic auto-updating range value from this existing range value,
+    /// tracking token changes in the given formatter.
+    func autoUpdating(in formatter: Formatter) -> AutoUpdatingRange {
+        AutoUpdatingRange(range: self, formatter: formatter)
     }
 }

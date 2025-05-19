@@ -9,8 +9,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set Version Number
+        run: echo "Using version number $GITHUB_REF_NAME" && sed -i '' "s/let swiftFormatVersion = \"[^\"]*\"/let swiftFormatVersion = \"$GITHUB_REF_NAME\"/" Sources/SwiftFormat.swift
       - name: Build macOS binary
-        run: swift build -c release --arch arm64 --arch x86_64
+        run: swift build -c release --arch arm64 --arch x86_64 -Xswiftc -Osize
+      - name: Strip macOS binary  
+        run: strip -rSTx .build/apple/Products/Release/swiftformat
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -20,20 +24,40 @@ jobs:
 
   linux:
     name: Build SwiftFormat for Linux
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build it
+      - name: Set Version Number
+        run: echo "Using version number $GITHUB_REF_NAME" && sed -i "s/let swiftFormatVersion = \"[^\"]*\"/let swiftFormatVersion = \"$GITHUB_REF_NAME\"/" Sources/SwiftFormat.swift
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Install cross-binutils for aarch64
+        run: sudo apt install -y binutils-aarch64-linux-gnu
+      - name: Build and export binaries
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          target: builder
+          outputs: type=local,dest=artifacts
+      - name: Strip and Move binaries
         run: |
-          swift build --configuration release --static-swift-stdlib --enable-dead-strip
-          SWIFTFORMAT_BIN_PATH=`swift build --configuration release --show-bin-path`
-          mv $SWIFTFORMAT_BIN_PATH/swiftformat "${HOME}/swiftformat_linux"
-      - name: 'Upload Artifact'
+          strip artifacts/linux_amd64/workspace/swiftformat
+          mv artifacts/linux_amd64/workspace/swiftformat "${HOME}/swiftformat_linux"
+          aarch64-linux-gnu-strip artifacts/linux_arm64/workspace/swiftformat
+          mv artifacts/linux_arm64/workspace/swiftformat "${HOME}/swiftformat_linux_aarch64"
+      - name: Upload AMD64 Artifact
         uses: actions/upload-artifact@v4
         with:
           name: swiftformat_linux
           path: ~/swiftformat_linux
+          retention-days: 5
+      - name: Upload ARM64 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: swiftformat_linux_aarch64
+          path: ~/swiftformat_linux_aarch64
           retention-days: 5
 
   upload:
@@ -46,13 +70,25 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: downloaded_artifacts
+          pattern: swiftformat_*
       - name: Display structure of downloaded files
         run: ls -R downloaded_artifacts
       - name: Build artifact bundle
-        run: ./Scripts/spm-artifact-bundle.sh ${{ github.event.release.name }} downloaded_artifacts/swiftformat_macos/swiftformat downloaded_artifacts/swiftformat_linux/swiftformat_linux
-      - name: Upload artifact bundle
+        run: ./Scripts/spm-artifact-bundle.sh ${{ github.event.release.name }} downloaded_artifacts/swiftformat_macos/swiftformat downloaded_artifacts/swiftformat_linux/swiftformat_linux downloaded_artifacts/swiftformat_linux_aarch64/swiftformat_linux_aarch64
+      - name: Prepare files for upload
+        run: |
+          # Ensure binaries are executable
+          chmod +x downloaded_artifacts/swiftformat_macos/swiftformat
+          chmod +x downloaded_artifacts/swiftformat_linux/swiftformat_linux
+          chmod +x downloaded_artifacts/swiftformat_linux_aarch64/swiftformat_linux_aarch64
+
+          # Create individual zip files for each binary directly
+          zip -j swiftformat.zip downloaded_artifacts/swiftformat_macos/swiftformat
+          zip -j swiftformat_linux.zip downloaded_artifacts/swiftformat_linux/swiftformat_linux
+          zip -j swiftformat_linux_aarch64.zip downloaded_artifacts/swiftformat_linux_aarch64/swiftformat_linux_aarch64
+      - name: Upload release assets
         uses: skx/github-action-publish-binaries@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          args: 'swiftformat.artifactbundle.zip'
+          args: 'swiftformat.artifactbundle.zip swiftformat.zip swiftformat_linux.zip swiftformat_linux_aarch64.zip'

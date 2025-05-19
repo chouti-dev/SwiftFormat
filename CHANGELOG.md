@@ -1,5 +1,109 @@
 # Change Log
 
+## [0.56.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.56.1) (2025-05-13)
+
+- Fixed several issues where `trailingCommas` rule would insert commas in places not actually supported by Swift 6.1
+- Fixed issue where `--wrapeffects` option would incorrectly unwrap `async let` properties following function call
+- Fixed issue where `redundantEquatable` rule would incorrectly remove `==` implementation in factor of synthesized implementation even if type contained non-Equatable properies like tuples
+- Fixed issue where `extensionAccessControl` rule would incorrectly hoist `public` ACL in `@preconcurrency` conformances
+- Fixed issue where `organizeDeclarations` rule would sometimes break property declarations with if expression values
+
+## [0.56.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.56.0) (2025-05-12)
+
+- Added `wrapMultilineFunctionChains` rule to wrap chained method calls
+- Added `environmentEntry` rule to update SwiftUI `EnvironmentValues` definitions to use the `@Entry` macro
+- Added `redundantEquatable` rule to remove explicit `Equatable` conformances that would be compiler-synthesized
+- Added `preferSwiftTesting` rule to migrate XCTest-based tests to Swift Testing
+- Added `swiftTestingTestCaseNames` rule to remove redundant "test" prefix from Swift Testing test case methods.
+- Added `preferCountWhere` rule to prefer `count(where:)` over `filter(_:).count`
+- Added `fileMacro` rule to prefer either `#file` or `#fileID`, which have the same behavior in Swift 6 and later
+- Added `blankLinesAfterGuardStatements` rule to remove blank lines between consecuitve guard statements, and add blank line after last guard statement.
+- Added `privateStateVariables` rule to add `private` access control to `@State` properties
+- Added `emptyExtensions` rule to remove extensions that contain no declarations or conformances
+- Added `--preserveacronyms` option to `acronyms` rule
+- Added `--wrapreturntype never` option to `wrapArguments` rule
+- Updated `trailingCommas` to support Swift 6.1 trailing comma functionality
+- `opaqueGenericParameters` now supports protocol requirements without a body
+- `--wrapeffects` and `--wrapreturntype` now support protocol requirements and closure types
+- Fixed indentation of trailing closures after chained multiline method call when using same-line closing parens
+- `blankLinesAtStartOfScope` rule now supports switch cases and closure capture / parameter lists
+- Fixed issue where type under `organizeDeclarations` line count threshold would ignore `swiftformat:sort` directives
+- Fixed issue where `organizeDeclarations` rule would unexpectedly remove non-mark comments
+- Compiling SwiftFormat now requires Swift 5.7+
+- SwiftFormat prerelease builds can now be installed via Homebrew using `brew install swiftformat --head`. Prerelease builds are subject to breaking changes.
+
+## [0.55.6](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.55.6) (2025-04-29)
+
+- Fixed parsing bugs related to parameter packs (`repeat`, `each` keywords)
+- Fixed bug where `propertyTypes` rule could cause build failure in properties with `some` type
+- Fixed bug where `--callsiteparen balanced` would have no effect when using `--closingparen same-line`
+- Fatal error messages now include the name of the currently-running rule
+- Docker build now uses Swift 6.0.3
+
+## [0.55.5](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.55.5) (2025-01-20)
+
+- Fixed bug with `yodaConditions` rule mangling generic function calls
+- Fixed indenting of guard `else` or opening brace following `if`/`switch` expression
+- The `organizeDeclarations` rule no longer treats properties with `didSet` as computed
+- Improved formatting support for async and throwing closures
+
+## [0.55.4](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.55.4) (2024-12-22)
+
+- Fixed inconsistent indenting of wrapped `where` clause for `switch ... case` statements
+- Fixed bug where `unusedArguments` could remove required arguments in some cases
+- The `sortTypealiases` rule now correctly handles `any` keyword
+
+## [0.55.3](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.55.3) (2024-11-26)
+
+- Fixed bug where `sortTypealiases` rule could mangle generic types, or ones using the `any` keyword
+- The `preferKeyPaths` rule now only uses `\\.self` for Swift 6 and later (fix din't land yet in 5.10)
+- Added speculative fix for plugin `artifactbundle` not working on `ubuntu-latest`
+
+## [0.55.2](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.55.2) (2024-11-24)
+
+- Fixed bug where `unusedArguments` failed to remove arguments that matched switch variable bindings
+- Fixed bug where `unusedArguments` failed to remove arguments that matched nested function call labels
+- Fixed spurious lint errors for `blankLinesAtStartOfScope` when using `organizeDeclarations` rule
+- Fixed bug where indentation errors were incorrectly reported as `wrap` rule lint errors
+- The `preferKeyPaths` rule now handles the `\\.self` case for Swift 5.10 and later
+- Fixed parsing of keyPaths beginning with `\.?`
+
+## [0.55.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.55.1) (2024-11-20)
+
+- Fixed bug where `docCommentsBeforeModifiers` got confused by `enum` cases that match modifier names
+- Fixed bug where `wrapEnumCases` would mangle nested or successive `enum` declarations
+- Artifact Bundle now includes pre-built binary for ARM-based Linux systems
+
+## [0.55.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.55.0) (2024-11-16)
+
+- Added `docCommentsBeforeModifiers` rule to hoist doc comments above declaration modifiers
+- Added `unusedPrivateDeclarations` rule to remove unused `private` or `fileprivate` declarations
+- Added `propertyTypes` rule to control the use of inferred or explicit types for properties
+- Renamed the `--redundanttype` option to `--propertytypes` as it's shared by both rules
+- Added `--ranges preserve` and `--operatorfunc preserve` options
+- Added `--languagemode` option to specify if you are using Swift 5 or 6 language mode
+- The `organizeDeclarations` rule can now sort declarations by name/type/visibility/etc
+- Fixed `organizeDeclarations` bug where `--beforemarks` unexpectedly matched keywords in function bodies
+- Fixed missing lint output for `organizeDeclarations` rule
+- Fixed bug in `markTypes` rule for chained protocol extension names
+- Renamed the confusing `--onelineforeach` option to `--inlinedforeach`
+- Git info can now be used in header comments when formatting code from stdin
+- You can now use the `--outputtokens` option to print output as tokens in JSON format
+- Each rule and test is now defined in a separate file to make it easier to maintain/contribute
+- Updated minimum Swift version for building SwiftFormat to 5.3 (you can still format older Swift code)
+- Docker build now uses static Linux SDK
+
+## [0.54.6](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.54.6) (2024-10-07)
+
+- Fixed incorrect wrapping of conditional bodies inside single-line string literals
+- Fixed properties inside type with where clause being treated as local scope
+- Fixed regression in `wrapMultilineStatementBraces` rule
+- Fixed tokenizing of a throwing closure type in a generics clause
+- Fixed bug in `parseDeclarations` where incorrect tokens could cause rules to time out
+- Fixed issue where `organizeDeclarations` would add extra blank lines if type had blank lines with spaces
+- Updated SwiftFormat for Xcode installation instructions for macOS 15 Sequoia
+- Added known issue to README for `preferForLoop` rule
+
 ## [0.54.5](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.54.5) (2024-09-11)
 
 - Fixed crash in `unusedArguments` rule

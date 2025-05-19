@@ -49,6 +49,16 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertFalse(formatter.isStartOfClosure(at: 4))
     }
 
+    func testTypeWhereBracesNotTreatedAsClosure() {
+        let formatter = Formatter(tokenize("class Foo<T> where T: Equatable {}"))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 14))
+    }
+
+    func testInitWhereBracesNotTreatedAsClosure() {
+        let formatter = Formatter(tokenize("init() where T: Equatable {}"))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 11))
+    }
+
     // conditional statements
 
     func testIfBracesNotTreatedAsClosure() {
@@ -88,6 +98,11 @@ class ParsingHelpersTests: XCTestCase {
     func testIfConditionWithoutSpaceNotTreatedAsClosure() {
         let formatter = Formatter(tokenize("if let foo = bar(){}"))
         XCTAssertFalse(formatter.isStartOfClosure(at: 11))
+    }
+
+    func testIfTryAndCallBracesNotTreatedAsClosure() {
+        let formatter = Formatter(tokenize("if try true && explode() {}"))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 12))
     }
 
     func testGuardElseBracesNotTreatedAsClosure() {
@@ -212,6 +227,23 @@ class ParsingHelpersTests: XCTestCase {
     func testThrowingFunctionWithWhereClauseBracesNotTreatedAsClosure() {
         let formatter = Formatter(tokenize("func foo<U, V>() throws where T == Result<U, V> {}"))
         XCTAssertFalse(formatter.isStartOfClosure(at: 28))
+    }
+
+    func testClosureInForInWhereClauseNotTreatedAsClosure() {
+        let formatter = Formatter(tokenize("for foo in foos where foo.method() { print(foo) }"))
+        XCTAssertFalse(formatter.isStartOfClosure(at: 16))
+    }
+
+    func testClosureInCaseWhereClause() {
+        let formatter = Formatter(tokenize("""
+        switch foo {
+            case .bar
+            where testValues.map(String.init).compactMap { $0 }
+            .contains(baz):
+                continue
+        }
+        """))
+        XCTAssertTrue(formatter.isStartOfClosure(at: 26))
     }
 
     func testInitBracesNotTreatedAsClosure() {
@@ -777,7 +809,7 @@ class ParsingHelpersTests: XCTestCase {
     func testModifierOrder() {
         let options = FormatOptions(modifierOrder: ["convenience", "override"])
         let formatter = Formatter([], options: options)
-        XCTAssertEqual(formatter.modifierOrder, [
+        XCTAssertEqual(formatter.preferredModifierOrder, [
             "private", "fileprivate", "internal", "package", "public", "open",
             "private(set)", "fileprivate(set)", "internal(set)", "package(set)", "public(set)", "open(set)",
             "final",
@@ -801,7 +833,7 @@ class ParsingHelpersTests: XCTestCase {
             "lazy", "final", "required", "convenience", "typeMethods", "owned",
         ])
         let formatter = Formatter([], options: options)
-        XCTAssertEqual(formatter.modifierOrder, [
+        XCTAssertEqual(formatter.preferredModifierOrder, [
             "override",
             "private", "fileprivate", "internal", "package", "public", "open",
             "private(set)", "fileprivate(set)", "internal(set)", "package(set)", "public(set)", "open(set)",
@@ -1154,16 +1186,18 @@ class ParsingHelpersTests: XCTestCase {
             }
 
         }
+
+        struct EmptyType {}
+
+        struct Test{let foo: String}
+
         """
 
         let originalTokens = tokenize(input)
         let declarations = Formatter(originalTokens).parseDeclarations()
 
-        // Verify we didn't lose any tokens
-        XCTAssertEqual(originalTokens, declarations.flatMap { $0.tokens })
-
         XCTAssertEqual(
-            sourceCode(for: declarations[0].tokens),
+            declarations[0].tokens.string,
             """
             import CoreGraphics
 
@@ -1171,7 +1205,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[1].tokens),
+            declarations[1].tokens.string,
             """
             import Foundation
 
@@ -1180,7 +1214,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[2].tokens),
+            declarations[2].tokens.string,
             """
             let global = 10
 
@@ -1189,7 +1223,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[3].tokens),
+            declarations[3].tokens.string,
             """
             @objc
             @available(iOS 13.0, *)
@@ -1201,7 +1235,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[4].tokens),
+            declarations[4].tokens.string,
             """
             let anotherGlobal = "hello"
 
@@ -1210,7 +1244,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[5].tokens),
+            declarations[5].tokens.string,
             """
             /// Doc comment
             /// (multiple lines)
@@ -1223,7 +1257,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[6].tokens),
+            declarations[6].tokens.string,
             """
             protocol SomeProtocol {
                 var getter: String { get async throws }
@@ -1235,7 +1269,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[6].body?[0].tokens),
+            declarations[6].body?[0].tokens.string,
             """
                 var getter: String { get async throws }
 
@@ -1243,7 +1277,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[6].body?[1].tokens),
+            declarations[6].body?[1].tokens.string,
             """
                 func protocolMethod() -> Bool
 
@@ -1251,7 +1285,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[7].tokens),
+            declarations[7].tokens.string,
             """
             class SomeClass {
 
@@ -1276,11 +1310,13 @@ class ParsingHelpersTests: XCTestCase {
                 }
 
             }
+
+
             """
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[7].body?[0].tokens),
+            declarations[7].body?[0].tokens.string,
             """
                 enum NestedEnum {
                     /// Doc comment
@@ -1293,7 +1329,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[7].body?[0].body?[0].tokens),
+            declarations[7].body?[0].body?[0].tokens.string,
             """
                     /// Doc comment
                     case bar
@@ -1302,7 +1338,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[7].body?[0].body?[1].tokens),
+            declarations[7].body?[0].body?[1].tokens.string,
             """
                     func test() {}
 
@@ -1310,7 +1346,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[7].body?[1].tokens),
+            declarations[7].body?[1].tokens.string,
             """
                 /*
                  * Block comment
@@ -1324,7 +1360,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[7].body?[2].tokens),
+            declarations[7].body?[2].tokens.string,
             """
                 @objc
                 private var computed: String {
@@ -1334,6 +1370,30 @@ class ParsingHelpersTests: XCTestCase {
                 }
 
 
+            """
+        )
+
+        XCTAssertEqual(
+            declarations[8].tokens.string,
+            """
+            struct EmptyType {}
+
+
+            """
+        )
+
+        XCTAssertEqual(
+            declarations[9].tokens.string,
+            """
+            struct Test{let foo: String}
+
+            """
+        )
+
+        XCTAssertEqual(
+            declarations[9].body?[0].tokens.string,
+            """
+            let foo: String
             """
         )
     }
@@ -1396,7 +1456,7 @@ class ParsingHelpersTests: XCTestCase {
         let declarations = Formatter(originalTokens).parseDeclarations()
 
         XCTAssertEqual(
-            sourceCode(for: declarations[0].body?[0].tokens),
+            declarations[0].body?[0].tokens.string,
             """
                 var bar = "bar"
 
@@ -1404,7 +1464,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[0].body?[0].tokens),
+            declarations[0].body?[0].tokens.string,
             """
                 var bar = "bar"
 
@@ -1412,7 +1472,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[0].body?[1].tokens),
+            declarations[0].body?[1].tokens.string,
             """
                 /// Leading comment
                 public var baz = "baz" // Trailing comment
@@ -1421,7 +1481,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[0].body?[2].tokens),
+            declarations[0].body?[2].tokens.string,
             """
                 var quux = "quux"
 
@@ -1441,7 +1501,7 @@ class ParsingHelpersTests: XCTestCase {
         let declarations = Formatter(originalTokens).parseDeclarations()
 
         XCTAssertEqual(
-            sourceCode(for: declarations[0].tokens),
+            declarations[0].tokens.string,
             """
             let `static` = NavigationBarType.static(nil, .none)
 
@@ -1449,7 +1509,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[1].tokens),
+            declarations[1].tokens.string,
             """
             let foo = bar
 
@@ -1457,7 +1517,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[2].tokens),
+            declarations[2].tokens.string,
             """
             let `static` = NavigationBarType.static
 
@@ -1465,7 +1525,7 @@ class ParsingHelpersTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            sourceCode(for: declarations[3].tokens),
+            declarations[3].tokens.string,
             """
             let bar = foo
             """
@@ -1527,6 +1587,9 @@ class ParsingHelpersTests: XCTestCase {
         }
         #endif
 
+        #if EMPTY_BLOCK
+        #endif
+
         let afterBlock = "quux"
         """
 
@@ -1538,7 +1601,8 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(declarations[1].body?[0].keyword, "struct")
         XCTAssertEqual(declarations[1].body?[1].keyword, "struct")
         XCTAssertEqual(declarations[1].body?[2].keyword, "struct")
-        XCTAssertEqual(declarations[2].keyword, "let")
+        XCTAssertEqual(declarations[2].keyword, "#if")
+        XCTAssertEqual(declarations[3].keyword, "let")
     }
 
     func testParseSymbolImportCorrectly() {
@@ -1585,6 +1649,150 @@ class ParsingHelpersTests: XCTestCase {
         _ = Formatter(tokens).parseDeclarations()
     }
 
+    func testParseDeclarationRangesInType() {
+        let input = """
+        class Foo {
+            let bar = "bar"
+            let baaz = "baaz"
+        }
+        """
+
+        let formatter = Formatter(tokenize(input))
+        let declarations = formatter.parseDeclarations()
+
+        XCTAssertEqual(declarations.count, 1)
+        XCTAssertEqual(declarations[0].range, 0 ... 28)
+
+        XCTAssertEqual(declarations[0].body?.count, 2)
+
+        let barDeclarationRange = declarations[0].body![0].range
+        XCTAssertEqual(barDeclarationRange, 6 ... 16)
+        XCTAssertEqual(
+            formatter.tokens[barDeclarationRange].string,
+            "    let bar = \"bar\"\n"
+        )
+
+        let baazDeclarationRange = declarations[0].body![1].range
+        XCTAssertEqual(baazDeclarationRange, 17 ... 27)
+        XCTAssertEqual(
+            formatter.tokens[baazDeclarationRange].string,
+            "    let baaz = \"baaz\"\n"
+        )
+    }
+
+    func testParseDeclarationRangesInConditionalCompilation() {
+        let input = """
+        #if DEBUG
+        let bar = "bar"
+        let baaz = "baaz"
+        #endif
+        """
+
+        let formatter = Formatter(tokenize(input))
+        let declarations = formatter.parseDeclarations()
+
+        XCTAssertEqual(declarations.count, 1)
+        XCTAssertEqual(declarations[0].range, 0 ... 24)
+        XCTAssertEqual(declarations[0].tokens.map(\.string).joined(), input)
+
+        XCTAssertEqual(declarations[0].body?.count, 2)
+
+        let barDeclarationRange = declarations[0].body![0].range
+        XCTAssertEqual(barDeclarationRange, 4 ... 13)
+        XCTAssertEqual(
+            formatter.tokens[barDeclarationRange].string,
+            "let bar = \"bar\"\n"
+        )
+
+        let baazDeclarationRange = declarations[0].body![1].range
+        XCTAssertEqual(baazDeclarationRange, 14 ... 23)
+        XCTAssertEqual(
+            formatter.tokens[baazDeclarationRange].string,
+            "let baaz = \"baaz\"\n"
+        )
+    }
+
+    func testParseConditionalCompilationWithNoInnerDeclarations() {
+        let input = """
+        struct Foo {
+            // This type is empty
+        }
+        extension Foo {
+            // This extension is empty
+        }
+        """
+
+        let formatter = Formatter(tokenize(input))
+        let declarations = formatter.parseDeclarations()
+        XCTAssertEqual(declarations.count, 2)
+
+        XCTAssertEqual(
+            declarations[0].tokens.map(\.string).joined(),
+            """
+            struct Foo {
+                // This type is empty
+            }
+
+            """
+        )
+
+        XCTAssertEqual(
+            declarations[1].tokens.map(\.string).joined(),
+            """
+            extension Foo {
+                // This extension is empty
+            }
+            """
+        )
+    }
+
+    func testParseConditionalCompilationWithArgument() {
+        let input = """
+        #if os(Linux)
+        #error("Linux is currently not supported")
+        #endif
+        """
+
+        let formatter = Formatter(tokenize(input))
+        let declarations = formatter.parseDeclarations()
+        XCTAssertEqual(declarations.count, 1)
+        XCTAssertEqual(declarations[0].tokens.map(\.string).joined(), input)
+    }
+
+    func testParseIfExpressionDeclaration() {
+        let input = """
+        private lazy var x: [Any] =
+          if let b {
+            [b]
+          } else if false {
+            []
+          } else {
+            [1, 2]
+          }
+
+        private lazy var y = f()
+        """
+
+        let formatter = Formatter(tokenize(input))
+        let declarations = formatter.parseDeclarations()
+        XCTAssertEqual(declarations.count, 2)
+
+        XCTAssertEqual(declarations[0].tokens.string, """
+        private lazy var x: [Any] =
+          if let b {
+            [b]
+          } else if false {
+            []
+          } else {
+            [1, 2]
+          }
+
+
+        """)
+
+        XCTAssertEqual(declarations[1].tokens.string, "private lazy var y = f()")
+    }
+
     // MARK: declarationScope
 
     func testDeclarationScope_classAndGlobals() {
@@ -1620,6 +1828,10 @@ class ParsingHelpersTests: XCTestCase {
             }
 
             let instanceMember3 = Bar()
+
+            let instanceMemberClosure = Foo {
+                let localMember2 = Bar()
+            }
         }
         """
 
@@ -1632,6 +1844,8 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(formatter.declarationScope(at: 42), .type) // instanceMethod
         XCTAssertEqual(formatter.declarationScope(at: 51), .local) // localMember1
         XCTAssertEqual(formatter.declarationScope(at: 66), .type) // instanceMember3
+        XCTAssertEqual(formatter.declarationScope(at: 78), .type) // instanceMemberClosure
+        XCTAssertEqual(formatter.declarationScope(at: 89), .local) // localMember2
     }
 
     func testDeclarationScope_protocol() {
@@ -1826,6 +2040,48 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(formatter.parseType(at: 0)?.name, "Foo.bar")
     }
 
+    func testDoesntParseMacroInvocationAsType() {
+        let formatter = Formatter(tokenize("""
+        let foo = #colorLiteral(1, 2, 3)
+        """))
+        XCTAssertNil(formatter.parseType(at: 6))
+    }
+
+    func testDoesntParseSelectorAsType() {
+        let formatter = Formatter(tokenize("""
+        let foo = #selector(Foo.bar)
+        """))
+        XCTAssertNil(formatter.parseType(at: 6))
+    }
+
+    func testDoesntParseArrayAsType() {
+        let formatter = Formatter(tokenize("""
+        let foo = [foo, bar].member()
+        """))
+        XCTAssertNil(formatter.parseType(at: 6))
+    }
+
+    func testDoesntParseDictionaryAsType() {
+        let formatter = Formatter(tokenize("""
+        let foo = [foo: bar, baaz: quux].member()
+        """))
+        XCTAssertNil(formatter.parseType(at: 6))
+    }
+
+    func testParsesArrayAsType() {
+        let formatter = Formatter(tokenize("""
+        let foo = [Foo]()
+        """))
+        XCTAssertEqual(formatter.parseType(at: 6)?.name, "[Foo]")
+    }
+
+    func testParsesDictionaryAsType() {
+        let formatter = Formatter(tokenize("""
+        let foo = [Foo: Bar]()
+        """))
+        XCTAssertEqual(formatter.parseType(at: 6)?.name, "[Foo: Bar]")
+    }
+
     func testParseGenericType() {
         let formatter = Formatter(tokenize("""
         let foo: Foo<Bar, Baaz> = .init()
@@ -1866,6 +2122,41 @@ class ParsingHelpersTests: XCTestCase {
         let foo: (Foo, Bar) -> (Foo, Bar) = { foo, bar in (foo, bar) }
         """))
         XCTAssertEqual(formatter.parseType(at: 5)?.name, "(Foo, Bar) -> (Foo, Bar)")
+    }
+
+    func testParseThrowingClosureType() {
+        let formatter = Formatter(tokenize("""
+        let foo: (Foo, Bar) throws -> Void
+        """))
+        XCTAssertEqual(formatter.parseType(at: 5)?.name, "(Foo, Bar) throws -> Void")
+    }
+
+    func testParseTypedThrowingClosureType() {
+        let formatter = Formatter(tokenize("""
+        let foo: (Foo, Bar) throws(MyFeatureError) -> Void
+        """))
+        XCTAssertEqual(formatter.parseType(at: 5)?.name, "(Foo, Bar) throws(MyFeatureError) -> Void")
+    }
+
+    func testParseAsyncClosureType() {
+        let formatter = Formatter(tokenize("""
+        let foo: (Foo, Bar) async -> Void
+        """))
+        XCTAssertEqual(formatter.parseType(at: 5)?.name, "(Foo, Bar) async -> Void")
+    }
+
+    func testParseAsyncThrowsClosureType() {
+        let formatter = Formatter(tokenize("""
+        let foo: (Foo, Bar) async throws -> Void
+        """))
+        XCTAssertEqual(formatter.parseType(at: 5)?.name, "(Foo, Bar) async throws -> Void")
+    }
+
+    func testParseTypedAsyncThrowsClosureType() {
+        let formatter = Formatter(tokenize("""
+        let foo: (Foo, Bar) async throws(MyCustomError) -> Void
+        """))
+        XCTAssertEqual(formatter.parseType(at: 5)?.name, "(Foo, Bar) async throws(MyCustomError) -> Void")
     }
 
     func testParseClosureTypeWithOwnership() {
@@ -1910,6 +2201,13 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(formatter.parseType(at: 5)?.name, "Foo.Bar.Baaz")
     }
 
+    func testDoesntParseLeadingDotAsType() {
+        let formatter = Formatter(tokenize("""
+        let foo: Foo = .Bar.baaz
+        """))
+        XCTAssertEqual(formatter.parseType(at: 9)?.name, nil)
+    }
+
     func testParseCompoundGenericType() {
         let formatter = Formatter(tokenize("""
         let foo: Foo<Bar>.Bar.Baaz<Quux.V2>
@@ -1931,6 +2229,21 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(formatter.parseType(at: 5)?.name, "some View")
     }
 
+    func testParameterPackTypes() {
+        let formatter = Formatter(tokenize("""
+        func foo<each T>() -> repeat each T {
+          return repeat each T.self
+        }
+
+        func eachFirst<each T: Collection>(_ item: repeat each T) -> (repeat (each T).Element?) {
+            return (repeat (each item).first)
+        }
+        """))
+        XCTAssertEqual(formatter.parseType(at: 4)?.name, "each T")
+        XCTAssertEqual(formatter.parseType(at: 13)?.name, "repeat each T")
+        XCTAssertEqual(formatter.parseType(at: 62)?.name, "repeat (each T).Element?")
+    }
+
     func testParseInvalidType() {
         let formatter = Formatter(tokenize("""
         let foo = { foo, bar in (foo, bar) }
@@ -1941,27 +2254,46 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(formatter.parseType(at: 7)?.name, nil)
     }
 
-    func testEndOfDeclaration() {
+    func testMultilineType() {
         let formatter = Formatter(tokenize("""
-        public enum MyFeatureCacheStrategy {
-          case networkOnly
-          case cacheFirst
-
-          public static let defaultCacheAge: TimeInterval = .minutes(5)
-
-          public func requestStrategy<Outcome>() -> SingleRequestStrategy<Outcome> {
-            switch self {
-            case .networkOnly:
-              return .networkOnly(writeResultToCache: true)
-            case .cacheFirst:
-              return .cacheFirst(maxCacheAge: Self.defaultCacheAge)
-            }
-          }
-        }
+        extension Foo.Bar
+            .Baaz.Quux
+            .InnerType1
+            .InnerType2
+        { }
         """))
 
-        XCTAssertEqual(formatter.endOfDeclaration(atDeclarationKeyword: 24), 39) // let defaultCacheAge
-        XCTAssertEqual(formatter.endOfDeclaration(atDeclarationKeyword: 43), 112) // func requestStrategy
+        XCTAssertEqual(formatter.parseType(at: 2)?.name, "Foo.Bar.Baaz.Quux.InnerType1.InnerType2")
+    }
+
+    func testParseTuples() {
+        let input = """
+        let tuple: (foo: Foo, bar: Bar)
+        let closure: (foo: Foo, bar: Bar) -> Void
+        let valueWithRedundantParens: (Foo)
+        let voidValue: ()
+        let tupleWithComments: (
+            bar: String, // comment A
+            quux: String // comment B
+        )  // Trailing comment
+        """
+
+        let formatter = Formatter(tokenize(input))
+
+        XCTAssertEqual(formatter.parseType(at: 5)?.name, "(foo: Foo, bar: Bar)")
+        XCTAssertTrue(formatter.isStartOfTupleType(at: 5))
+
+        XCTAssertEqual(formatter.parseType(at: 23)?.name, "(foo: Foo, bar: Bar) -> Void")
+        XCTAssertFalse(formatter.isStartOfTupleType(at: 23))
+
+        XCTAssertEqual(formatter.parseType(at: 45)?.name, "(Foo)")
+        XCTAssertFalse(formatter.isStartOfTupleType(at: 45))
+
+        XCTAssertEqual(formatter.parseType(at: 54)?.name, "()")
+        XCTAssertFalse(formatter.isStartOfTupleType(at: 54))
+
+        XCTAssertTrue(formatter.isStartOfTupleType(at: 62))
+        XCTAssertEqual(formatter.parseType(at: 62)?.name, "(bar: String,  quux: String  )")
     }
 
     // MARK: - parseExpressionRange
@@ -2023,6 +2355,9 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssert(isSingleExpression(#"await { await printAsync(foo) }()"#))
         XCTAssert(isSingleExpression(#"try await { try await printAsyncThrows(foo) }()"#))
         XCTAssert(isSingleExpression(#"Foo<Bar>()"#))
+        XCTAssert(isSingleExpression(#"each foo"#))
+        XCTAssert(isSingleExpression(#"repeat each foo.var.baaz"#))
+        XCTAssert(isSingleExpression(#"repeat (each item).first"#))
         XCTAssert(isSingleExpression(#"Foo<Bar, Baaz>(quux: quux)"#))
         XCTAssert(!isSingleExpression(#"if foo { "foo" } else { "bar" }"#))
         XCTAssert(!isSingleExpression(#"foo.bar, baaz.quux"#))
@@ -2199,7 +2534,7 @@ class ParsingHelpersTests: XCTestCase {
 
         var parseIndex = 0
         while let expressionRange = formatter.parseExpressionRange(startingAt: parseIndex) {
-            let expression = formatter.tokens[expressionRange].map { $0.string }.joined()
+            let expression = formatter.tokens[expressionRange].map(\.string).joined()
             expressions.append(expression)
 
             if let nextExpressionIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: expressionRange.upperBound) {
@@ -2215,7 +2550,7 @@ class ParsingHelpersTests: XCTestCase {
     func parseExpression(in input: String, at index: Int) -> String {
         let formatter = Formatter(tokenize(input))
         guard let expressionRange = formatter.parseExpressionRange(startingAt: index) else { return "" }
-        return formatter.tokens[expressionRange].map { $0.string }.joined()
+        return formatter.tokens[expressionRange].map(\.string).joined()
     }
 
     // MARK: isStoredProperty
@@ -2252,7 +2587,7 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertFalse(isStoredProperty("""
         var foo: String {
             get { "foo" }
-            set { print(newValue} }
+            set { print(newValue) }
         }
         """))
     }
@@ -2268,5 +2603,205 @@ class ParsingHelpersTests: XCTestCase {
         let input = "extension [Int] {}"
         let formatter = Formatter(tokenize(input))
         XCTAssertEqual(formatter.scopeType(at: 2), .arrayType)
+    }
+
+    // MARK: parseFunctionDeclarationArgumentLabels
+
+    func testParseFunctionDeclarationArguments() {
+        let input = """
+        func foo(_ foo: Foo, bar: Bar, quux _: Quux, last baaz: Baaz) {}
+        func bar() {}
+        """
+
+        let formatter = Formatter(tokenize(input))
+
+        XCTAssertEqual(
+            formatter.parseFunctionDeclarationArguments(startOfScope: 3), // foo(...)
+            [
+                Formatter.FunctionArgument(externalLabel: nil, internalLabel: "foo", type: "Foo"),
+                Formatter.FunctionArgument(externalLabel: "bar", internalLabel: "bar", type: "Bar"),
+                Formatter.FunctionArgument(externalLabel: "quux", internalLabel: nil, type: "Quux"),
+                Formatter.FunctionArgument(externalLabel: "last", internalLabel: "baaz", type: "Baaz"),
+            ]
+        )
+
+        XCTAssertEqual(
+            formatter.parseFunctionDeclarationArguments(startOfScope: 40), // bar()
+            []
+        )
+    }
+
+    func testParseFunctionCallArgumentLabels() {
+        let input = """
+        foo(Foo(foo: foo), bar: Bar(bar), foo, quux: Quux(), last: Baaz(foo: foo))
+
+        print(formatter.isOperator(at: 0))
+        """
+
+        let formatter = Formatter(tokenize(input))
+        XCTAssertEqual(
+            formatter.parseFunctionCallArguments(startOfScope: 1).map(\.label), // foo(...)
+            [nil, "bar", nil, "quux", "last"]
+        )
+
+        XCTAssertEqual(
+            formatter.parseFunctionCallArguments(startOfScope: 3).map(\.label), // Foo(...)
+            ["foo"]
+        )
+
+        XCTAssertEqual(
+            formatter.parseFunctionCallArguments(startOfScope: 15).map(\.label), // Bar(...)
+            [nil]
+        )
+
+        XCTAssertEqual(
+            formatter.parseFunctionCallArguments(startOfScope: 27).map(\.label), // Quux()
+            []
+        )
+
+        XCTAssertEqual(
+            formatter.parseFunctionCallArguments(startOfScope: 49).map(\.label), // isOperator(...)
+            ["at"]
+        )
+    }
+
+    func testParseFunctionDeclarationWithEffects() {
+        let input = """
+        struct FooBar {
+
+            func foo(bar: Bar, baaz: Baaz) async throws(GenericError<Foo>) -> Foo<Bar, Baaz> {
+                Foo(bar: bar, baaz: baaz)
+            }
+
+        }
+        """
+
+        let formatter = Formatter(tokenize(input))
+        let function = formatter.parseFunctionDeclaration(keywordIndex: 8)!
+
+        XCTAssertEqual(function.keywordIndex, 8)
+        XCTAssertEqual(function.name, "foo")
+        XCTAssertEqual(function.genericParameterRange, nil)
+        XCTAssertEqual(formatter.tokens[function.argumentsRange].string, "(bar: Bar, baaz: Baaz)")
+        XCTAssertEqual(function.arguments.count, 2)
+        XCTAssertEqual(formatter.tokens[function.effectsRange!].string, "async throws(GenericError<Foo>)")
+        XCTAssertEqual(function.effects, ["async", "throws(GenericError<Foo>)"])
+        XCTAssertEqual(function.returnOperatorIndex, 34)
+        XCTAssertEqual(formatter.tokens[function.returnType!.range].string, "Foo<Bar, Baaz>")
+        XCTAssertEqual(function.whereClauseRange, nil)
+        XCTAssertEqual(formatter.tokens[function.bodyRange!].string, """
+        {
+                Foo(bar: bar, baaz: baaz)
+            }
+        """)
+    }
+
+    func testParseFunctionDeclarationWithGeneric() {
+        let input = """
+        public func genericFoo<Bar: Baaz>(bar: Bar) rethrows where Baaz.Quux == Foo {
+            print(bar)
+        }
+
+        func bar() { print("bar") }
+        """
+
+        let formatter = Formatter(tokenize(input))
+
+        let function = formatter.parseFunctionDeclaration(keywordIndex: 2)!
+        XCTAssertEqual(function.keywordIndex, 2)
+        XCTAssertEqual(function.name, "genericFoo")
+        XCTAssertEqual(formatter.tokens[function.genericParameterRange!].string, "<Bar: Baaz>")
+        XCTAssertEqual(formatter.tokens[function.argumentsRange].string, "(bar: Bar)")
+        XCTAssertEqual(function.arguments.count, 1)
+        XCTAssertEqual(formatter.tokens[function.effectsRange!].string, "rethrows")
+        XCTAssertEqual(function.effects, ["rethrows"])
+        XCTAssertEqual(function.returnOperatorIndex, nil)
+        XCTAssertEqual(function.returnType?.range, nil)
+        XCTAssertEqual(formatter.tokens[function.whereClauseRange!].string, "where Baaz.Quux == Foo ")
+        XCTAssertEqual(formatter.tokens[function.bodyRange!].string, """
+        {
+            print(bar)
+        }
+        """)
+
+        let secondFunction = formatter.parseFunctionDeclaration(keywordIndex: 41)!
+        XCTAssertEqual(secondFunction.keywordIndex, 41)
+        XCTAssertEqual(secondFunction.name, "bar")
+        XCTAssertEqual(secondFunction.genericParameterRange, nil)
+        XCTAssertEqual(formatter.tokens[secondFunction.argumentsRange].string, "()")
+        XCTAssertEqual(secondFunction.arguments.count, 0)
+        XCTAssertEqual(secondFunction.effectsRange, nil)
+        XCTAssertEqual(secondFunction.effects, [])
+        XCTAssertEqual(secondFunction.returnOperatorIndex, nil)
+        XCTAssertEqual(secondFunction.returnType?.range, nil)
+        XCTAssertEqual(secondFunction.whereClauseRange, nil)
+        XCTAssertEqual(formatter.tokens[secondFunction.bodyRange!].string, #"{ print("bar") }"#)
+    }
+
+    func testParseProtocolFunctionRequirements() {
+        let input = """
+        protocol FooBarProtocol {
+            func foo(bar: Bar, baaz: Baaz) async throws -> Module.Foo<Bar, Baaz> where Bar == Baaz.Quux
+
+            subscript<Bar: Baaz>(_ bar: Bar) throws
+        }
+        """
+
+        let formatter = Formatter(tokenize(input))
+
+        let function = formatter.parseFunctionDeclaration(keywordIndex: 7)!
+        XCTAssertEqual(function.keywordIndex, 7)
+        XCTAssertEqual(function.name, "foo")
+        XCTAssertEqual(function.genericParameterRange, nil)
+        XCTAssertEqual(formatter.tokens[function.argumentsRange].string, "(bar: Bar, baaz: Baaz)")
+        XCTAssertEqual(function.arguments.count, 2)
+        XCTAssertEqual(formatter.tokens[function.effectsRange!].string, "async throws")
+        XCTAssertEqual(function.effects, ["async", "throws"])
+        XCTAssertEqual(function.returnOperatorIndex, 27)
+        XCTAssertEqual(formatter.tokens[function.returnType!.range].string, "Module.Foo<Bar, Baaz>")
+        XCTAssertEqual(formatter.tokens[function.whereClauseRange!].string, "where Bar == Baaz.Quux")
+        XCTAssertEqual(function.bodyRange, nil)
+
+        let secondFunction = formatter.parseFunctionDeclaration(keywordIndex: 51)!
+        XCTAssertEqual(secondFunction.keywordIndex, 51)
+        XCTAssertEqual(secondFunction.name, nil)
+        XCTAssertEqual(formatter.tokens[secondFunction.genericParameterRange!].string, "<Bar: Baaz>")
+        XCTAssertEqual(formatter.tokens[secondFunction.argumentsRange].string, "(_ bar: Bar)")
+        XCTAssertEqual(secondFunction.arguments.count, 1)
+        XCTAssertEqual(formatter.tokens[secondFunction.effectsRange!].string, "throws")
+        XCTAssertEqual(secondFunction.effects, ["throws"])
+        XCTAssertEqual(secondFunction.returnOperatorIndex, nil)
+        XCTAssertEqual(secondFunction.returnType?.range, nil)
+        XCTAssertEqual(secondFunction.whereClauseRange, nil)
+        XCTAssertEqual(secondFunction.bodyRange, nil)
+    }
+
+    func testParseFailableInit() {
+        let input = """
+        init() {}
+        init?() { return nil }
+        """
+
+        let formatter = Formatter(tokenize(input))
+
+        let firstInit = formatter.parseFunctionDeclaration(keywordIndex: 0)!
+        XCTAssertEqual(firstInit.keywordIndex, 0)
+        XCTAssertEqual(firstInit.name, nil)
+        XCTAssertEqual(formatter.tokens[firstInit.argumentsRange].string, "()")
+        XCTAssertEqual(firstInit.arguments.count, 0)
+        XCTAssertEqual(firstInit.effects, [])
+        XCTAssertEqual(firstInit.returnOperatorIndex, nil)
+        XCTAssertEqual(firstInit.whereClauseRange, nil)
+        XCTAssertEqual(formatter.tokens[firstInit.bodyRange!].string, "{}")
+
+        let secondInit = formatter.parseFunctionDeclaration(keywordIndex: 7)!
+        XCTAssertEqual(secondInit.keywordIndex, 7)
+        XCTAssertEqual(secondInit.name, nil)
+        XCTAssertEqual(formatter.tokens[secondInit.argumentsRange].string, "()")
+        XCTAssertEqual(secondInit.arguments.count, 0)
+        XCTAssertEqual(secondInit.effects, [])
+        XCTAssertEqual(secondInit.returnOperatorIndex, nil)
+        XCTAssertEqual(secondInit.whereClauseRange, nil)
+        XCTAssertEqual(formatter.tokens[secondInit.bodyRange!].string, "{ return nil }")
     }
 }

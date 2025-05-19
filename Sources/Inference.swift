@@ -106,7 +106,7 @@ private struct Inference {
         }
         if let indent = indents.sorted(by: {
             $0.count > $1.count
-        }).first.map({ $0.indent }) {
+        }).first.map(\.indent) {
             options.indent = indent
         }
     }
@@ -408,7 +408,7 @@ private struct Inference {
         }
 
         // Decide on callSiteClosingParenPosition
-        if functionCallSameLine > functionCallBalanced && functionDeclarationBalanced > functionDeclarationSameLine {
+        if functionCallSameLine > functionCallBalanced, functionDeclarationBalanced > functionDeclarationSameLine {
             options.callSiteClosingParenPosition = .sameLine
         } else {
             options.callSiteClosingParenPosition = .balanced
@@ -979,7 +979,7 @@ private struct Inference {
                     continue
                 case .startOfScope("{") where lastKeyword == "var":
                     lastKeyword = ""
-                    if formatter.isStartOfClosure(at: index, in: scopeStack.last) {
+                    if formatter.isStartOfClosure(at: index) {
                         fallthrough
                     }
                     var prevIndex = index - 1
@@ -1273,7 +1273,7 @@ private struct Inference {
                 nospace += 1
             }
         }
-        options.spaceAroundOperatorDeclarations = (nospace <= space)
+        options.spaceAroundOperatorDeclarations = nospace > space ? .remove : .insert
     }
 
     let elseOnNextLine = OptionInferrer { formatter, options in

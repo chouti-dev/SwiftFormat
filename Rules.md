@@ -15,12 +15,14 @@
 * [consecutiveBlankLines](#consecutiveBlankLines)
 * [consecutiveSpaces](#consecutiveSpaces)
 * [consistentSwitchCaseSpacing](#consistentSwitchCaseSpacing)
+* [docCommentsBeforeModifiers](#docCommentsBeforeModifiers)
 * [duplicateImports](#duplicateImports)
 * [elseOnSameLine](#elseOnSameLine)
 * [emptyBraces](#emptyBraces)
 * [enumNamespaces](#enumNamespaces)
 * [extensionAccessControl](#extensionAccessControl)
 * [fileHeader](#fileHeader)
+* [fileMacro](#fileMacro)
 * [genericExtensions](#genericExtensions)
 * [headerFileName](#headerFileName)
 * [hoistAwait](#hoistAwait)
@@ -34,6 +36,7 @@
 * [modifierOrder](#modifierOrder)
 * [numberFormatting](#numberFormatting)
 * [opaqueGenericParameters](#opaqueGenericParameters)
+* [preferCountWhere](#preferCountWhere)
 * [preferForLoop](#preferForLoop)
 * [preferKeyPath](#preferKeyPath)
 * [redundantBackticks](#redundantBackticks)
@@ -75,6 +78,7 @@
 * [spaceInsideParens](#spaceInsideParens)
 * [strongOutlets](#strongOutlets)
 * [strongifiedSelf](#strongifiedSelf)
+* [swiftTestingTestCaseNames](#swiftTestingTestCaseNames)
 * [todos](#todos)
 * [trailingClosures](#trailingClosures)
 * [trailingCommas](#trailingCommas)
@@ -94,18 +98,27 @@
 
 * [acronyms](#acronyms)
 * [blankLineAfterSwitchCase](#blankLineAfterSwitchCase)
+* [blankLinesAfterGuardStatements](#blankLinesAfterGuardStatements)
 * [blankLinesBetweenImports](#blankLinesBetweenImports)
 * [blockComments](#blockComments)
 * [docComments](#docComments)
+* [emptyExtensions](#emptyExtensions)
+* [environmentEntry](#environmentEntry)
 * [isEmpty](#isEmpty)
 * [markTypes](#markTypes)
 * [noExplicitOwnership](#noExplicitOwnership)
 * [organizeDeclarations](#organizeDeclarations)
+* [preferSwiftTesting](#preferSwiftTesting)
+* [privateStateVariables](#privateStateVariables)
+* [propertyTypes](#propertyTypes)
+* [redundantEquatable](#redundantEquatable)
 * [redundantProperty](#redundantProperty)
 * [sortSwitchCases](#sortSwitchCases)
+* [unusedPrivateDeclarations](#unusedPrivateDeclarations)
 * [wrapConditionalBodies](#wrapConditionalBodies)
 * [wrapEnumCases](#wrapEnumCases)
 * [wrapMultilineConditionalAssignment](#wrapMultilineConditionalAssignment)
+* [wrapMultilineFunctionChains](#wrapMultilineFunctionChains)
 * [wrapSwitchCases](#wrapSwitchCases)
 
 # Deprecated Rules (do not use)
@@ -123,6 +136,7 @@ Capitalize acronyms when the first character is capitalized.
 Option | Description
 --- | ---
 `--acronyms` | Acronyms to auto-capitalize. Defaults to "ID,URL,UUID"
+`--preserveacronyms` | List of symbols to be ignored by the acyronyms rule
 
 <details>
 <summary>Examples</summary>
@@ -195,6 +209,18 @@ swift version is set to 4.1 or above.
 
 Replace obsolete @UIApplicationMain and @NSApplicationMain attributes
 with @main for Swift 5.3 and above.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- @UIApplicationMain
++ @main
+  class AppDelegate: UIResponder, UIApplicationDelegate {}
+```
+
+</details>
+<br/>
 
 ## assertionFailures
 
@@ -269,6 +295,28 @@ which is followed by a closing brace).
           energyShields.engage()
       }
   }
+```
+
+</details>
+<br/>
+
+## blankLinesAfterGuardStatements
+
+Remove blank lines between consecutive guard statements, and insert a blank after the last guard statement.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+    guard let spicy = self.makeSpicy() else {
+        return
+    }
+-
+    guard let soap = self.clean() else {
+        return
+    }
++
+    let doTheJob = nikekov()
 ```
 
 </details>
@@ -387,6 +435,21 @@ Option | Description
 ## blankLinesBetweenChainedFunctions
 
 Remove blank lines between chained functions but keep the linebreaks.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  [0, 1, 2]
+      .map { $0 * 2 }
+-
+-
+-
+      .map { $0 * 3 }
+```
+
+</details>
+<br/>
 
 ## blankLinesBetweenImports
 
@@ -676,6 +739,23 @@ Option | Description
 </details>
 <br/>
 
+## docCommentsBeforeModifiers
+
+Place doc comments before any declaration modifiers or attributes.
+
+<details>
+<summary>Examples</summary>
+
+```diff
++ /// Doc comment on this function declaration
+  @MainActor
+- /// Doc comment on this function declaration
+  func foo() {}
+```
+
+</details>
+<br/>
+
 ## duplicateImports
 
 Remove duplicate import statements.
@@ -783,6 +863,22 @@ Option | Description
 </details>
 <br/>
 
+## emptyExtensions
+
+Remove empty, non-conforming, extensions.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- extension String {}
+-
+  extension String: Equatable {}
+```
+
+</details>
+<br/>
+
 ## enumNamespaces
 
 Convert types used for hosting only static members into enums (an empty enum is
@@ -791,6 +887,46 @@ the canonical way to create a namespace in Swift as it can't be instantiated).
 Option | Description
 --- | ---
 `--enumnamespaces` | Change type to enum: "always" (default) or "structs-only"
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- class FeatureConstants {
++ enum FeatureConstants {
+      static let foo = "foo"
+      static let bar = "bar"
+  }
+```
+
+</details>
+<br/>
+
+## environmentEntry
+
+Updates SwiftUI `EnvironmentValues` definitions to use the @Entry macro.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- struct ScreenNameEnvironmentKey: EnvironmentKey {
+-   static var defaultValue: Identifier? {
+-      .init("undefined") 
+-     }
+-   }
+
+   extension EnvironmentValues {
+-    var screenName: Identifier? {
+-      get { self[ScreenNameEnvironmentKey.self] }
+-      set { self[ScreenNameEnvironmentKey.self] = newValue }
+-    }
++    @Entry var screenName: Identifier? = .init("undefined")
+   }
+```
+
+</details>
+<br/>
 
 ## extensionAccessControl
 
@@ -937,6 +1073,30 @@ standard library.
 </details>
 <br/>
 
+## fileMacro
+
+Prefer either #file or #fileID, which have the same behavior in Swift 6 and later.
+
+Option | Description
+--- | ---
+`--filemacro` | File macro to prefer: "#file" (default) or "#fileID".
+
+<details>
+<summary>Examples</summary>
+
+```diff
+// --filemacro #file
+- func foo(file: StaticString = #fileID) { ... }
++ func foo(file: StaticString = #file) { ... }
+
+// --filemacro #fileID
+- func foo(file: StaticString = #file) { ... }
++ func foo(file: StaticString = #fileID) { ... }
+```
+
+</details>
+<br/>
+
 ## genericExtensions
 
 Use angle brackets (`extension Array<Foo>`) for generic type extensions
@@ -983,6 +1143,24 @@ Option | Description
 ## headerFileName
 
 Ensure file name in header comment matches the actual file name.
+
+<details>
+<summary>Examples</summary>
+
+For a file named `Bar.swift`:
+
+```diff
+- //  Foo.swift
++ //  Bar.swift
+  //  SwiftFormat
+  //
+  //  Created by Nick Lockwood on 5/3/23.
+
+  struct Bar {}
+```
+
+</details>
+<br/>
 
 ## hoistAwait
 
@@ -1191,6 +1369,20 @@ Move leading delimiters to the end of the previous line.
 
 Add empty blank line at end of file.
 
+<details>
+<summary>Examples</summary>
+
+```diff
+  struct Foo {↩
+      let bar: Bar↩
+- }
++ }↩
++
+```
+
+</details>
+<br/>
+
 ## linebreaks
 
 Use specified linebreak character for all linebreaks (CR, LF or CRLF).
@@ -1368,9 +1560,38 @@ Option | Description
 `--enumthreshold` | Minimum line count to organize enum body. Defaults to 0
 `--extensionlength` | Minimum line count to organize extension body. Defaults to 0
 `--organizationmode` | Organize declarations by "visibility" (default) or "type"
+`--visibilityorder` | Order for visibility groups inside declaration
+`--typeorder` | Order for declaration type groups inside declaration
+`--visibilitymarks` | Marks for visibility groups (public:Public Fields,..)
+`--typemarks` | Marks for declaration type groups (classMethod:Baaz,..)
+`--groupblanklines` | Require a blank line after each subgroup. Default: true
+`--sortswiftuiprops` | Sort SwiftUI props: none, alphabetize, first-appearance-sort
 
 <details>
 <summary>Examples</summary>
+
+Default value for `--visibilityorder` when using `--organizationmode visibility`:
+`beforeMarks, instanceLifecycle, open, public, package, internal, fileprivate, private`
+
+Default value for `--visibilityorder` when using `--organizationmode type`:
+`open, public, package, internal, fileprivate, private`
+
+**NOTE:** When providing custom arguments for `--visibilityorder` the following entries must be included:
+`open, public, package, internal, fileprivate, private`
+
+Default value for `--typeorder` when using `--organizationmode visibility`:
+`nestedType, staticProperty, staticPropertyWithBody, classPropertyWithBody, overriddenProperty, swiftUIPropertyWrapper, instanceProperty, instancePropertyWithBody, swiftUIProperty, swiftUIMethod, overriddenMethod, staticMethod, classMethod, instanceMethod`
+
+Default value for `--typeorder` when using `--organizationmode type`:
+`beforeMarks, nestedType, staticProperty, staticPropertyWithBody, classPropertyWithBody, overriddenProperty, swiftUIPropertyWrapper, instanceProperty, computedProperty, instanceLifecycle, swiftUIProperty, swiftUIMethod, overriddenMethod, staticMethod, classMethod, instanceMethod`
+
+**NOTE:** The follow declaration types must be included in either `--typeorder` or `--visibilityorder`:
+`beforeMarks, nestedType, instanceLifecycle, instanceProperty, instanceMethod`
+
+**NOTE:** The Swift compiler automatically synthesizes a memberwise `init` for `struct` types.
+
+To allow SwiftFormat to reorganize your code effectively, you must explicitly declare an `init`.
+Without this declaration, only functions will be reordered, while properties will remain in their original order. 
 
 `--organizationmode visibility` (default)
 
@@ -1461,6 +1682,32 @@ Option | Description
 </details>
 <br/>
 
+## preferCountWhere
+
+Prefer `count(where:)` over `filter(_:).count`.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- planets.filter { !$0.moons.isEmpty }.count
++ planets.count(where: { !$0.moons.isEmpty })
+
+- planets.filter { planet in
+-     planet.moons.filter { moon in
+-         moon.hasAtmosphere
+-     }.count > 1
+- }.count
++ planets.count(where: { planet in
++     planet.moons.count(where: { moon in
++         moon.hasAtmosphere
++     }) > 1
++ })
+```
+
+</details>
+<br/>
+
 ## preferForLoop
 
 Convert functional `forEach` calls to for loops.
@@ -1468,7 +1715,7 @@ Convert functional `forEach` calls to for loops.
 Option | Description
 --- | ---
 `--anonymousforeach` | Convert anonymous forEach: "convert" (default) or "ignore"
-`--onelineforeach` | Convert one-line forEach: "convert" or "ignore" (default)
+`--inlinedforeach` | Convert inline forEach to for: "convert", "ignore" (default)
 
 <details>
 <summary>Examples</summary>
@@ -1516,6 +1763,149 @@ Convert trivial `map { $0.foo }` closures to keyPath-based syntax.
 
 - let barArray = fooArray.compactMap { $0.optionalBar }
 + let barArray = fooArray.compactMap(\.optionalBar)
+```
+
+</details>
+<br/>
+
+## preferSwiftTesting
+
+Prefer the Swift Testing library over XCTest.
+
+Option | Description
+--- | ---
+`--xctestsymbols` | Comma-delimited list of symbols that depend on XCTest
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  @testable import MyFeatureLib
+- import XCTest
++ import Testing
++ import Foundation
+
+- final class MyFeatureTests: XCTestCase {
+-     func testMyFeatureHasNoBugs() {
+-         let myFeature = MyFeature()
+-         myFeature.runAction()
+-         XCTAssertFalse(myFeature.hasBugs, "My feature has no bugs")
+-         XCTAssertEqual(myFeature.crashes.count, 0, "My feature doesn't crash")
+-         XCTAssertNil(myFeature.crashReport)
+-     }
+- }
++ @MainActor @Suite(.serialized)
++ final class MyFeatureTests { 
++     @Test func myFeatureHasNoBugs() {
++         let myFeature = MyFeature()
++         myFeature.runAction()
++         #expect(!myFeature.hasBugs, "My feature has no bugs")
++         #expect(myFeature.crashes.isEmpty, "My feature doesn't crash")
++         #expect(myFeature.crashReport == nil)
++     }
++ }
+
+- final class MyFeatureTests: XCTestCase {
+-     var myFeature: MyFeature!
+- 
+-     override func setUp() async throws {
+-         myFeature = try await MyFeature()
+-     }
+- 
+-     override func tearDown() {
+-         myFeature = nil
+-     }
+- 
+-     func testMyFeatureWorks() {
+-         myFeature.runAction()
+-         XCTAssertTrue(myFeature.worksProperly)
+-         XCTAssertEqual(myFeature.screens.count, 8)
+-     }
+- }
++ @MainActor
++ final class MyFeatureTests {
++     var myFeature: MyFeature!
++ 
++     init() async throws {
++         myFeature = try await MyFeature()
++     }
++ 
++     deinit {
++         myFeature = nil
++     }
++ 
++     @Test func myFeatureWorks() {
++         myFeature.runAction()
++         #expect(myFeature.worksProperly)
++         #expect(myFeature.screens.count == 8)
++     }
++ }
+```
+
+</details>
+<br/>
+
+## privateStateVariables
+
+Adds `private` access control to @State properties without existing access control modifiers.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- @State var anInt: Int
++ @State private var anInt: Int
+
+- @StateObject var myInstance: MyObject
++ @StateObject private var myInstace: MyObject
+```
+
+</details>
+<br/>
+
+## propertyTypes
+
+Convert property declarations to use inferred types (`let foo = Foo()`) or explicit types (`let foo: Foo = .init()`).
+
+Option | Description
+--- | ---
+`--propertytypes` | "inferred", "explicit", or "infer-locals-only" (default)
+`--inferredtypes` | "exclude-cond-exprs" (default) or "always"
+`--preservedsymbols` | Comma-delimited list of symbols to be ignored by the rule
+
+<details>
+<summary>Examples</summary>
+
+```diff
+// with --propertytypes inferred
+- let view: UIView = UIView()
++ let view = UIView()
+
+// with --propertytypes explicit
+- let view: UIView = UIView()
++ let view: UIView = .init()
+
+// with --propertytypes infer-locals-only
+  class Foo {
+-     let view: UIView = UIView()
++     let view: UIView = .init()
+
+      func method() {
+-         let view: UIView = UIView()
++         let view = UIView()
+      }
+  }
+
+  // with --inferredtypes always:
+- let foo: Foo =
++ let foo =
+    if condition {
+-     .init(bar)
++     Foo(bar)
+    } else {
+-     .init(baaz)
++     Foo(baaz)
+    }
 ```
 
 </details>
@@ -1582,6 +1972,61 @@ which are called immediately.
 - }()
 + lazy var bar = Bar(baaz: baaz,
 +                    quux: quux)
+```
+
+</details>
+<br/>
+
+## redundantEquatable
+
+Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+
+Option | Description
+--- | ---
+`--equatablemacro` | For example: "@Equatable,EquatableMacroLib"
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  struct Foo: Equatable {
+      let bar: Bar
+      let baaz: Baaz
+
+-     static func ==(lhs: Foo, rhs: Foo) -> Bool {
+-         lhs.bar == rhs.bar 
+-             && lhs.baaz == rhs.baaz
+-     }
+  }
+
+  class Bar: Equatable {
+      let baaz: Baaz
+
+      static func ==(lhs: Bar, rhs: Bar) -> Bool {
+          lhs.baaz == rhs.baaz
+      }
+  }
+```
+
+If your project includes a macro that generates the `static func ==` implementation
+for the attached class, you can specify `--equatablemacro @Equatable,MyMacroLib`
+and this rule will also migrate eligible classes to use your macro instead of
+a hand-written Equatable conformance:
+
+```diff
+  // --equatablemacro @Equatable,MyMacroLib
+  import FooLib
++ import MyMacroLib
+
++ @Equatable
++ class Bar {
+- class Bar: Equatable {
+      let baaz: Baaz
+
+-     static func ==(lhs: Bar, rhs: Bar) -> Bool {
+-         lhs.baaz == rhs.baaz
+-     }
+  }
 ```
 
 </details>
@@ -1997,27 +2442,44 @@ by using `--self init-only`:
 
 Remove explicit `Self` where applicable.
 
+<details>
+<summary>Examples</summary>
+
+```diff
+  enum Foo {
+      static let bar = Bar()
+
+      static func baaz() -> Bar {
+-         Self.bar()
++         bar()
+      }
+  }
+```
+
+</details>
+<br/>
+
 ## redundantType
 
 Remove redundant type from variable declarations.
 
 Option | Description
 --- | ---
-`--redundanttype` | "inferred", "explicit", or "infer-locals-only" (default)
+`--propertytypes` | "inferred", "explicit", or "infer-locals-only" (default)
 
 <details>
 <summary>Examples</summary>
 
 ```diff
-// inferred
+// with --propertytypes inferred
 - let view: UIView = UIView()
 + let view = UIView()
 
-// explicit
+// with --propertytypes explicit
 - let view: UIView = UIView()
 + let view: UIView = .init()
 
-// infer-locals-only
+// with --propertytypes infer-locals-only
   class Foo {
 -     let view: UIView = UIView()
 +     let view: UIView = .init()
@@ -2028,7 +2490,7 @@ Option | Description
       }
   }
 
-// Swift 5.9+, inferred (SE-0380)
+// Swift 5.9+, with --propertytypes inferred (SE-0380)
 - let foo: Foo = if condition {
 + let foo = if condition {
       Foo("foo")
@@ -2036,7 +2498,7 @@ Option | Description
       Foo("bar")
   }
 
-// Swift 5.9+, explicit (SE-0380)
+// Swift 5.9+, with --propertytypes explicit (SE-0380)
   let foo: Foo = if condition {
 -     Foo("foo")
 +     .init("foo")
@@ -2132,11 +2594,35 @@ Sorts the body of declarations with // swiftformat:sort
 and declarations between // swiftformat:sort:begin and
 // swiftformat:sort:end comments.
 
+Option | Description
+--- | ---
+`--sortedpatterns` | List of patterns to sort alphabetically without `:sort` mark.
+
 <details>
 <summary>Examples</summary>
 
 ```diff
   // swiftformat:sort
+  enum FeatureFlags {
+-     case upsellB
+-     case fooFeature
+-     case barFeature
+-     case upsellA(
+-         fooConfiguration: Foo,
+-         barConfiguration: Bar)
++     case barFeature
++     case fooFeature
++     case upsellA(
++         fooConfiguration: Foo,
++         barConfiguration: Bar)
++     case upsellB
+  }
+
+config:
+```
+    sortedpatterns: 'Feature'
+```
+
   enum FeatureFlags {
 -     case upsellB
 -     case fooFeature
@@ -2216,6 +2702,20 @@ Option | Description
 ## sortSwitchCases
 
 Sort switch cases alphabetically.
+
+<details>
+<summary>Examples</summary>
+
+```dif
+  switch self {
+- case .b, .a, .c, .e, .d:
++ case .a, .b, .c, .d, .e:
+      return nil
+  }
+```
+
+</details>
+<br/>
 
 ## sortTypealiases
 
@@ -2333,9 +2833,9 @@ Add or remove space around operators or delimiters.
 
 Option | Description
 --- | ---
-`--operatorfunc` | Spacing for operator funcs: "spaced" (default) or "no-space"
+`--operatorfunc` | Operator funcs: "spaced" (default), "no-space", or "preserve"
 `--nospaceoperators` | Comma-delimited list of operators without surrounding space
-`--ranges` | Spacing for ranges: "spaced" (default) or "no-space"
+`--ranges` | Range spaces: "spaced" (default) or "no-space", or "preserve"
 `--typedelimiter` | "space-after" (default), "spaced" or "no-space"
 
 <details>
@@ -2502,6 +3002,31 @@ set to 4.2 or above.
 </details>
 <br/>
 
+## swiftTestingTestCaseNames
+
+In Swift Testing, don't prefix @Test methods with 'test'.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  import Testing
+
+  struct MyFeatureTests {
+-     @Test func testMyFeatureHasNoBugs() {
++     @Test func myFeatureHasNoBugs() {
+          let myFeature = MyFeature()
+          myFeature.runAction()
+          #expect(!myFeature.hasBugs, "My feature has no bugs")
+          #expect(myFeature.crashes.isEmpty, "My feature doesn't crash")
+          #expect(myFeature.crashReport == nil)
+      }
+  }
+```
+
+</details>
+<br/>
+
 ## todos
 
 Use correct formatting for `TODO:`, `MARK:` or `FIXME:` comments.
@@ -2549,7 +3074,7 @@ Option | Description
 
 ## trailingCommas
 
-Add or remove trailing comma from the last item in a collection literal.
+Add or remove trailing commas in comma-separated lists.
 
 Option | Description
 --- | ---
@@ -2563,14 +3088,35 @@ Option | Description
     foo,
     bar,
 -   baz
-  ]
-
-  let array = [
-    foo,
-    bar,
 +   baz,
   ]
 ```
+
+Swift 6.1 and later:
+
+```diff
+  func foo(
+      bar: Int,
+-     baaz: Int
++     baaz: Int,
+  ) {}
+```
+
+```diff
+  foo(
+      bar: 1,
+-     baaz: 2
++     baaz: 2,
+  )
+```
+
+```diff
+  struct Foo<
+      Bar,
+      Baaz,
+-     Quux
++     Quux,
+  > {}
 
 </details>
 <br/>
@@ -2582,6 +3128,23 @@ Remove trailing space at end of a line.
 Option | Description
 --- | ---
 `--trimwhitespace` | Trim trailing space: "always" (default) or "nonblank-lines"
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- let foo: Foo␣
++ let foo: Foo
+- ␣␣␣␣
++
+- func bar() {␣␣
++ func bar() {
+  ␣␣␣␣print("foo")
+  }
+```
+
+</details>
+<br/>
 
 ## typeSugar
 
@@ -2656,6 +3219,28 @@ Option | Description
 </details>
 <br/>
 
+## unusedPrivateDeclarations
+
+Remove unused private and fileprivate declarations.
+
+Option | Description
+--- | ---
+`--preservedecls` | Comma separated list of declaration names to exclude
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  struct Foo {
+-     fileprivate var foo = "foo"
+-     fileprivate var baz = "baz"
+      var bar = "bar"
+  }
+```
+
+</details>
+<br/>
+
 ## void
 
 Use `Void` for type declarations and `()` for values.
@@ -2717,7 +3302,7 @@ Option | Description
 `--wrapcollections` | Wrap array/dict: "before-first", "after-first", "preserve"
 `--closingparen` | Closing paren position: "balanced" (default) or "same-line"
 `--callsiteparen` | Closing paren at call sites: "balanced" or "same-line"
-`--wrapreturntype` | Wrap return type: "if-multiline", "preserve" (default)
+`--wrapreturntype` | Wrap return type: "if-multiline", "preserve", "never"
 `--wrapconditions` | Wrap conditions: "before-first", "after-first", "preserve"
 `--wraptypealiases` | Wrap typealiases: "before-first", "after-first", "preserve"
 `--wrapeffects` | Wrap effects: "if-multiline", "never", "preserve"
@@ -2936,6 +3521,27 @@ Wrap multiline conditional assignment expressions after the assignment operator.
 </details>
 <br/>
 
+## wrapMultilineFunctionChains
+
+Wraps chained function calls to either all on the same line, or one per line.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  let evenSquaresSum = [20, 17, 35, 4]
+-   .filter { $0 % 2 == 0 }.map { $0 * $0 }
+    .reduce(0, +)
+
+  let evenSquaresSum = [20, 17, 35, 4]
++   .filter { $0 % 2 == 0 }
++   .map { $0 * $0 }
+    .reduce(0, +)
+```
+
+</details>
+<br/>
+
 ## wrapMultilineStatementBraces
 
 Wrap the opening brace of multiline statements.
@@ -3034,3 +3640,19 @@ Prefer constant values to be on the right-hand-side of expressions.
 Option | Description
 --- | ---
 `--yodaswap` | Swap yoda values: "always" (default) or "literals-only"
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- if 5 == foo,
++ if foo == 5,
+-    nil != bar,
++    bar != nil,
+-    .default == baaz,
++    baaz == .default,
+  { ... }
+```
+
+</details>
+<br/>

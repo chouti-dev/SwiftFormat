@@ -2553,6 +2553,29 @@ class TokenizerTests: XCTestCase {
         XCTAssertEqual(tokenize(input), output)
     }
 
+    func testParameterPackGeneric() {
+        let input = "Optional<(Wrapped, Other, repeat each Another)>"
+        let output: [Token] = [
+            .identifier("Optional"),
+            .startOfScope("<"),
+            .startOfScope("("),
+            .identifier("Wrapped"),
+            .delimiter(","),
+            .space(" "),
+            .identifier("Other"),
+            .delimiter(","),
+            .space(" "),
+            .keyword("repeat"),
+            .space(" "),
+            .identifier("each"),
+            .space(" "),
+            .identifier("Another"),
+            .endOfScope(")"),
+            .endOfScope(">"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
     func testFunctionThatLooksLikeGenericType() {
         let input = "y<CGRectGetMaxY(r)"
         let output: [Token] = [
@@ -3455,6 +3478,39 @@ class TokenizerTests: XCTestCase {
             .space(" "),
             .startOfScope("{"),
             .endOfScope("}"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testGenericThrowingClosure() {
+        let input = "let a = Thing<[(Int) throws -> [Int]]>([])"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("a"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .identifier("Thing"),
+            .startOfScope("<"),
+            .startOfScope("["),
+            .startOfScope("("),
+            .identifier("Int"),
+            .endOfScope(")"),
+            .space(" "),
+            .keyword("throws"),
+            .space(" "),
+            .operator("->", .infix),
+            .space(" "),
+            .startOfScope("["),
+            .identifier("Int"),
+            .endOfScope("]"),
+            .endOfScope("]"),
+            .endOfScope(">"),
+            .startOfScope("("),
+            .startOfScope("["),
+            .endOfScope("]"),
+            .endOfScope(")"),
         ]
         XCTAssertEqual(tokenize(input), output)
     }
@@ -4491,6 +4547,45 @@ class TokenizerTests: XCTestCase {
         XCTAssertEqual(tokenize(input), output)
     }
 
+    func testAnonymousOptionalKeyPath() {
+        let input = "let foo = \\.?.bar"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("foo"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .operator("\\", .prefix),
+            .operator(".", .prefix),
+            .operator("?", .postfix),
+            .operator(".", .infix),
+            .identifier("bar"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testAnonymousOptionalSubscriptKeyPath() {
+        let input = "let foo = \\.?[0].bar"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("foo"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .operator("\\", .prefix),
+            .operator(".", .prefix),
+            .operator("?", .postfix),
+            .startOfScope("["),
+            .number("0", .integer),
+            .endOfScope("]"),
+            .operator(".", .infix),
+            .identifier("bar"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
     func testAttributeInsideGenericArguments() {
         let input = "Foo<(@MainActor () -> Void)?>(nil)"
         let output: [Token] = [
@@ -4515,7 +4610,7 @@ class TokenizerTests: XCTestCase {
         XCTAssertEqual(tokenize(input), output)
     }
 
-    // MARK: Supressed Conformances
+    // MARK: Suppressed Conformances
 
     func testNoncopyableStructDeclaration() {
         let input = "struct Foo: ~Copyable {}"

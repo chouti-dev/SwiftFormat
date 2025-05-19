@@ -428,12 +428,31 @@ class ArgumentsTests: XCTestCase {
         XCTAssertEqual(args["swiftversion"], "5.1")
     }
 
+    func testParseArgumentsContainingLanguageVersion() throws {
+        let config = "--languagemode 6"
+        let data = Data(config.utf8)
+        let args = try parseConfigFile(data)
+        XCTAssertEqual(args.count, 1)
+        XCTAssertEqual(args["languagemode"], "6")
+    }
+
     func testParseArgumentsContainingDisableAll() throws {
         let config = "--disable all"
         let data = Data(config.utf8)
         let args = try parseConfigFile(data)
         let options = try Options(args, in: "/")
         XCTAssertEqual(options.rules, [])
+    }
+
+    func testPopulatesDefaultLanguageMode() throws {
+        let swift5Options = FormatOptions(swiftVersion: "5.0")
+        XCTAssertEqual(swift5Options.languageMode, "5")
+
+        let swift6Options = FormatOptions(swiftVersion: "6.0")
+        XCTAssertEqual(swift6Options.languageMode, "5")
+
+        let swift6LangModeOptions = FormatOptions(swiftVersion: "6.0", languageMode: "6")
+        XCTAssertEqual(swift6LangModeOptions.languageMode, "6")
     }
 
     // MARK: config file serialization
@@ -467,7 +486,7 @@ class ArgumentsTests: XCTestCase {
     // trailing separator
 
     func testSerializeOptionsDisabledDefaultRulesEnabledIsEmpty() throws {
-        let rules = allRules.subtracting(FormatRules.disabledByDefault)
+        let rules = defaultRules
         let config: String = serialize(options: Options(formatOptions: nil, rules: rules))
         XCTAssertEqual(config, "")
     }
@@ -480,7 +499,7 @@ class ArgumentsTests: XCTestCase {
     }
 
     func testSerializeOptionsDisabledSomeRulesDisabledNoTerminatingSeparator() throws {
-        let rules = Set(allRules.prefix(3)).subtracting(FormatRules.disabledByDefault)
+        let rules = Set(defaultRules.prefix(3))
         let config: String = serialize(options: Options(formatOptions: nil, rules: rules))
         XCTAssertTrue(config.contains("--disable"))
         XCTAssertFalse(config.contains("--enable"))
@@ -488,7 +507,7 @@ class ArgumentsTests: XCTestCase {
     }
 
     func testSerializeOptionsEnabledDefaultRulesEnabledNoTerminatingSeparator() throws {
-        let rules = allRules.subtracting(FormatRules.disabledByDefault)
+        let rules = defaultRules
         let config: String = serialize(options: Options(formatOptions: .default, rules: rules))
         XCTAssertNotEqual(config, "")
         XCTAssertFalse(config.contains("--disable"))
@@ -504,7 +523,7 @@ class ArgumentsTests: XCTestCase {
     }
 
     func testSerializeOptionsEnabledSomeRulesDisabledNoTerminatingSeparator() throws {
-        let rules = Set(allRules.prefix(3)).subtracting(FormatRules.disabledByDefault)
+        let rules = Set(defaultRules.prefix(3))
         let config: String = serialize(options: Options(formatOptions: .default, rules: rules))
         XCTAssertTrue(config.contains("--disable"))
         XCTAssertFalse(config.contains("--enable"))
@@ -685,24 +704,24 @@ class ArgumentsTests: XCTestCase {
         let options = try Options([:], in: "")
         XCTAssertNil(options.formatOptions)
         XCTAssertNil(options.fileOptions)
-        XCTAssertEqual(options.rules, allRules.subtracting(FormatRules.disabledByDefault))
+        XCTAssertEqual(options.rules, defaultRules)
     }
 
     func testParseExcludedURLsFileOption() throws {
         let options = try Options(["exclude": "foo bar, baz"], in: "/dir")
-        let paths = options.fileOptions?.excludedGlobs.map { $0.description } ?? []
+        let paths = options.fileOptions?.excludedGlobs.map(\.description) ?? []
         XCTAssertEqual(paths, ["/dir/foo bar", "/dir/baz"])
     }
 
     func testParseUnexcludedURLsFileOption() throws {
         let options = try Options(["unexclude": "foo bar, baz"], in: "/dir")
-        let paths = options.fileOptions?.unexcludedGlobs.map { $0.description } ?? []
+        let paths = options.fileOptions?.unexcludedGlobs.map(\.description) ?? []
         XCTAssertEqual(paths, ["/dir/foo bar", "/dir/baz"])
     }
 
     func testParseDeprecatedOption() throws {
         let options = try Options(["ranges": "nospace"], in: "")
-        XCTAssertEqual(options.formatOptions?.spaceAroundRangeOperators, false)
+        XCTAssertEqual(options.formatOptions?.spaceAroundRangeOperators, .remove)
     }
 
     func testParseNoSpaceOperatorsOption() throws {

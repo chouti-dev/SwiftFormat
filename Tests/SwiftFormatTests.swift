@@ -67,7 +67,7 @@ class SwiftFormatTests: XCTestCase {
             return { files.append(inputURL) }
         }
         XCTAssertEqual(errors.count, 0)
-        XCTAssertEqual(files.count, 72)
+        XCTAssertGreaterThanOrEqual(files.count, 180)
     }
 
     func testInputFilesMatchOutputFilesForSameOutput() {
@@ -78,7 +78,7 @@ class SwiftFormatTests: XCTestCase {
             return { files.append(inputURL) }
         }
         XCTAssertEqual(errors.count, 0)
-        XCTAssertEqual(files.count, 72)
+        XCTAssertGreaterThanOrEqual(files.count, 180)
     }
 
     func testInputFileNotEnumeratedWhenExcluded() {
@@ -92,21 +92,29 @@ class SwiftFormatTests: XCTestCase {
             XCTAssertEqual(inputURL, outputURL)
             return { files.append(inputURL) }
         }
+
+        var allFiles = [URL]()
+        let allFilesInputURL = URL(fileURLWithPath: #file).deletingLastPathComponent().deletingLastPathComponent()
+        _ = enumerateFiles(withInputURL: allFilesInputURL, outputURL: allFilesInputURL) { inputURL, outputURL, _ in
+            XCTAssertEqual(inputURL, outputURL)
+            return { allFiles.append(inputURL) }
+        }
+
         XCTAssertEqual(errors.count, 0)
-        XCTAssertEqual(files.count, 45)
+        XCTAssertLessThan(files.count, allFiles.count)
     }
 
     // MARK: format function
 
     func testFormatReturnsInputWithNoRules() {
         let input = "foo ()  "
-        XCTAssertEqual(try format(input, rules: []), input)
+        XCTAssertEqual(try format(input, rules: []).output, input)
     }
 
     func testFormatUsesDefaultRulesIfNoneSpecified() {
         let input = "foo ()  "
         let output = "foo()\n"
-        XCTAssertEqual(try format(input), output)
+        XCTAssertEqual(try format(input).output, output)
     }
 
     // MARK: lint function
@@ -119,16 +127,16 @@ class SwiftFormatTests: XCTestCase {
     func testLintWithDefaultRules() {
         let input = "foo ()  "
         XCTAssertEqual(try lint(input), [
-            .init(line: 1, rule: FormatRules.linebreakAtEndOfFile, filePath: nil),
-            .init(line: 1, rule: FormatRules.spaceAroundParens, filePath: nil),
-            .init(line: 1, rule: FormatRules.trailingSpace, filePath: nil),
+            .init(line: 1, rule: .linebreakAtEndOfFile, filePath: nil, isMove: false),
+            .init(line: 1, rule: .spaceAroundParens, filePath: nil, isMove: false),
+            .init(line: 1, rule: .trailingSpace, filePath: nil, isMove: false),
         ])
     }
 
     func testLintConsecutiveBlankLinesAtEndOfFile() {
         let input = "foo\n\n"
         XCTAssertEqual(try lint(input), [
-            .init(line: 2, rule: FormatRules.consecutiveBlankLines, filePath: nil),
+            .init(line: 2, rule: .consecutiveBlankLines, filePath: nil, isMove: false),
         ])
     }
 
@@ -144,7 +152,7 @@ class SwiftFormatTests: XCTestCase {
     func testFormattingSucceedsForFragmentWithOption() {
         let input = "foo () {"
         let options = FormatOptions(fragment: true)
-        XCTAssertEqual(try format(input, rules: [], options: options), input)
+        XCTAssertEqual(try format(input, rules: [], options: options).output, input)
     }
 
     // MARK: format line range
@@ -160,7 +168,7 @@ class SwiftFormatTests: XCTestCase {
         let badlySpaced2: Int = 5
         let   badlySpaced3 : Int = 5
         """
-        XCTAssertEqual(try format(input, lineRange: 2 ... 2), output)
+        XCTAssertEqual(try format(input, lineRange: 2 ... 2).output, output)
     }
 
     func testFormattingRangeNoCrash() {
@@ -186,14 +194,14 @@ class SwiftFormatTests: XCTestCase {
     func testFormattingSucceedsForConflictWithOption() {
         let input = "foo () {\n<<<<<< old\n    bar()\n======\n    baz()\n>>>>>> new\n}"
         let options = FormatOptions(ignoreConflictMarkers: true)
-        XCTAssertEqual(try format(input, rules: [], options: options), input)
+        XCTAssertEqual(try format(input, rules: [], options: options).output, input)
     }
 
     // MARK: empty file
 
     func testNoTimeoutForEmptyFile() {
         let input = ""
-        XCTAssertEqual(try format(input), input)
+        XCTAssertEqual(try format(input).output, input)
     }
 
     // MARK: offsetForToken
@@ -277,7 +285,7 @@ class SwiftFormatTests: XCTestCase {
         let offset2 = SourceOffset(line: 2, column: 1)
         let offset3 = SourceOffset(line: 5, column: 1)
         let offset4 = SourceOffset(line: 6, column: 1)
-        let output = try format(input, rules: [FormatRules.consecutiveBlankLines])
+        let output = try format(input, rules: [.consecutiveBlankLines]).tokens
         let expected3 = SourceOffset(line: 4, column: 1)
         let expected4 = SourceOffset(line: 5, column: 1)
         XCTAssertEqual(newOffset(for: offset1, in: output, tabWidth: 1), offset1)
@@ -319,6 +327,6 @@ class SwiftFormatTests: XCTestCase {
     func testLinebreakInferredForBlankLinesBetweenScopes() {
         let input = "class Foo {\r  func bar() {\r  }\r  func baz() {\r  }\r}"
         let output = "class Foo {\r  func bar() {\r  }\r\r  func baz() {\r  }\r}"
-        XCTAssertEqual(try format(input, rules: [FormatRules.blankLinesBetweenScopes]), output)
+        XCTAssertEqual(try format(input, rules: [.blankLinesBetweenScopes]).output, output)
     }
 }

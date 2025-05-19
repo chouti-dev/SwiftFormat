@@ -32,9 +32,6 @@
 import XCTest
 @testable import SwiftFormat
 
-private let projectDirectory = URL(fileURLWithPath: #file)
-    .deletingLastPathComponent().deletingLastPathComponent()
-
 private func createTmpFile(_ path: String? = nil, contents: String) throws -> URL {
     let path = path ?? (UUID().uuidString + ".swift")
     let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(path)
@@ -105,6 +102,65 @@ class CommandLineTests: XCTestCase {
         _ = processArguments([""], in: "")
         readCount = 0
         _ = processArguments(["", "stdin"], in: "")
+    }
+
+    func testStdinOutputTokens() {
+        CLI.print = { message, type in
+            switch type {
+            case .raw, .content:
+                XCTAssertEqual(message, """
+                {"tokens":[\
+                {"string":"func","type":"keyword"},\
+                {"string":" ","type":"space"},\
+                {"string":"foo","type":"identifier"},\
+                {"string":"(","type":"startOfScope"},\
+                {"string":")","type":"endOfScope"},\
+                {"string":" ","type":"space"},\
+                {"string":"{","type":"startOfScope"},\
+                {"originalLine":2,"string":"\\n","type":"linebreak"},\
+                {"string":"    ","type":"space"},\
+                {"string":"bar","type":"identifier"},\
+                {"string":"(","type":"startOfScope"},\
+                {"string":")","type":"endOfScope"},\
+                {"string":" ","type":"space"},\
+                {"operatorType":"infix","string":"+","type":"operator"},\
+                {"string":" ","type":"space"},\
+                {"string":"baaz","type":"identifier"},\
+                {"string":"(","type":"startOfScope"},\
+                {"string":")","type":"endOfScope"},\
+                {"string":" ","type":"space"},\
+                {"operatorType":"infix","string":"+","type":"operator"},\
+                {"string":" ","type":"space"},\
+                {"numberType":"integer","string":"25","type":"number"},\
+                {"originalLine":3,"string":"\\n","type":"linebreak"},\
+                {"string":"}","type":"endOfScope"},\
+                {"originalLine":4,"string":"\\n","type":"linebreak"}\
+                ],"version":"\(swiftFormatVersion)"}
+                """)
+            case .error, .warning:
+                XCTFail()
+            case .info, .success:
+                break
+            }
+        }
+        var readCount = 0
+        CLI.readLine = {
+            readCount += 1
+            switch readCount {
+            case 1:
+                return "func foo()\n"
+            case 2:
+                return "{\n"
+            case 3:
+                return "bar() + baaz() + 25\n"
+            case 4:
+                return "}"
+            default:
+                return nil
+            }
+        }
+
+        _ = processArguments(["", "stdin", "--outputtokens"], in: "")
     }
 
     func testExcludeStdinPath() throws {
@@ -345,7 +401,7 @@ class CommandLineTests: XCTestCase {
     func testRulesNotMarkedAsDisabled() {
         CLI.print = { message, _ in
             XCTAssert(!message.contains("(disabled)") ||
-                FormatRules.disabledByDefault.contains(where: { message.contains($0) }))
+                FormatRules.disabledByDefault.contains(where: { message.contains($0.name) }))
         }
         XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--rules"), .ok)
     }
@@ -398,12 +454,12 @@ class CommandLineTests: XCTestCase {
         Package.swift #bar
 
         #baz
-        Sources/Rules.swift
+        Sources/FormatRule.swift
         CommandLineTool/*.swift
         """
         XCTAssertEqual(try parseFileList(source, in: projectDirectory.path), [
             URL(fileURLWithPath: "\(projectDirectory.path)/Package.swift"),
-            URL(fileURLWithPath: "\(projectDirectory.path)/Sources/Rules.swift"),
+            URL(fileURLWithPath: "\(projectDirectory.path)/Sources/FormatRule.swift"),
             URL(fileURLWithPath: "\(projectDirectory.path)/CommandLineTool/main.swift"),
         ])
     }
@@ -503,8 +559,8 @@ class CommandLineTests: XCTestCase {
                 url.path,
             ], in: "")
         }
-        let ouput = try String(contentsOf: outputURL)
-        XCTAssert(ouput.contains("\"rule_id\" : \"emptyBraces\""))
+        let output = try String(contentsOf: outputURL)
+        XCTAssert(output.contains("\"rule_id\" : \"emptyBraces\""))
     }
 
     func testGithubActionsLogReporterEndToEnd() throws {
@@ -599,7 +655,45 @@ class CommandLineTests: XCTestCase {
                 url.path,
             ], in: "")
         }
-        let ouput = try String(contentsOf: outputURL)
-        XCTAssert(ouput.contains("<error line=\"1\" column=\"0\" severity=\"warning\""))
+        let output = try String(contentsOf: outputURL)
+        XCTAssert(output.contains("<error line=\"1\" column=\"0\" severity=\"warning\""))
+    }
+
+    func testLintCommandOutputsOrganizeDeclarationOrderingViolations() {
+        var output: [String] = []
+        CLI.print = { message, _ in
+            output.append(message)
+        }
+
+        let input = """
+        struct Test {
+            func test() {
+                print("Test")
+            }
+            var foo: Foo
+            func bar() {
+                print("Bar")
+            }
+        }
+        """
+
+        let lines = input.components(separatedBy: "\n").map { $0 + "\n" }
+
+        var readCount = 0
+        CLI.readLine = {
+            guard readCount < lines.count else { return nil }
+            defer { readCount += 1 }
+            return lines[readCount]
+        }
+
+        _ = processArguments(["", "stdin", "--lint", "--rules", "organizeDeclarations"], in: "")
+
+        XCTAssertEqual(output, [
+            "Running SwiftFormat...",
+            "(lint mode - no files will be changed.)",
+            ":2:1: error: (organizeDeclarations) Organize declarations within class, struct, enum, actor, and extension bodies.",
+            ":5:1: error: (organizeDeclarations) Organize declarations within class, struct, enum, actor, and extension bodies.",
+            "Source input did not pass lint check.",
+        ])
     }
 }
