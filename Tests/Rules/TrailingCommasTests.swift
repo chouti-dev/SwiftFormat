@@ -275,14 +275,24 @@ class TrailingCommasTests: XCTestCase {
 
     func testTrailingCommasAddedToFunctionParameters() {
         let input = """
-        func foo(
-            bar _: Int
-        ) {}
+        struct Foo {
+            func foo(
+                bar: Int,
+                baaz: Int
+            ) -> Int {
+                bar + baaz
+            }
+        }
         """
         let output = """
-        func foo(
-            bar _: Int,
-        ) {}
+        struct Foo {
+            func foo(
+                bar: Int,
+                baaz: Int,
+            ) -> Int {
+                bar + baaz
+            }
+        }
         """
         let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
@@ -447,15 +457,25 @@ class TrailingCommasTests: XCTestCase {
 
     func testTrailingCommasAddedToTuple() {
         let input = """
-        let foo = (
+        var foo = (
             bar: 0,
             baz: 1
         )
+
+        foo = (
+            bar: 1,
+            baz: 2
+        )
         """
         let output = """
-        let foo = (
+        var foo = (
             bar: 0,
             baz: 1,
+        )
+
+        foo = (
+            bar: 1,
+            baz: 2,
         )
         """
         let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
@@ -625,7 +645,7 @@ class TrailingCommasTests: XCTestCase {
     func testPreservesTrailingCommaInTupleFunctionArgumentInSwift6_1_issue_2050() {
         let input = """
         func updateBackgroundMusic(
-            _ inputs: (
+            inputs _: (
                 isFullyVisible: Bool,
                 currentLevel: LevelsService.Level?,
                 isAudioEngineRunningInForeground: Bool,
@@ -649,6 +669,35 @@ class TrailingCommasTests: XCTestCase {
             bar: String,
             quux: String // trailing comma not supported
         )
+
+        let closure: @Sendable (
+            String,
+            String // trailing comma not supported
+        ) -> (
+            bar: String,
+            quux: String // trailing comma not supported
+        )
+
+        let closure: (
+            String,
+            String // trailing comma not supported
+        ) async -> (
+            bar: String,
+            quux: String // trailing comma not supported
+        )
+
+        let closure: (
+            String,
+            String // trailing comma not supported
+        ) async throws -> (
+            bar: String,
+            quux: String // trailing comma not supported
+        )
+
+        func foo(_: @escaping (
+            String,
+            String // trailing comma not supported
+        ) -> Void) {}
         """
 
         let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
@@ -664,6 +713,34 @@ class TrailingCommasTests: XCTestCase {
                 _ error: LocationServiceError?
             ) -> Void
         )?) {}
+        """
+
+        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommasPreservedInClosureTupleTypealiasesInSwift6_1() {
+        let input = """
+        public typealias StringToInt = (
+            String
+        ) -> Int
+
+        enum Toster {
+            public typealias StringToInt = ((
+                String
+            ) -> Int)?
+        }
+
+        public typealias Tuple = (
+            foo: String,
+            bar: Int
+        )
+
+        public typealias OptionalTuple = (
+            foo: String,
+            bar: Int,
+            baaz: Bool
+        )?
         """
 
         let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
@@ -1086,6 +1163,11 @@ class TrailingCommasTests: XCTestCase {
             String,
             Any
         > {}
+
+        protocol MyProtocolWithAssociatedTypes<
+            Foo,
+            Bar
+        > {}
         """
 
         let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
@@ -1245,5 +1327,32 @@ class TrailingCommasTests: XCTestCase {
 
         let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testSingleLineArrayWithMultipleElementsFollowingNotOperator() {
+        let input = """
+        for file in files where
+            file != "build" && !file.hasPrefix(".") && ![
+                ".build", ".app", ".framework", ".xcodeproj", ".xcassets",
+            ].contains(where: { file.hasSuffix($0) }) {}
+        """
+
+        let options = FormatOptions(trailingCommas: true)
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testSingleLineArrayWithMultipleElementsFollowingForceTry() {
+        let input = """
+        let foo = try! [
+            ".build", ".app", ".framework", ".xcodeproj", ".xcassets",
+        ].throwingOperation()
+
+        let bar = try? [
+            ".build", ".app", ".framework", ".xcodeproj", ".xcassets",
+        ].throwingOperation()
+        """
+
+        let options = FormatOptions(trailingCommas: true)
+        testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 }

@@ -1,5 +1,22 @@
 # Change Log
 
+## [0.56.4](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.56.4) (2025-06-15)
+
+- Fixed issue where `trailingCommas` rule would not insert trailing commas in function declarations with return type
+- Fixed issue where `trailingCommas` rule would not insert trailing commas in array literals following `!` operator
+- Fixed issue where `unusedArguments` rule would ignore function declarations with trailing commas
+- Fixed issue where `void` rule would not handle `()` types in typealiases
+- Fixed issue where `redundantLet` rule did not detect code inside result builders when nested in conditional compilation blocks
+
+## [0.56.3](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.56.3) (2025-06-04)
+
+- Fixed issue where `trailingCommas` rule would insert commas in closure types and tuple types used in typealaises (not supported in Swift 6.1)
+
+## [0.56.2](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.56.2) (2025-05-27)
+
+- Fixed issues where `trailingCommas` rule would insert commas in `@escpaing` or `@Sendable` closure types (not supported in Swift 6.1)
+- Fixed issue where `privateStateVariables` rule handled `@Previewable` attributes on previous line incorrectly
+
 ## [0.56.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.56.1) (2025-05-13)
 
 - Fixed several issues where `trailingCommas` rule would insert commas in places not actually supported by Swift 6.1

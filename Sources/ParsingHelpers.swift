@@ -325,9 +325,12 @@ extension Formatter {
                 if tokens[prevIndex].isAttribute {
                     prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: prevIndex) ?? prevIndex
                 }
+                let tokenBeforePrevIndex = lastToken(before: prevIndex, where: \.isNonSpaceOrCommentOrLinebreak)
+
                 switch tokens[prevIndex] {
                 case .identifier, .endOfScope(")"), .endOfScope("]"),
-                     .operator("?", _), .operator("!", _),
+                     .operator("?", .postfix) where tokenBeforePrevIndex != .keyword("try"),
+                     .operator("!", .postfix) where tokenBeforePrevIndex != .keyword("try"),
                      .endOfScope where token.isStringDelimiter:
                     if tokens[prevIndex + 1 ..< index].contains(where: \.isLinebreak) {
                         break
@@ -635,6 +638,24 @@ extension Formatter {
         default:
             return true
         }
+    }
+
+    /// Whether or not the index is the start of a valid closure type
+    func isStartOfClosureType(at i: Int) -> Bool {
+        guard let type = parseType(at: i),
+              index(of: .operator("->", .infix), in: Range(type.range)) != nil
+        else { return false }
+
+        // Avoid confusing the arguments + return type of a function declaration with a closure type
+        if let previousKeyword = indexOfLastSignificantKeyword(at: i, excluding: ["where"]),
+           tokens[previousKeyword] == .keyword("func"),
+           let functionDeclaration = parseFunctionDeclaration(keywordIndex: previousKeyword),
+           functionDeclaration.argumentsRange.lowerBound == type.range.lowerBound
+        {
+            return false
+        }
+
+        return true
     }
 
     func isInClosureArguments(at i: Int) -> Bool {
@@ -1095,7 +1116,7 @@ extension Formatter {
     func isInResultBuilder(at i: Int) -> Bool {
         var i = i
         while let startIndex = index(before: i, where: {
-            [.startOfScope("{"), .startOfScope(":")].contains($0)
+            [.startOfScope("{"), .startOfScope(":"), .startOfScope("#if")].contains($0)
         }) {
             guard let prevIndex = index(before: startIndex, where: {
                 !$0.isSpaceOrCommentOrLinebreak && !$0.isEndOfScope
@@ -1111,7 +1132,11 @@ extension Formatter {
                     break
                 }
             }
-            i = prevIndex
+            if tokens[prevIndex].isStartOfScope, i != startIndex {
+                i = startIndex
+            } else {
+                i = prevIndex
+            }
         }
         return false
     }
@@ -1272,6 +1297,7 @@ extension Formatter {
     ///  - `sending ...`
     ///  - `repeat ...`
     ///  - `each ...`
+    ///  - `inout ...`
     ///  - `~...`
     ///  - any `@attribute ...`
     ///  - `(type).(type)`
@@ -1395,7 +1421,7 @@ extension Formatter {
         }
 
         // Parse types with any of the following prefixes, along with any `@attribute`.
-        let typePrefixes = Set(["any", "some", "borrowing", "consuming", "sending", "repeat", "each", "~"])
+        let typePrefixes = Set(["any", "some", "borrowing", "consuming", "sending", "repeat", "each", "~", "inout"])
         if typePrefixes.contains(startToken.string) || startToken.isAttribute,
            let nextToken = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfTypeIndex),
            let followingType = parseType(at: nextToken)
@@ -2580,8 +2606,17 @@ extension Formatter {
     struct FunctionArgument: Equatable {
         /// The external label of this argument. `nil` if omitted with an `_`.
         let externalLabel: String?
+
         /// The internal label of this argument. `nil` if omitted with an `_`.
         let internalLabel: String?
+
+        /// The index of the external argument label. If nil, the argument
+        /// uses the same label both internally and externally.
+        let externalLabelIndex: Int?
+
+        /// The index of the internal argument name. Always present in the grammar.
+        let internalLabelIndex: Int
+
         /// The type of the argument
         var type: String
     }
@@ -2713,11 +2748,13 @@ extension Formatter {
             else { continue }
 
             var externalLabelIndex = internalLabelIndex
+            var hasExplicitExternalLabel = false
 
             if let possibleExternalLabelIndex = index(of: .nonSpaceOrComment, before: internalLabelIndex),
                tokens[possibleExternalLabelIndex].isIdentifier || tokens[possibleExternalLabelIndex].string == "_"
             {
                 externalLabelIndex = possibleExternalLabelIndex
+                hasExplicitExternalLabel = true
             }
 
             guard let startOfType = index(of: .nonSpaceOrComment, after: colonIndex),
@@ -2728,13 +2765,15 @@ extension Formatter {
                 if token.string == "_" {
                     return nil
                 } else {
-                    return token.string
+                    return token.unescaped()
                 }
             }
 
             arguments.append(FunctionArgument(
                 externalLabel: identifierString(tokens[externalLabelIndex]),
                 internalLabel: identifierString(tokens[internalLabelIndex]),
+                externalLabelIndex: hasExplicitExternalLabel ? externalLabelIndex : nil,
+                internalLabelIndex: internalLabelIndex,
                 type: type
             ))
         }
