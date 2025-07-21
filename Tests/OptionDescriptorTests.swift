@@ -94,7 +94,7 @@ class OptionDescriptorTests: XCTestCase {
             XCTAssertEqual(descriptor.fromOptions(options), item.argumentValue, "\(testName): Option is transformed to argument")
         }
 
-        if let invalid = invalid {
+        if let invalid {
             options[keyPath: keyPath] = invalid
             XCTAssertEqual(descriptor.fromOptions(options), descriptor.defaultArgument, "\(testName): invalid input return the default value")
         }
@@ -348,5 +348,11 @@ class OptionDescriptorTests: XCTestCase {
         let options1 = FormatOptions(selfRequired: ["foo", "bar", "baz"])
         let options2 = FormatOptions(selfRequired: ["baz", "bar", "foo"])
         XCTAssertEqual(options1.description, options2.description)
+    }
+
+    func testFileMacroCase() {
+        let argument = "#fileID"
+        var options: FormatOptions = .default
+        XCTAssertNoThrow(try Descriptors.preferFileMacro.toOptions(argument, &options))
     }
 }

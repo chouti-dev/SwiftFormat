@@ -13,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// swiftformat:options --indent 2 --maxwidth 100 --wrapparameters afterfirst
+// swiftformat:options --indent 2 --max-width 100 --wrap-parameters afterfirst
 // swiftformat:disable sortedImports unusedArguments wrapMultilineStatementBraces redundantParens
 
 import FirebaseFirestore
@@ -73,10 +73,10 @@ class _FirestoreDecoder: Decoder {
 
   /// The path to the current point in the container tree. Given the root container, one could
   /// conceptually reconstruct `storage` by following `codingPath` from the root container.
-  public fileprivate(set) var codingPath: [CodingKey]
+  fileprivate(set) var codingPath: [CodingKey]
 
   /// Contextual user-provided information for use during encoding.
-  public var userInfo: [CodingUserInfoKey: Any] = [:]
+  var userInfo: [CodingUserInfoKey: Any] = [:]
 
   // MARK: - Initialization
 
@@ -89,7 +89,7 @@ class _FirestoreDecoder: Decoder {
 
   // MARK: - Decoder Methods
 
-  public func container<Key>(keyedBy _: Key.Type) throws -> KeyedDecodingContainer<Key> {
+  func container<Key>(keyedBy _: Key.Type) throws -> KeyedDecodingContainer<Key> {
     guard !(storage.topContainer is NSNull) else {
       throw DecodingError.valueNotFound(KeyedDecodingContainer<Key>.self,
                                         DecodingError.Context(codingPath: codingPath,
@@ -106,7 +106,7 @@ class _FirestoreDecoder: Decoder {
     return KeyedDecodingContainer(container)
   }
 
-  public func unkeyedContainer() throws -> UnkeyedDecodingContainer {
+  func unkeyedContainer() throws -> UnkeyedDecodingContainer {
     guard !(storage.topContainer is NSNull) else {
       throw DecodingError.valueNotFound(UnkeyedDecodingContainer.self,
                                         DecodingError.Context(codingPath: codingPath,
@@ -121,7 +121,7 @@ class _FirestoreDecoder: Decoder {
     return _FirestoreUnkeyedDecodingContainer(referencing: self, wrapping: topContainer)
   }
 
-  public func singleValueContainer() throws -> SingleValueDecodingContainer {
+  func singleValueContainer() throws -> SingleValueDecodingContainer {
     return self
   }
 }
@@ -738,81 +738,81 @@ extension _FirestoreDecoder: SingleValueDecodingContainer {
     }
   }
 
-  public func decodeNil() -> Bool {
+  func decodeNil() -> Bool {
     return storage.topContainer is NSNull
   }
 
-  public func decode(_: Bool.Type) throws -> Bool {
+  func decode(_: Bool.Type) throws -> Bool {
     try expectNonNull(Bool.self)
     return try unbox(storage.topContainer, as: Bool.self)!
   }
 
-  public func decode(_: Int.Type) throws -> Int {
+  func decode(_: Int.Type) throws -> Int {
     try expectNonNull(Int.self)
     return try unbox(storage.topContainer, as: Int.self)!
   }
 
-  public func decode(_: Int8.Type) throws -> Int8 {
+  func decode(_: Int8.Type) throws -> Int8 {
     try expectNonNull(Int8.self)
     return try unbox(storage.topContainer, as: Int8.self)!
   }
 
-  public func decode(_: Int16.Type) throws -> Int16 {
+  func decode(_: Int16.Type) throws -> Int16 {
     try expectNonNull(Int16.self)
     return try unbox(storage.topContainer, as: Int16.self)!
   }
 
-  public func decode(_: Int32.Type) throws -> Int32 {
+  func decode(_: Int32.Type) throws -> Int32 {
     try expectNonNull(Int32.self)
     return try unbox(storage.topContainer, as: Int32.self)!
   }
 
-  public func decode(_: Int64.Type) throws -> Int64 {
+  func decode(_: Int64.Type) throws -> Int64 {
     try expectNonNull(Int64.self)
     return try unbox(storage.topContainer, as: Int64.self)!
   }
 
-  public func decode(_: UInt.Type) throws -> UInt {
+  func decode(_: UInt.Type) throws -> UInt {
     try expectNonNull(UInt.self)
     return try unbox(storage.topContainer, as: UInt.self)!
   }
 
-  public func decode(_: UInt8.Type) throws -> UInt8 {
+  func decode(_: UInt8.Type) throws -> UInt8 {
     try expectNonNull(UInt8.self)
     return try unbox(storage.topContainer, as: UInt8.self)!
   }
 
-  public func decode(_: UInt16.Type) throws -> UInt16 {
+  func decode(_: UInt16.Type) throws -> UInt16 {
     try expectNonNull(UInt16.self)
     return try unbox(storage.topContainer, as: UInt16.self)!
   }
 
-  public func decode(_: UInt32.Type) throws -> UInt32 {
+  func decode(_: UInt32.Type) throws -> UInt32 {
     try expectNonNull(UInt32.self)
     return try unbox(storage.topContainer, as: UInt32.self)!
   }
 
-  public func decode(_: UInt64.Type) throws -> UInt64 {
+  func decode(_: UInt64.Type) throws -> UInt64 {
     try expectNonNull(UInt64.self)
     return try unbox(storage.topContainer, as: UInt64.self)!
   }
 
-  public func decode(_: Float.Type) throws -> Float {
+  func decode(_: Float.Type) throws -> Float {
     try expectNonNull(Float.self)
     return try unbox(storage.topContainer, as: Float.self)!
   }
 
-  public func decode(_: Double.Type) throws -> Double {
+  func decode(_: Double.Type) throws -> Double {
     try expectNonNull(Double.self)
     return try unbox(storage.topContainer, as: Double.self)!
   }
 
-  public func decode(_: String.Type) throws -> String {
+  func decode(_: String.Type) throws -> String {
     try expectNonNull(String.self)
     return try unbox(storage.topContainer, as: String.self)!
   }
 
-  public func decode<T: Decodable>(_: T.Type) throws -> T {
+  func decode<T: Decodable>(_: T.Type) throws -> T {
     try expectNonNull(T.self)
     return try unbox(storage.topContainer, as: T.self)!
   }

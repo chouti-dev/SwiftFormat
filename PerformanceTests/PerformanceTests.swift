@@ -77,7 +77,7 @@ class PerformanceTests: XCTestCase {
             spaceAroundOperatorDeclarations: .remove,
             useVoid: false,
             indentCase: true,
-            trailingCommas: false,
+            trailingCommas: .never,
             indentComments: false,
             truncateBlankLines: false,
             allmanBraces: true,
@@ -93,7 +93,8 @@ class PerformanceTests: XCTestCase {
             hoistPatternLet: false,
             elseOnNextLine: true,
             explicitSelf: .insert,
-            experimentalRules: true
+            experimentalRules: true,
+            typeBlankLines: .insert
         )
         measure {
             _ = tokens.map { try! format($0, options: options) }

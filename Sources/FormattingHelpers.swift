@@ -163,7 +163,7 @@ extension Formatter {
                         guard let endIndex = endOfScope(at: nextIndex) else {
                             return fatalError("Expected end of scope", at: nextIndex)
                         }
-                        if let removeSelfKeyword = removeSelfKeyword {
+                        if let removeSelfKeyword {
                             var i = endIndex - 1
                             while i > nextIndex {
                                 switch tokens[i] {
@@ -192,7 +192,7 @@ extension Formatter {
                             names.formUnion(locals)
                             return
                         }
-                        continue
+                        continue inner
                     case .keyword("let"), .keyword("var"):
                         names.formUnion(locals)
                         declarationIndex = nextIndex
@@ -213,17 +213,8 @@ extension Formatter {
                         index = nextIndex
                         names.formUnion(locals)
                         break inner
-                    case .startOfScope("//"), .startOfScope("/*"):
-                        if case let .commentBody(comment)? = next(.nonSpace, after: nextIndex) {
-                            processCommentBody(comment, at: nextIndex)
-                            if token == .startOfScope("//") {
-                                processLinebreak()
-                            }
-                        }
-                        index = endOfScope(at: nextIndex) ?? (tokens.count - 1)
-                        continue inner
-                    case .linebreak:
-                        processLinebreak()
+                    case .endOfScope("*/"), .linebreak:
+                        updateEnablement(at: nextIndex)
                     default:
                         break
                     }
@@ -253,16 +244,8 @@ extension Formatter {
                     return
                 }
                 index = nextIndex
-            case .startOfScope("//"), .startOfScope("/*"):
-                if case let .commentBody(comment)? = next(.nonSpace, after: index) {
-                    processCommentBody(comment, at: index)
-                    if token == .startOfScope("//") {
-                        processLinebreak()
-                    }
-                }
-                index = endOfScope(at: index) ?? (tokens.count - 1)
-            case .linebreak:
-                processLinebreak()
+            case .endOfScope("*/"), .linebreak:
+                updateEnablement(at: index)
             default:
                 break
             }
@@ -375,7 +358,10 @@ extension Formatter {
                     if let nextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: cursorIndex - 1),
                        tokens[nextIndex] == .startOfScope("{")
                     {
-                        unwrapLine(before: nextIndex, preservingComments: true)
+                        // Don't unwrap the brace line if using Allman braces
+                        if !options.allmanBraces {
+                            unwrapLine(before: nextIndex, preservingComments: true)
+                        }
                     }
                 }
             }
@@ -423,7 +409,7 @@ extension Formatter {
             }
 
             // Insert linebreak after each comma
-            var index = self.index(of: .nonSpaceOrCommentOrLinebreak, before: endOfScope)!
+            var index = index(of: .nonSpaceOrCommentOrLinebreak, before: endOfScope)!
             if tokens[index] != .delimiter(",") {
                 index += 1
             }
@@ -590,7 +576,7 @@ extension Formatter {
             }
             guard mode != .disabled, let firstIdentifierIndex =
                 index(of: .nonSpaceOrCommentOrLinebreak, after: i),
-                !isInSingleLineStringLiteral(at: i)
+                !isInStringLiteralWithWrappingDisabled(at: i)
             else {
                 lastIndex = i
                 return
@@ -858,7 +844,7 @@ extension Formatter {
         forEach(.operator("?", .infix)) { conditionIndex, _ in
             guard options.wrapTernaryOperators != .default,
                   let expressionStartIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: conditionIndex),
-                  !isInSingleLineStringLiteral(at: conditionIndex)
+                  !isInStringLiteralWithWrappingDisabled(at: conditionIndex)
             else { return }
 
             // Find the : operator that separates the true and false branches
@@ -915,7 +901,7 @@ extension Formatter {
     }
 
     func indexWhereLineShouldWrap(from index: Int) -> Int? {
-        var lineLength = self.lineLength(upTo: index)
+        var lineLength = lineLength(upTo: index)
         var stringLiteralDepth = 0
         var currentPriority = 0
         var lastBreakPoint: Int?
@@ -1014,7 +1000,7 @@ extension Formatter {
                 break
             }
             lineLength += tokenLength(token)
-            if lineLength > maxWidth, let breakPoint = lastBreakPoint, breakPoint < i {
+            if lineLength > maxWidth, let breakPoint = lastBreakPoint, breakPoint < i, !isInStringLiteralWithWrappingDisabled(at: i) {
                 return breakPoint
             }
             i += 1
@@ -1026,7 +1012,7 @@ extension Formatter {
     func wrapStatementBody(at i: Int) {
         assert(token(at: i) == .startOfScope("{"))
 
-        guard !isInSingleLineStringLiteral(at: i) else {
+        guard !isInStringLiteralWithWrappingDisabled(at: i) else {
             return
         }
 
@@ -1086,6 +1072,26 @@ extension Formatter {
 
         // We want the closing brace at the same indentation level as conditional
         insertSpace(currentIndentForLine(at: i), at: closingBraceIndex)
+    }
+
+    /// Returns true if the token at the specified index is inside a single-line string literal (including inside an interpolation),
+    /// which should never be wrapped, or in any string literal when string interpolation wrapping is disabled.
+    func isInStringLiteralWithWrappingDisabled(at i: Int) -> Bool {
+        var i = i
+        while let startOfScope = startOfScope(at: i) {
+            i = startOfScope
+
+            if tokens[startOfScope].isStringDelimiter {
+                if options.wrapStringInterpolation == .preserve {
+                    return true
+                } else if !tokens[startOfScope].isMultilineStringDelimiter {
+                    // Single line strings can never have line break
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 
     func removeParen(at index: Int) {
@@ -1250,6 +1256,24 @@ extension Formatter {
         insertEffectKeyword(at: insertIndex)
     }
 
+    /// Adds `throws` effect to the given function declaration if not already present
+    func addThrowsEffect(to functionDecl: FunctionDeclaration) {
+        guard !functionDecl.effects.contains("throws") else { return }
+
+        if let effectsRange = functionDecl.effectsRange {
+            // If async is present, insert throws after it to maintain correct order: async throws
+            if let asyncIndex = index(of: .identifier("async"), in: effectsRange.lowerBound ..< effectsRange.upperBound + 1) {
+                insert([.space(" "), .keyword("throws")], at: asyncIndex + 1)
+            } else {
+                // Otherwise add it to the end of effects
+                insert([.keyword("throws"), .space(" ")], at: effectsRange.upperBound)
+            }
+        } else {
+            // If there are no effects, add after the arguments
+            insert([.space(" "), .keyword("throws")], at: functionDecl.argumentsRange.upperBound + 1)
+        }
+    }
+
     /// Whether or not the code block starting at the given `.startOfScope` token
     /// has a single statement. This makes it eligible to be used with implicit return.
     func blockBodyHasSingleStatement(
@@ -1259,7 +1283,7 @@ extension Formatter {
         includingReturnInConditionalStatements: Bool? = nil
     ) -> Bool {
         guard let endOfScopeIndex = endOfScope(at: startOfScopeIndex) else { return false }
-        let startOfBody = self.startOfBody(atStartOfScope: startOfScopeIndex)
+        let startOfBody = startOfBody(atStartOfScope: startOfScopeIndex)
 
         // The body should contain exactly one expression.
         // We can confirm this by parsing the body with `parseExpressionRange`,
@@ -1535,7 +1559,7 @@ extension Formatter {
 
         /// Inserts a blank line at the end of the switch case
         func insertTrailingBlankLine(using formatter: Formatter) {
-            guard let linebreakBeforeEndOfScope = linebreakBeforeEndOfScope else {
+            guard let linebreakBeforeEndOfScope else {
                 return
             }
 
@@ -1544,8 +1568,8 @@ extension Formatter {
 
         /// Removes the trailing blank line from the switch case if present
         func removeTrailingBlankLine(using formatter: Formatter) {
-            guard let linebreakBeforeEndOfScope = linebreakBeforeEndOfScope,
-                  let linebreakBeforeBlankLine = linebreakBeforeBlankLine
+            guard let linebreakBeforeEndOfScope,
+                  let linebreakBeforeBlankLine
             else { return }
 
             formatter.removeTokens(in: (linebreakBeforeBlankLine + 1) ... linebreakBeforeEndOfScope)
@@ -1602,7 +1626,7 @@ extension Formatter {
                 linebreakBeforeEndOfScope = tokenBeforeEndOfScope
             }
 
-            if let linebreakBeforeEndOfScope = linebreakBeforeEndOfScope,
+            if let linebreakBeforeEndOfScope,
                let tokenBeforeBlankLine = index(of: .nonSpace, before: linebreakBeforeEndOfScope),
                tokens[tokenBeforeBlankLine].isLinebreak
             {
@@ -1875,7 +1899,7 @@ extension Formatter {
                             return knownProtocol?.primaryAssociatedType == associatedTypeName
                         })
 
-                        if let matchingProtocolWithAssociatedType = matchingProtocolWithAssociatedType {
+                        if let matchingProtocolWithAssociatedType {
                             primaryAssociatedTypes[matchingProtocolWithAssociatedType] = conformance
                         } else {
                             // If this isn't the primary associated type of a protocol constraint, then we can't use it
@@ -2166,30 +2190,23 @@ extension Formatter {
                         } else {
                             localNames.insert(nameToken.unescaped())
                         }
-                    case .startOfScope("("), .startOfScope("#if"), .startOfScope(":"):
+                    case .startOfScope("("), .startOfScope("#if"), .startOfScope(":"),
+                         .startOfScope("/*"), .startOfScope("//"):
                         break
-                    case .startOfScope("//"), .startOfScope("/*"):
-                        if case let .commentBody(comment)? = next(.nonSpace, after: i) {
-                            processCommentBody(comment, at: i)
-                            if token == .startOfScope("//") {
-                                processLinebreak()
-                            }
-                        }
-                        i = endOfScope(at: i) ?? (tokens.count - 1)
                     case .startOfScope:
                         classOrStatic = false
                         i = endOfScope(at: i) ?? (tokens.count - 1)
                     case .endOfScope("}"), .endOfScope("case"), .endOfScope("default"):
                         break outer
-                    case .linebreak:
-                        processLinebreak()
+                    case .endOfScope("*/"), .linebreak:
+                        updateEnablement(at: i)
                     default:
                         break
                     }
                     i += 1
                 }
             }
-            if let type = type {
+            if let type {
                 membersByType[type.name] = members
                 classMembersByType[type.name] = classMembers
             }
@@ -2199,7 +2216,7 @@ extension Formatter {
             var classOrStatic = classOrStatic
             var scopeStack = [(token: Token.space(""), dynamicMemberTypes: Set<String>())]
 
-            // TODO: restructure this to use forEachToken to avoid exposing processCommentBody mechanism
+            // TODO: restructure this to use forEachToken to avoid exposing comment directives mechanism
             while let token = token(at: index) {
                 switch token {
                 case .keyword("is"), .keyword("as"), .keyword("try"), .keyword("await"):
@@ -2359,14 +2376,9 @@ extension Formatter {
                 case let .keyword(name):
                     lastKeyword = name
                     lastKeywordIndex = index
-                case .startOfScope("//"), .startOfScope("/*"):
-                    if case let .commentBody(comment)? = next(.nonSpace, after: index) {
-                        processCommentBody(comment, at: index)
-                        if token == .startOfScope("//") {
-                            processLinebreak()
-                        }
-                    }
+                case .startOfScope("/*"), .startOfScope("//"):
                     index = endOfScope(at: index) ?? (tokens.count - 1)
+                    updateEnablement(at: index)
                 case .startOfScope where token.isStringDelimiter, .startOfScope("#if"),
                      .startOfScope("["), .startOfScope("("):
                     scopeStack.append((token, []))
@@ -2437,7 +2449,7 @@ extension Formatter {
                     let classOrStatic = modifiersForDeclaration(at: lastKeywordIndex, contains: { _, string in
                         ["static", "class"].contains(string)
                     })
-                    if let name = name, classOrStatic || !staticSelf {
+                    if let name, classOrStatic || !staticSelf {
                         processAccessors(["get", "set", "willSet", "didSet", "init", "_modify"], for: name,
                                          at: &index, localNames: localNames, members: members,
                                          typeStack: &typeStack, closureStack: &closureStack,
@@ -2461,7 +2473,7 @@ extension Formatter {
 
                     // Handle a capture list followed by an optional parameter list:
                     // `{ [self, foo] bar in` or `{ [self, foo] in` etc.
-                    if let inIndex = inIndex,
+                    if let inIndex,
                        let captureListStartIndex = self.index(in: (index + 1) ..< inIndex, where: {
                            !$0.isSpaceOrCommentOrLinebreak && !$0.isAttribute
                        }),
@@ -2474,7 +2486,7 @@ extension Formatter {
 
                     // Handle a parameter list if present without a capture list
                     // e.g. `{ foo, bar in`
-                    else if let inIndex = inIndex,
+                    else if let inIndex,
                             let firstTokenInClosure = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index),
                             isInClosureArguments(at: firstTokenInClosure)
                     {
@@ -2556,7 +2568,7 @@ extension Formatter {
                             return true
                         }
 
-                        guard let selfCapture = selfCapture else {
+                        guard let selfCapture else {
                             return false
                         }
 
@@ -2709,7 +2721,7 @@ extension Formatter {
                         return
                     }
                 case .linebreak:
-                    processLinebreak()
+                    updateEnablement(at: index)
                 default:
                     break
                 }
@@ -2899,6 +2911,89 @@ extension Formatter {
                     classMembersByType: &classMembersByType,
                     usingDynamicLookup: false, classOrStatic: false,
                     isTypeRoot: false, isInit: false)
+    }
+
+    /// Ensures that the given range ends with at least one trailing blank line,
+    /// by adding a blank line to the end of this declaration if not already present.
+    func addTrailingBlankLineIfNeeded(in range: ClosedRange<Int>) {
+        let range = range.autoUpdating(in: self)
+        while tokens[range.range].numberOfTrailingLinebreaks() < 2 {
+            insertLinebreak(at: range.upperBound)
+        }
+    }
+
+    /// Ensures that given range doesn't end with a trailing blank line
+    /// by removing any trailing blank lines.
+    func removeTrailingBlankLinesIfPresent(in range: ClosedRange<Int>) {
+        let range = range.autoUpdating(in: self)
+        while tokens[range.range].numberOfTrailingLinebreaks() > 1 {
+            guard let lastNewlineIndex = lastIndex(of: .linebreak, in: Range(range.range)) else { break }
+
+            removeToken(at: lastNewlineIndex)
+        }
+    }
+
+    /// Ensures that given range starts with at least one leading blank line,
+    /// by adding blank like to the start of this declaration if not already present.
+    func addLeadingBlankLineIfNeeded(in range: ClosedRange<Int>) {
+        let range = range.autoUpdating(in: self)
+        while tokens[range.range].numberOfLeadingLinebreaks() < 2 {
+            insertLinebreak(at: range.lowerBound)
+        }
+    }
+
+    /// Ensures that the given range doesn't end with a trailing blank line
+    /// by removing any trailing blank lines.
+    func removeLeadingBlankLinesIfPresent(in range: ClosedRange<Int>) {
+        let range = range.autoUpdating(in: self)
+        while tokens[range.range].numberOfLeadingLinebreaks() > 1 {
+            guard let firstNewlineIndex = index(of: .linebreak, in: Range(range.range)) else { break }
+            removeTokens(in: range.lowerBound ... firstNewlineIndex)
+        }
+    }
+}
+
+extension RandomAccessCollection where Element == Token, Index == Int {
+    // The number of trailing newlines in this array of tokens,
+    // taking into account any spaces that may be between the linebreaks.
+    func numberOfLeadingLinebreaks() -> Int {
+        guard !isEmpty else { return 0 }
+
+        var numberOfLeadingLinebreaks = 0
+        var searchIndex = indices.first!
+
+        while searchIndex <= indices.last!,
+              self[searchIndex].isSpaceOrLinebreak
+        {
+            if self[searchIndex].isLinebreak {
+                numberOfLeadingLinebreaks += 1
+            }
+
+            searchIndex += 1
+        }
+
+        return numberOfLeadingLinebreaks
+    }
+
+    // The number of trailing newlines in this array of tokens,
+    // taking into account any spaces that may be between the linebreaks.
+    func numberOfTrailingLinebreaks() -> Int {
+        guard !isEmpty else { return 0 }
+
+        var numberOfTrailingLinebreaks = 0
+        var searchIndex = indices.last!
+
+        while searchIndex >= indices.first!,
+              self[searchIndex].isSpaceOrLinebreak
+        {
+            if self[searchIndex].isLinebreak {
+                numberOfTrailingLinebreaks += 1
+            }
+
+            searchIndex -= 1
+        }
+
+        return numberOfTrailingLinebreaks
     }
 }
 

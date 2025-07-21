@@ -70,11 +70,12 @@ enum Reporters {
         JSONReporter.self,
         GithubActionsLogReporter.self,
         XMLReporter.self,
+        SARIFReporter.self,
     ]
 
     static var help: String {
-        let names = all.map { "\"\($0.name)\"" }
-        return names.joined(separator: ", ")
+        // swiftformat:disable:next preferKeyPath
+        all.map { $0.name }.formattedList()
     }
 
     static func reporter(named: String, environment: [String: String]) -> Reporter? {

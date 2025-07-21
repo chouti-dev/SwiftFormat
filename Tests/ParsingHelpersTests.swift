@@ -2804,4 +2804,143 @@ class ParsingHelpersTests: XCTestCase {
         XCTAssertEqual(secondInit.whereClauseRange, nil)
         XCTAssertEqual(formatter.tokens[secondInit.bodyRange!].string, "{ return nil }")
     }
+
+    func testParseMarkdownFile() throws {
+        let input = #"""
+        # Sample README
+
+        This is a nice project with lots of cool APIs to know about, including:
+
+        ```swift
+        func foo(
+            bar: Bar
+            baaz: Baaz
+        ) -> Foo {}
+        ```
+
+        and:
+
+          ```swift no-format
+          class Foo {
+              public init() {}
+              public func bar() {}
+          }
+          ```
+
+        This sample code even has a multi-line string in it:
+
+        ```swift --indentstrings true
+        let codeBlock = """
+          ```swift
+          print("foo")
+          ```
+
+          ```diff
+          - print("foo")
+          + print("bar")
+          ```
+          """
+        ```
+
+        Try it out!
+        """#
+
+        let codeBlocks = try parseCodeBlocks(fromMarkdown: input, language: "swift")
+
+        XCTAssertEqual(
+            codeBlocks[0].text,
+            #"""
+            func foo(
+                bar: Bar
+                baaz: Baaz
+            ) -> Foo {}
+            """#
+        )
+
+        XCTAssertEqual(
+            codeBlocks[1].text,
+            #"""
+              class Foo {
+                  public init() {}
+                  public func bar() {}
+              }
+            """#
+        )
+
+        XCTAssertEqual(codeBlocks[1].options, "no-format")
+
+        XCTAssertEqual(
+            codeBlocks[2].text,
+            #"""
+            let codeBlock = """
+              ```swift
+              print("foo")
+              ```
+
+              ```diff
+              - print("foo")
+              + print("bar")
+              ```
+              """
+            """#
+        )
+
+        XCTAssertEqual(codeBlocks[2].options, "--indentstrings true")
+    }
+
+    func testParseMarkdownWithUnbalancedDelimiters() {
+        let input = """
+        # Sample README
+
+        This is a nice project with lots of cool APIs to know about, including:
+
+        ```swift
+        func foo(
+            bar: Bar
+            baaz: Baaz
+        ) -> Foo {}
+
+        ```swift
+        foo(bar: bar, baaz: baaz)
+        ```
+        """
+
+        XCTAssertThrowsError(try parseCodeBlocks(fromMarkdown: input, language: "swift"))
+    }
+
+    func testCommaSeparatedElementsInScope() {
+        let input = """
+        [
+            1,
+            2,
+            3
+        ]
+        """
+
+        let formatter = Formatter(tokenize(input))
+        let elements = formatter.commaSeparatedElementsInScope(startOfScope: 0).map { formatter.tokens[$0].string }
+        XCTAssertEqual(elements, [
+            "1",
+            "2",
+            "3",
+        ])
+    }
+
+    func testCommaSeparatedElementsInScopeWithTrailingComma() {
+        let input = """
+        foo(
+            foo: foo(),
+            bar: bar(foo, bar),
+            baaz: baaz.quux,
+        )
+        """
+
+        let formatter = Formatter(tokenize(input))
+        let elements = formatter.commaSeparatedElementsInScope(startOfScope: 1).map { formatter.tokens[$0].string }
+        XCTAssertEqual(elements, [
+            "foo: foo()",
+            "bar: bar(foo, bar)",
+            "baaz: baaz.quux",
+        ])
+    }
 }

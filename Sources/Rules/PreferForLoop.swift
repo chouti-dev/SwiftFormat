@@ -11,7 +11,7 @@ import Foundation
 public extension FormatRule {
     static let preferForLoop = FormatRule(
         help: "Convert functional `forEach` calls to for loops.",
-        options: ["anonymousforeach", "inlinedforeach"]
+        options: ["anonymous-for-each", "single-line-for-each"]
     ) { formatter in
         formatter.forEach(.identifier("forEach")) { forEachIndex, _ in
             // Make sure this is a function call preceded by a `.`
@@ -196,7 +196,7 @@ public extension FormatRule {
                 }
             }
 
-            if let forEachCallCloseParenIndex = forEachCallCloseParenIndex {
+            if let forEachCallCloseParenIndex {
                 formatter.removeToken(at: forEachCallCloseParenIndex)
             }
 

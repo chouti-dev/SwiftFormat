@@ -190,7 +190,7 @@ class IndentTests: XCTestCase {
 
     func testNoIndentWrappedModifiersForProtocol() {
         let input = "@objc\nprivate\nprotocol Foo {}"
-        testFormatting(for: input, rule: .indent)
+        testFormatting(for: input, rule: .indent, exclude: [.modifiersOnSameLine])
     }
 
     // indent braces
@@ -989,13 +989,13 @@ class IndentTests: XCTestCase {
     func testWrappedLineAfterComma() {
         let input = "let a = b,\nb = c"
         let output = "let a = b,\n    b = c"
-        testFormatting(for: input, output, rule: .indent)
+        testFormatting(for: input, output, rule: .indent, exclude: [.singlePropertyPerLine])
     }
 
     func testWrappedBeforeComma() {
         let input = "let a = b\n, b = c"
         let output = "let a = b\n    , b = c"
-        testFormatting(for: input, output, rule: .indent, exclude: [.leadingDelimiters])
+        testFormatting(for: input, output, rule: .indent, exclude: [.leadingDelimiters, .singlePropertyPerLine])
     }
 
     func testWrappedLineAfterCommaInsideArray() {

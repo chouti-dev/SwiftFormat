@@ -1134,12 +1134,12 @@ class WrapArgumentsTests: XCTestCase {
 
     func testWrapProtocolFuncParametersBeforeFirst() {
         let input = """
-        protocol Foo {
+        public protocol Foo {
             public func stringify<T>(_ value: T, label: String) -> (T, String)
         }
         """
         let output = """
-        protocol Foo {
+        public protocol Foo {
             public func stringify<T>(
                 _ value: T,
                 label: String
@@ -1209,7 +1209,7 @@ class WrapArgumentsTests: XCTestCase {
     func testNoDoubleSpaceAddedToWrappedArray() {
         let input = "[ foo,\n    bar ]"
         let output = "[\n    foo,\n    bar\n]"
-        let options = FormatOptions(trailingCommas: false, wrapCollections: .beforeFirst)
+        let options = FormatOptions(trailingCommas: .never, wrapCollections: .beforeFirst)
         testFormatting(for: input, [output], rules: [.wrapArguments, .spaceInsideBrackets],
                        options: options)
     }
@@ -1217,7 +1217,7 @@ class WrapArgumentsTests: XCTestCase {
     func testTrailingCommasAddedToWrappedArray() {
         let input = "[foo,\n    bar]"
         let output = "[\n    foo,\n    bar,\n]"
-        let options = FormatOptions(trailingCommas: true, wrapCollections: .beforeFirst)
+        let options = FormatOptions(trailingCommas: .always, wrapCollections: .beforeFirst)
         testFormatting(for: input, [output], rules: [.wrapArguments, .trailingCommas],
                        options: options)
     }
@@ -1225,7 +1225,7 @@ class WrapArgumentsTests: XCTestCase {
     func testTrailingCommasAddedToWrappedNestedDictionary() {
         let input = "[foo: [bar: baz,\n    bar2: baz2]]"
         let output = "[foo: [\n    bar: baz,\n    bar2: baz2,\n]]"
-        let options = FormatOptions(trailingCommas: true, wrapCollections: .beforeFirst)
+        let options = FormatOptions(trailingCommas: .always, wrapCollections: .beforeFirst)
         testFormatting(for: input, [output], rules: [.wrapArguments, .trailingCommas],
                        options: options)
     }
@@ -1233,7 +1233,7 @@ class WrapArgumentsTests: XCTestCase {
     func testTrailingCommasAddedToSingleLineNestedDictionary() {
         let input = "[\n    foo: [bar: baz, bar2: baz2]]"
         let output = "[\n    foo: [bar: baz, bar2: baz2],\n]"
-        let options = FormatOptions(trailingCommas: true, wrapCollections: .beforeFirst)
+        let options = FormatOptions(trailingCommas: .always, wrapCollections: .beforeFirst)
         testFormatting(for: input, [output], rules: [.wrapArguments, .trailingCommas],
                        options: options)
     }
@@ -1241,7 +1241,7 @@ class WrapArgumentsTests: XCTestCase {
     func testTrailingCommasAddedToWrappedNestedDictionaries() {
         let input = "[foo: [bar: baz,\n    bar2: baz2],\n    foo2: [bar: baz,\n    bar2: baz2]]"
         let output = "[\n    foo: [\n        bar: baz,\n        bar2: baz2,\n    ],\n    foo2: [\n        bar: baz,\n        bar2: baz2,\n    ],\n]"
-        let options = FormatOptions(trailingCommas: true, wrapCollections: .beforeFirst)
+        let options = FormatOptions(trailingCommas: .always, wrapCollections: .beforeFirst)
         testFormatting(for: input, [output], rules: [.wrapArguments, .trailingCommas],
                        options: options)
     }
@@ -1311,7 +1311,7 @@ class WrapArgumentsTests: XCTestCase {
     func testNoBeforeFirstPreservedAndTrailingCommaIgnoredInMultilineNestedDictionary() {
         let input = "[foo: [bar: baz,\n    bar2: baz2]]"
         let output = "[foo: [bar: baz,\n       bar2: baz2]]"
-        let options = FormatOptions(trailingCommas: true, wrapCollections: .preserve)
+        let options = FormatOptions(trailingCommas: .always, wrapCollections: .preserve)
         testFormatting(for: input, [output], rules: [.wrapArguments, .trailingCommas],
                        options: options)
     }
@@ -1319,7 +1319,7 @@ class WrapArgumentsTests: XCTestCase {
     func testBeforeFirstPreservedAndTrailingCommaAddedInSingleLineNestedDictionary() {
         let input = "[\n    foo: [bar: baz, bar2: baz2]]"
         let output = "[\n    foo: [bar: baz, bar2: baz2],\n]"
-        let options = FormatOptions(trailingCommas: true, wrapCollections: .preserve)
+        let options = FormatOptions(trailingCommas: .always, wrapCollections: .preserve)
         testFormatting(for: input, [output], rules: [.wrapArguments, .trailingCommas],
                        options: options)
     }
@@ -1327,7 +1327,7 @@ class WrapArgumentsTests: XCTestCase {
     func testBeforeFirstPreservedAndTrailingCommaAddedInSingleLineNestedDictionaryWithOneNestedItem() {
         let input = "[\n    foo: [bar: baz]]"
         let output = "[\n    foo: [bar: baz],\n]"
-        let options = FormatOptions(trailingCommas: true, wrapCollections: .preserve)
+        let options = FormatOptions(trailingCommas: .always, wrapCollections: .preserve)
         testFormatting(for: input, [output], rules: [.wrapArguments, .trailingCommas],
                        options: options)
     }
@@ -2174,6 +2174,32 @@ class WrapArgumentsTests: XCTestCase {
         )
 
         testFormatting(for: input, output, rule: .wrapArguments, options: options)
+    }
+
+    func testAllmanBraceWithWrapReturnTypeNever() {
+        let input = """
+        func makeStuff(
+            param1: String = "",
+            param2: Int? = nil,
+            param3: String = ""
+        ) -> String {
+            print(param1, param2, param3)
+            return "return"
+        }
+        """
+        let output = """
+        func makeStuff(
+            param1: String = "",
+            param2: Int? = nil,
+            param3: String = ""
+        ) -> String
+        {
+            print(param1, param2, param3)
+            return "return"
+        }
+        """
+        let options = FormatOptions(allmanBraces: true, wrapReturnType: .never)
+        testFormatting(for: input, [output], rules: [.wrapArguments, .braces], options: options)
     }
 
     func testWrapArgumentsDoesntBreakFunctionDeclaration_issue_1776() {

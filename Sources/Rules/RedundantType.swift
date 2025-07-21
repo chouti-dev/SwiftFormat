@@ -12,7 +12,7 @@ public extension FormatRule {
     /// Removes explicit type declarations from initialization declarations
     static let redundantType = FormatRule(
         help: "Remove redundant type from variable declarations.",
-        options: ["propertytypes"]
+        options: ["property-types"]
     ) { formatter in
         formatter.forEach(.operator("=", .infix)) { i, _ in
             guard let keyword = formatter.lastSignificantKeyword(at: i),
@@ -54,7 +54,7 @@ public extension FormatRule {
             // Explicit type can't be safely removed from @Model classes
             // https://github.com/nicklockwood/SwiftFormat/issues/1649
             if !isInferred,
-               let declarationKeywordIndex = declarationKeywordIndex,
+               let declarationKeywordIndex,
                formatter.modifiersForDeclaration(at: declarationKeywordIndex, contains: "@Model")
             {
                 return
@@ -135,15 +135,15 @@ public extension FormatRule {
     } examples: {
         """
         ```diff
-        // with --propertytypes inferred
+          // with --propertytypes inferred
         - let view: UIView = UIView()
         + let view = UIView()
 
-        // with --propertytypes explicit
+          // with --propertytypes explicit
         - let view: UIView = UIView()
         + let view: UIView = .init()
 
-        // with --propertytypes infer-locals-only
+          // with --propertytypes infer-locals-only
           class Foo {
         -     let view: UIView = UIView()
         +     let view: UIView = .init()
@@ -154,7 +154,7 @@ public extension FormatRule {
               }
           }
 
-        // Swift 5.9+, with --propertytypes inferred (SE-0380)
+          // Swift 5.9+, with --propertytypes inferred (SE-0380)
         - let foo: Foo = if condition {
         + let foo = if condition {
               Foo("foo")
@@ -162,7 +162,7 @@ public extension FormatRule {
               Foo("bar")
           }
 
-        // Swift 5.9+, with --propertytypes explicit (SE-0380)
+          // Swift 5.9+, with --propertytypes explicit (SE-0380)
           let foo: Foo = if condition {
         -     Foo("foo")
         +     .init("foo")

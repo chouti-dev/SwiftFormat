@@ -86,7 +86,7 @@ extension Declaration {
 
     /// The fully qualified name of this declaration, including the name of each parent declaration.
     var fullyQualifiedName: String? {
-        guard let name = name else { return nil }
+        guard let name else { return nil }
         let typeNames = parentDeclarations.compactMap(\.name) + [name]
         return typeNames.joined(separator: ".")
     }
@@ -118,8 +118,9 @@ extension Declaration {
 
     /// The start index of this declaration's modifiers,
     /// which represents the first non-space / non-comment token in the declaration.
-    var startOfModifiersIndex: Int {
-        formatter.startOfModifiers(at: keywordIndex, includingAttributes: true)
+    func startOfModifiersIndex(includingAttributes: Bool) -> Int {
+        let startOfModifiers = formatter.startOfModifiers(at: keywordIndex, includingAttributes: includingAttributes)
+        return max(startOfModifiers, range.lowerBound)
     }
 
     /// The modifiers before this declaration's keyword, including any attributes.
@@ -161,8 +162,18 @@ extension Declaration {
 
     /// A list of all declarations that are a parent of this declaration
     var parentDeclarations: [Declaration] {
-        guard let parent = parent else { return [] }
+        guard let parent else { return [] }
         return parent.parentDeclarations + [parent]
+    }
+
+    /// The type that contains this declaration, or `nil` if this is a top-level declaration.
+    /// The closest `parent` that is not a conditional compilation declaration.
+    var parentType: TypeDeclaration? {
+        if let parentType = parent?.asTypeDeclaration {
+            return parentType
+        } else {
+            return parent?.parentType
+        }
     }
 
     /// The `CustomDebugStringConvertible` representation of this declaration
@@ -353,7 +364,7 @@ final class ConditionalCompilationDeclaration: Declaration {
 
 // MARK: - Helpers
 
-extension Collection where Element == Declaration {
+extension Collection<Declaration> {
     /// Performs the given operation for each declaration in this tree of declarations.
     func forEachRecursiveDeclaration(_ operation: (Declaration) -> Void) {
         for declaration in self {
@@ -376,43 +387,15 @@ extension Declaration {
     }
 
     /// Ensures that this declaration ends with at least one trailing blank line,
-    /// by a blank like to the end of this declaration if not already present.
+    /// by adding a blank line to the end of this declaration if not already present.
     func addTrailingBlankLineIfNeeded() {
-        while tokens.numberOfTrailingLinebreaks() < 2 {
-            formatter.insertLinebreak(at: range.upperBound)
-        }
+        formatter.addTrailingBlankLineIfNeeded(in: range)
     }
 
     /// Ensures that this declaration doesn't end with a trailing blank line
     /// by removing any trailing blank lines.
     func removeTrailingBlankLinesIfPresent() {
-        while tokens.numberOfTrailingLinebreaks() > 1 {
-            guard let lastNewlineIndex = formatter.lastIndex(of: .linebreak, in: Range(range)) else { break }
-            formatter.removeTokens(in: lastNewlineIndex ... range.upperBound)
-        }
-    }
-}
-
-extension RandomAccessCollection where Element == Token, Index == Int {
-    // The number of trailing newlines in this array of tokens,
-    // taking into account any spaces that may be between the linebreaks.
-    func numberOfTrailingLinebreaks() -> Int {
-        guard !isEmpty else { return 0 }
-
-        var numberOfTrailingLinebreaks = 0
-        var searchIndex = indices.last!
-
-        while searchIndex >= indices.first!,
-              self[searchIndex].isSpaceOrLinebreak
-        {
-            if self[searchIndex].isLinebreak {
-                numberOfTrailingLinebreaks += 1
-            }
-
-            searchIndex -= 1
-        }
-
-        return numberOfTrailingLinebreaks
+        formatter.removeTrailingBlankLinesIfPresent(in: range)
     }
 }
 

@@ -12,7 +12,7 @@ public extension FormatRule {
     static let conditionalAssignment = FormatRule(
         help: "Assign properties using if / switch expressions.",
         orderAfter: [.redundantReturn],
-        options: ["condassignment"]
+        options: ["conditional-assignment"]
     ) { formatter in
         // If / switch expressions were added in Swift 5.9 (SE-0380)
         guard formatter.options.swiftVersion >= "5.9" else {
@@ -107,7 +107,7 @@ public extension FormatRule {
                     startOfParentScope = formatter.startOfScope(at: caseToken)
                 }
 
-                if let startOfParentScope = startOfParentScope,
+                if let startOfParentScope,
                    let mostRecentIfOrSwitch = formatter.index(of: .keyword, before: startOfParentScope, if: { ["if", "switch"].contains($0.string) }),
                    let conditionalBranches = formatter.conditionalBranches(at: mostRecentIfOrSwitch),
                    let startOfFirstParentBranch = conditionalBranches.first?.startOfBranch,
@@ -156,7 +156,7 @@ public extension FormatRule {
         +     "bar"
           }
 
-        // With --condassignment always (disabled by default)
+          // With --condassignment always (disabled by default)
         - switch condition {
         + foo.bar = switch condition {
           case true:

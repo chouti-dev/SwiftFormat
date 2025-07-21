@@ -235,7 +235,7 @@ private struct Inference {
                 noTrailing += 1
             }
         }
-        options.trailingCommas = (trailing >= noTrailing)
+        options.trailingCommas = (trailing >= noTrailing) ? .always : .never
     }
 
     let truncateBlankLines = OptionInferrer { formatter, options in
@@ -563,7 +563,7 @@ private struct Inference {
         var functionArgsRemoved = 0, functionArgsKept = 0
         var unnamedFunctionArgsRemoved = 0, unnamedFunctionArgsKept = 0
 
-        func removeUsed<T>(from argNames: inout [String], with associatedData: inout [T], in range: CountableRange<Int>) {
+        func removeUsed(from argNames: inout [String], with associatedData: inout [some Any], in range: CountableRange<Int>) {
             for i in range {
                 let token = formatter.tokens[i]
                 if case .identifier = token, let index = argNames.firstIndex(of: token.unescaped()),
@@ -758,7 +758,7 @@ private struct Inference {
                     i += 1
                 }
             }
-            if let type = type {
+            if let type {
                 membersByType[type] = members
                 classMembersByType[type] = classMembers
             }
@@ -880,14 +880,9 @@ private struct Inference {
                 case let .keyword(name):
                     lastKeyword = name
                     lastKeywordIndex = index
-                case .startOfScope("//"), .startOfScope("/*"):
-                    if case let .commentBody(comment)? = formatter.next(.nonSpace, after: index) {
-                        formatter.processCommentBody(comment, at: index)
-                        if token == .startOfScope("//") {
-                            formatter.processLinebreak()
-                        }
-                    }
+                case .startOfScope("/*"), .startOfScope("//"):
                     index = formatter.endOfScope(at: index) ?? (formatter.tokens.count - 1)
+                    formatter.updateEnablement(at: index)
                 case .startOfScope("("):
                     if case let .identifier(fn)? = formatter.last(.nonSpaceOrCommentOrLinebreak, before: index),
                        selfRequired.contains(fn) || fn == "expect"
@@ -997,7 +992,7 @@ private struct Inference {
                         }
                         prevIndex -= 1
                     }
-                    if let name = name {
+                    if let name {
                         processAccessors(["get", "set", "willSet", "didSet", "init", "_modify"], for: name,
                                          at: &index, localNames: localNames, members: members,
                                          typeStack: &typeStack, membersByType: &membersByType,
@@ -1107,7 +1102,7 @@ private struct Inference {
                         return
                     }
                 case .linebreak:
-                    formatter.processLinebreak()
+                    formatter.updateEnablement(at: index)
                 default:
                     break
                 }

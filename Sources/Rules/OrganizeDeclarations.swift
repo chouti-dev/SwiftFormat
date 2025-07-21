@@ -13,18 +13,16 @@ public extension FormatRule {
         help: "Organize declarations within class, struct, enum, actor, and extension bodies.",
         runOnceOnly: true,
         disabledByDefault: true,
-        orderAfter: [.extensionAccessControl, .redundantFileprivate],
+        orderAfter: [.extensionAccessControl, .redundantFileprivate, .redundantPublic],
         options: [
-            "categorymark", "markcategories", "beforemarks",
-            "lifecycle", "organizetypes", "structthreshold", "classthreshold",
-            "enumthreshold", "extensionlength", "organizationmode",
-            "visibilityorder", "typeorder", "visibilitymarks", "typemarks",
-            "groupblanklines", "sortswiftuiprops",
+            "category-mark", "mark-categories", "before-marks",
+            "lifecycle", "organize-types", "struct-threshold", "class-threshold",
+            "enum-threshold", "extension-threshold", "organization-mode",
+            "visibility-order", "type-order", "visibility-marks", "type-marks",
+            "group-blank-lines", "sort-swiftui-properties",
         ],
-        sharedOptions: ["sortedpatterns", "lineaftermarks", "linebreaks"]
+        sharedOptions: ["sorted-patterns", "line-after-marks", "linebreaks"]
     ) { formatter in
-        guard !formatter.options.fragment else { return }
-
         formatter.parseDeclarations().forEachRecursiveDeclaration { declaration in
             // Organize the body of type declarations
             guard let typeDeclaration = declaration.asTypeDeclaration else { return }
@@ -32,22 +30,22 @@ public extension FormatRule {
         }
     } examples: {
         """
-        Default value for `--visibilityorder` when using `--organizationmode visibility`:
+        Default value for `--visibility-order` when using `--organization-mode visibility`:
         `\(VisibilityCategory.defaultOrdering(for: .visibility).map(\.rawValue).joined(separator: ", "))`
 
-        Default value for `--visibilityorder` when using `--organizationmode type`:
+        Default value for `--visibility-order` when using `--organization-mode type`:
         `\(VisibilityCategory.defaultOrdering(for: .type).map(\.rawValue).joined(separator: ", "))`
 
-        **NOTE:** When providing custom arguments for `--visibilityorder` the following entries must be included:
+        **NOTE:** When providing custom arguments for `--visibility-order` the following entries must be included:
         `\(VisibilityCategory.essentialCases.map(\.rawValue).joined(separator: ", "))`
 
-        Default value for `--typeorder` when using `--organizationmode visibility`:
+        Default value for `--type-order` when using `--organization-mode visibility`:
         `\(DeclarationType.defaultOrdering(for: .visibility).map(\.rawValue).joined(separator: ", "))`
 
-        Default value for `--typeorder` when using `--organizationmode type`:
+        Default value for `--type-order` when using `--organization-mode type`:
         `\(DeclarationType.defaultOrdering(for: .type).map(\.rawValue).joined(separator: ", "))`
 
-        **NOTE:** The follow declaration types must be included in either `--typeorder` or `--visibilityorder`:
+        **NOTE:** The follow declaration types must be included in either `--type-order` or `--visibility-order`:
         `\(DeclarationType.essentialCases.map(\.rawValue).joined(separator: ", "))`
 
         **NOTE:** The Swift compiler automatically synthesizes a memberwise `init` for `struct` types.
@@ -55,7 +53,7 @@ public extension FormatRule {
         To allow SwiftFormat to reorganize your code effectively, you must explicitly declare an `init`.
         Without this declaration, only functions will be reordered, while properties will remain in their original order. 
 
-        `--organizationmode visibility` (default)
+        `--organization-mode visibility` (default)
 
         ```diff
           public class Foo {
@@ -70,7 +68,7 @@ public extension FormatRule {
         -     func f() {}
         -     init() {}
         -     deinit() {}
-         }
+          }
 
           public class Foo {
         +
@@ -97,10 +95,10 @@ public extension FormatRule {
         +
         +     private let g: Int = 2
         +
-         }
+          }
         ```
 
-        `--organizationmode type`
+        `--organization-mode type`
 
         ```diff
           public class Foo {
@@ -115,7 +113,7 @@ public extension FormatRule {
         -     func f() {}
         -     init() {}
         -     deinit() {}
-         }
+          }
 
           public class Foo {
         +
@@ -138,7 +136,7 @@ public extension FormatRule {
         +     public func c() -> String {}
         +     public func d() {}
         +
-         }
+          }
         ```
         """
     }
@@ -155,7 +153,7 @@ extension Formatter {
         else { return }
 
         // Parse category order from options
-        let categoryOrder = self.categoryOrder(for: options.organizationMode)
+        let categoryOrder = categoryOrder(for: options.organizationMode)
 
         // Adjust the ranges of the type's body declarations so that any
         // existing MARK comment is the first tokens in any declaration.
@@ -475,7 +473,7 @@ extension Formatter {
 
             // Move any tokens from before the category separator into the previous declaration.
             // This makes sure that things like comments stay grouped in the same category.
-            if let previousDeclaration = previousDeclaration, startOfCommentLine != 0 {
+            if let previousDeclaration, startOfCommentLine != 0 {
                 // Remove the tokens before the category separator from this declaration...
                 let rangeBeforeComment = min(startOfCommentLine, declaration.range.lowerBound) ..< startOfCommentLine
                 let tokensBeforeCommentLine = Array(tokens[rangeBeforeComment])
@@ -585,7 +583,7 @@ extension Formatter {
         /// Ends the current group, ensuring that groups are only recorded
         /// when they contain two or more declarations.
         func endCurrentGroup(addingToExistingGroup declarationToAdd: Declaration? = nil) {
-            if let declarationToAdd = declarationToAdd {
+            if let declarationToAdd {
                 currentGroup.append(declarationToAdd)
             }
 
@@ -623,7 +621,7 @@ struct Category: Equatable, Hashable {
     var visibility: VisibilityCategory
     var type: DeclarationType
     var order: Int
-    var comment: String? = nil
+    var comment: String?
 
     /// The comment tokens that should precede all declarations in this category
     func markCommentBody(from template: String, with mode: DeclarationOrganizationMode) -> String? {
@@ -753,7 +751,7 @@ extension Formatter {
             guard declarationTypes.contains(essentialDeclarationType)
                 || VisibilityCategorys.contains(.explicit(essentialDeclarationType))
             else {
-                Swift.fatalError("\(essentialDeclarationType.rawValue) must be included in either --typeorder or --visibilityorder")
+                Swift.fatalError("\(essentialDeclarationType.rawValue) must be included in either --type-order or --visibility-order")
             }
         }
 

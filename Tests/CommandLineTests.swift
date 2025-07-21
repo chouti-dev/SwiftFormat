@@ -61,7 +61,7 @@ private func withTmpFiles(_ files: [String: String], fn: (URL) throws -> Void) t
     for (path, contents) in files {
         try urls.append(createTmpFile("\(prefix)/\(path)", contents: contents))
     }
-    for url in urls where url.pathExtension == "swift" {
+    for url in urls where url.pathExtension == "swift" || url.pathExtension == "md" {
         try fn(url)
     }
     for url in urls {
@@ -315,16 +315,6 @@ class CommandLineTests: XCTestCase {
         }
     }
 
-    func testHelpLineLength() {
-        CLI.print = { message, _ in
-            for line in message.components(separatedBy: "\n") {
-                XCTAssertLessThanOrEqual(line.count, 80, line)
-            }
-        }
-        printHelp(as: .content)
-        printOptions(as: .content)
-    }
-
     func testHelpOptionsImplemented() {
         CLI.print = { message, _ in
             if message.hasPrefix("--") {
@@ -351,6 +341,54 @@ class CommandLineTests: XCTestCase {
         printHelp(as: .content)
         printOptions(as: .content)
         XCTAssert(arguments.isEmpty, "\(arguments.joined(separator: ",")) not listed in help")
+    }
+
+    func testHelpOptionFormatting() {
+        let shortOption = OptionDescriptor(
+            argumentName: "option",
+            displayName: "option",
+            help: "Short option description",
+            keyPath: \.fragment,
+            trueValues: [],
+            falseValues: []
+        )
+
+        let mediumOption = OptionDescriptor(
+            argumentName: "option-medium",
+            displayName: "option-medium",
+            help: "Option with a medium name and description length",
+            keyPath: \.fragment,
+            trueValues: [],
+            falseValues: []
+        )
+
+        let longOption = OptionDescriptor(
+            argumentName: "option-with-longer-name",
+            displayName: "option-with-longer-name",
+            help: """
+            This is a longer option with a name over the original 16 character limit, \
+            and a help text over the original 80 character limit.
+            """,
+            keyPath: \.fragment,
+            trueValues: [],
+            falseValues: []
+        )
+
+        CLI.print = { output, _ in
+            guard !output.isEmpty else { return }
+            XCTAssertEqual(output, """
+            --option           Short option description
+            --option           Short option description
+            --option-medium    Option with a medium name and description length
+            --option-medium    Option with a medium name and description length
+            --option-with-longer-name
+                               This is a longer option with a name over the original 16 character limit, and a help text over the original 80 character limit.
+            --option-with-longer-name
+                               This is a longer option with a name over the original 16 character limit, and a help text over the original 80 character limit.
+            """)
+        }
+
+        printOptions([shortOption, shortOption, mediumOption, mediumOption, longOption, longOption], as: .content)
     }
 
     // MARK: cache
@@ -420,7 +458,7 @@ class CommandLineTests: XCTestCase {
         CLI.print = { message, _ in
             XCTFail(message)
         }
-        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--quiet --dryrun"), .ok)
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--quiet --dry-run"), .ok)
     }
 
     func testQuietModeAllowsContent() {
@@ -443,7 +481,7 @@ class CommandLineTests: XCTestCase {
         CLI.print = { message, type in
             XCTAssertEqual(type, .error, message)
         }
-        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "Sources --dryrun Tests --rules indent"), .error)
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "Sources --dry-run Tests --rules indent"), .error)
     }
 
     // MARK: file list
@@ -515,6 +553,84 @@ class CommandLineTests: XCTestCase {
             }
         }
         XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "stdin --lint --rules indent --header foo"), .ok)
+    }
+
+    func testMultipleConfigFiles() throws {
+        try withTmpFiles([
+            "config1.swiftformat": """
+            --indent 2
+            --rules trailingCommas
+            --rules redundantSelf
+            """,
+            "config2.swiftformat": """
+            --indent 4
+            --disable trailingCommas
+            """,
+            "test.swift": """
+            func foo() {
+                let array = [1, 2, 3,]
+                self.bar()
+            }
+            """,
+        ]) { url in
+            guard url.pathExtension == "swift" else { return }
+            let testDir = url.deletingLastPathComponent().path
+
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(
+                CLI.run(in: testDir, with: "test.swift --config config1.swiftformat --config config2.swiftformat"),
+                .ok
+            )
+
+            let output = try String(contentsOf: url, encoding: .utf8)
+
+            XCTAssertEqual(output, """
+            func foo() {
+                let array = [1, 2, 3,]
+                bar()
+            }
+            """)
+        }
+    }
+
+    func testMultipleConfigFilesWithCommaDelimitedPaths() throws {
+        try withTmpFiles([
+            "config1.swiftformat": """
+            --indent 2
+            --rules trailingCommas
+            --rules redundantSelf
+            """,
+            "config2.swiftformat": """
+            --indent 4
+            --disable trailingCommas
+            """,
+            "test.swift": """
+            func foo() {
+                let array = [1, 2, 3,]
+                self.bar()
+            }
+            """,
+        ]) { url in
+            guard url.pathExtension == "swift" else { return }
+            let testDir = url.deletingLastPathComponent().path
+
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(
+                CLI.run(in: testDir, with: "test.swift --config config1.swiftformat,config2.swiftformat"),
+                .ok
+            )
+
+            let output = try String(contentsOf: url, encoding: .utf8)
+
+            XCTAssertEqual(output, """
+            func foo() {
+                let array = [1, 2, 3,]
+                bar()
+            }
+            """)
+        }
     }
 
     // MARK: reporter
@@ -659,6 +775,50 @@ class CommandLineTests: XCTestCase {
         XCTAssert(output.contains("<error line=\"1\" column=\"0\" severity=\"warning\""))
     }
 
+    func testSARIFReporterEndToEnd() throws {
+        try withTmpFiles([
+            "foo.swift": "func foo() {\n}\n",
+        ]) { url in
+            CLI.print = { message, type in
+                switch type {
+                case .raw:
+                    XCTAssert(message.contains("\"ruleId\" : \"emptyBraces\""))
+                case .error, .warning:
+                    break
+                case .info, .success:
+                    break
+                case .content:
+                    XCTFail()
+                }
+            }
+            _ = processArguments([
+                "",
+                "--lint",
+                "--reporter",
+                "sarif",
+                url.path,
+            ], in: "")
+        }
+    }
+
+    func testSARIFReporterInferredFromURL() throws {
+        let outputURL = try createTmpFile("report.sarif", contents: "")
+        try withTmpFiles([
+            "foo.swift": "func foo() {\n}\n",
+        ]) { url in
+            CLI.print = { _, _ in }
+            _ = processArguments([
+                "",
+                "--lint",
+                "--report",
+                outputURL.path,
+                url.path,
+            ], in: "")
+        }
+        let output = try String(contentsOf: outputURL)
+        XCTAssert(output.contains("\"ruleId\" : \"emptyBraces\""))
+    }
+
     func testLintCommandOutputsOrganizeDeclarationOrderingViolations() {
         var output: [String] = []
         CLI.print = { message, _ in
@@ -695,5 +855,218 @@ class CommandLineTests: XCTestCase {
             ":5:1: error: (organizeDeclarations) Organize declarations within class, struct, enum, actor, and extension bodies.",
             "Source input did not pass lint check.",
         ])
+    }
+
+    func testFormatMarkdownFile() throws {
+        CLI.print = { message, type in
+            if type == .error {
+                XCTFail(message)
+            }
+        }
+
+        try withTmpFiles([
+            "README.md": """
+            # Sample README
+
+            This is a nice project with lots of cool APIs to know about, including:
+
+            ```swift
+            func foo(
+            bar: Bar,
+            baaz: Baaz
+            ) -> Foo { ... }
+            ```
+
+              ```swift --indent 2
+              func foo(
+              bar: Bar,
+              baaz: Baaz
+              ) -> Foo { ... }
+              ```
+
+            ```swift --disable indent
+            print( "foo" )
+              print( "bar" )
+                print( "baaz" )
+            ```
+
+            ```swift --disable spaceInsideParens
+            print( "foo" )
+              print( "bar" )
+                print( "baaz" )
+            ```
+
+            ```swift --enable organizeDeclarations
+            class Foo {
+                init() {}
+                func bar() {}
+            }
+            ```
+
+            ```swift
+            --markdownfiles format-lenient ignores blocks that can't be parsed:
+            print("Foo
+            ```
+
+            Thanks for reading!
+            """,
+        ]) { url in
+            _ = processArguments([
+                "",
+                url.path,
+                "--markdownfiles", "format-lenient",
+                "--rules", "indent",
+                "--rules", "braces",
+                "--rules", "spaceInsideParens",
+                "--rules", "linebreakAtEndOfFile",
+            ], in: "")
+
+            let updatedReadme = try String(contentsOf: url, encoding: .utf8)
+
+            // The Swift code blocks should be indented correctly:
+            XCTAssertEqual(updatedReadme, """
+            # Sample README
+
+            This is a nice project with lots of cool APIs to know about, including:
+
+            ```swift
+            func foo(
+                bar: Bar,
+                baaz: Baaz
+            ) -> Foo { ... }
+            ```
+
+              ```swift --indent 2
+              func foo(
+                bar: Bar,
+                baaz: Baaz
+              ) -> Foo { ... }
+              ```
+
+            ```swift --disable indent
+            print("foo")
+              print("bar")
+                print("baaz")
+            ```
+
+            ```swift --disable spaceInsideParens
+            print( "foo" )
+            print( "bar" )
+            print( "baaz" )
+            ```
+
+            ```swift --enable organizeDeclarations
+            class Foo {
+
+                // MARK: Lifecycle
+
+                init() {}
+
+                // MARK: Internal
+
+                func bar() {}
+            }
+            ```
+
+            ```swift
+            --markdownfiles format-lenient ignores blocks that can't be parsed:
+            print("Foo
+            ```
+
+            Thanks for reading!
+            """)
+        }
+    }
+
+    func testStrictMarkdownFormatting() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        try withTmpFiles([
+            "README.md": """
+            # Sample README
+
+            This is a nice project with lots of cool APIs to know about, including:
+
+            ```swift
+            --markdownfiles format-strict fails if there are parsing errors:
+            print("Foo
+            ```
+
+            ```swift no-format
+            This block is ignored
+            print("Foo
+            ```
+
+            Thanks for reading!
+            """,
+        ]) { url in
+            _ = processArguments([
+                "",
+                url.path,
+                "--markdownfiles", "format-strict",
+                "--rules", "indent",
+            ], in: "")
+        }
+
+        XCTAssertEqual(errors.count, 1)
+        XCTAssert(errors[0].contains("Unexpected end of file at 7:11"))
+    }
+
+    func testUnbalancedCodeBlockTokens() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        try withTmpFiles([
+            "README.md": """
+            # Sample README
+
+            This markdown file has unbalanced code block tokens:
+
+            ```swift
+            print("Hello, world!")
+            // Missing closing ```
+
+            This should cause an error in strict mode.
+            """,
+        ]) { url in
+            _ = processArguments([
+                "",
+                url.path,
+                "--markdownfiles", "format-strict",
+                "--rules", "indent",
+            ], in: "")
+        }
+
+        XCTAssertEqual(errors.count, 1)
+        XCTAssert(errors[0].contains("Unbalanced code block delimiters in markdown"))
+    }
+
+    func testTrailingCommasCollectionsOnlyDoesNotTriggerDeprecationWarning_issue_2141() throws {
+        var warnings = [String]()
+        CLI.print = { message, type in
+            if type == .warning {
+                warnings.append(message)
+            }
+        }
+
+        try withTmpFiles([
+            "foo/bar/baz.swift": "",
+        ]) { url in
+            _ = processArguments(["", url.path, "--trailing-commas", "collections-only", "--swift-version", "6.0"], in: "")
+        }
+
+        // Should not contain the deprecation warning about --commas
+        XCTAssertEqual(warnings, [])
     }
 }

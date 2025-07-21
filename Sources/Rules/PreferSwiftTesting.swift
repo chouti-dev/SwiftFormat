@@ -12,7 +12,7 @@ public extension FormatRule {
     static let preferSwiftTesting = FormatRule(
         help: "Prefer the Swift Testing library over XCTest.",
         disabledByDefault: true,
-        options: ["xctestsymbols"]
+        options: ["xctest-symbols"]
     ) { formatter in
         // Swift Testing was introduced in Xcode 16.0 with Swift 6.0
         guard formatter.options.swiftVersion >= "6.0" else { return }
@@ -382,7 +382,7 @@ extension Formatter {
             )
 
         case "XCTFail":
-            let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall)
+            let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall, preserveWhitespace: true)
             switch functionParams.count {
             case 0:
                 return tokenize("Issue.record()")
@@ -393,7 +393,7 @@ extension Formatter {
             }
 
         case "XCTUnwrap":
-            let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall)
+            let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall, preserveWhitespace: true)
             switch functionParams.count {
             case 1:
                 return tokenize("#require(\(functionParams[0].value))")
@@ -404,7 +404,7 @@ extension Formatter {
             }
 
         case "XCTAssertNoThrow":
-            let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall)
+            let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall, preserveWhitespace: true)
             switch functionParams.count {
             case 1:
                 return tokenize("#expect(throws: Never.self) { \(functionParams[0].value) }")
@@ -415,7 +415,7 @@ extension Formatter {
             }
 
         case "XCTAssertThrowsError":
-            let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall)
+            let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall, preserveWhitespace: true)
 
             // Trailing closure variant is unsupported for now
             if let endOfFunctionCall = endOfScope(at: startOfFunctionCall),
@@ -444,7 +444,7 @@ extension Formatter {
         makeAssertion: (_ value: String) -> String
     ) -> [Token]? {
         guard let startOfFunctionCall = index(of: .nonSpaceOrComment, after: identifierIndex) else { return nil }
-        let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall)
+        let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall, preserveWhitespace: true)
 
         // All of the function params should be unlabeled
         guard functionParams.allSatisfy({ $0.label == nil }) else { return nil }
@@ -462,7 +462,7 @@ extension Formatter {
             return nil
         }
 
-        if let message = message {
+        if let message {
             return tokenize("#expect(\(makeAssertion(value)),\(message))")
         } else {
             return tokenize("#expect(\(makeAssertion(value)))")
@@ -476,7 +476,7 @@ extension Formatter {
         operator operatorToken: String
     ) -> [Token]? {
         guard let startOfFunctionCall = index(of: .nonSpaceOrComment, after: identifierIndex) else { return nil }
-        let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall)
+        let functionParams = parseFunctionCallArguments(startOfScope: startOfFunctionCall, preserveWhitespace: true)
 
         // All of the function params should be unlabeled
         guard functionParams.allSatisfy({ $0.label == nil }) else { return nil }
@@ -497,7 +497,7 @@ extension Formatter {
             return nil
         }
 
-        if let message = message {
+        if let message {
             return tokenize("#expect(\(lhs) \(operatorToken)\(rhs),\(message))")
         } else {
             return tokenize("#expect(\(lhs) \(operatorToken)\(rhs))")

@@ -14,7 +14,10 @@ class CodeOrganizationTests: XCTestCase {
         for ruleFile in allRuleFiles {
             let fileName = ruleFile.lastPathComponent
             let titleCaseRuleName = fileName.replacingOccurrences(of: ".swift", with: "")
-            let ruleName = titleCaseRuleName.first!.lowercased() + titleCaseRuleName.dropFirst()
+            var ruleName = titleCaseRuleName.first!.lowercased() + titleCaseRuleName.dropFirst()
+            if titleCaseRuleName == "URLMacro" {
+                ruleName = "urlMacro"
+            }
 
             let content = try String(contentsOf: ruleFile)
             let formatter = Formatter(tokenize(content))
@@ -116,7 +119,7 @@ class CodeOrganizationTests: XCTestCase {
                 let fullHelperName: String
                 if let argumentLabels = matchingHelper.funcArgLabels {
                     let argumentLabelStrings = argumentLabels.map { label -> String in
-                        if let label = label {
+                        if let label {
                             return label + ":"
                         } else {
                             return "_:"
@@ -141,14 +144,21 @@ class CodeOrganizationTests: XCTestCase {
         let allRuleNames = Set(allRuleFiles.map { ruleFile -> String in
             let fileName = ruleFile.lastPathComponent
             let titleCaseRuleName = fileName.replacingOccurrences(of: ".swift", with: "")
-            return titleCaseRuleName.first!.lowercased() + titleCaseRuleName.dropFirst()
+            var ruleName = titleCaseRuleName.first!.lowercased() + titleCaseRuleName.dropFirst()
+            if titleCaseRuleName == "URLMacro" {
+                ruleName = "urlMacro"
+            }
+            return ruleName
         })
 
         for testFile in allRuleTestFiles {
             let testFileName = testFile.lastPathComponent
             let expectedTestClassName = testFileName.replacingOccurrences(of: ".swift", with: "")
-            let titleCaseRuleName = expectedTestClassName.replacingOccurrences(of: "Tests", with: "")
-            let ruleName = titleCaseRuleName.first!.lowercased() + titleCaseRuleName.dropFirst()
+            let titleCaseRuleName = expectedTestClassName.hasSuffix("Tests") ? String(expectedTestClassName.dropLast(5)) : expectedTestClassName
+            var ruleName = titleCaseRuleName.first!.lowercased() + titleCaseRuleName.dropFirst()
+            if titleCaseRuleName == "URLMacro" {
+                ruleName = "urlMacro"
+            }
 
             XCTAssert(allRuleNames.contains(ruleName), """
             \(testFileName) has no matching rule named \(ruleName).

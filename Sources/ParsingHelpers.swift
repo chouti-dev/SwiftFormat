@@ -8,7 +8,7 @@
 
 import Foundation
 
-// MARK: shared helper methods
+// MARK: - shared helper methods
 
 public extension Formatter {
     /// Returns the index of the first token of the line containing the specified index
@@ -516,6 +516,52 @@ extension Formatter {
         return index(of: .operator("->", .infix), in: startIndex + 1 ..< endIndex)
     }
 
+    /// Recursively searches to the start of scopes until we either no longer find a scope or we know we are in a closure.
+    func isInClosure(at index: Int) -> Bool {
+        guard let startOfScopeIndex = startOfScope(at: index) else {
+            return false
+        }
+        if isStartOfClosure(at: startOfScopeIndex) {
+            return true
+        } else {
+            return isInClosure(at: startOfScopeIndex)
+        }
+    }
+
+    /// Whether the given index is within the body of the given function declaration,
+    /// and not inside a nested closure or nested function.
+    func isInFunctionBody(of functionDecl: FunctionDeclaration, at index: Int) -> Bool {
+        guard let bodyRange = functionDecl.bodyRange,
+              bodyRange.contains(index)
+        else {
+            return false
+        }
+
+        guard let startOfScopeIndex = startOfScope(at: index) else {
+            return false
+        }
+
+        if startOfScopeIndex == bodyRange.lowerBound {
+            return true
+        }
+
+        if isStartOfClosure(at: startOfScopeIndex) {
+            return false
+        }
+
+        // If this is a function scope, but not the body of the function itself,
+        // then this is some nested function.
+        if lastSignificantKeyword(at: startOfScopeIndex, excluding: ["where"]) == "func",
+           startOfScopeIndex != bodyRange.lowerBound
+        {
+            return false
+        }
+
+        // Recursively check parent scope
+        return isInFunctionBody(of: functionDecl, at: startOfScopeIndex)
+    }
+
+    /// Whether or not this index the start of scope of a closure literal, eg `{` but not some other type of scope.
     func isStartOfClosure(at i: Int) -> Bool {
         guard token(at: i) == .startOfScope("{") else {
             return false
@@ -1071,6 +1117,17 @@ extension Formatter {
         }
     }
 
+    /// Whether the given index is a `startOfScope("{")` that represents the start of a type body
+    func isStartOfTypeBody(at scopeIndex: Int) -> Bool {
+        guard tokens[scopeIndex] == .startOfScope("{") else { return false }
+
+        guard let lastKeyword = lastSignificantKeyword(at: scopeIndex, excluding: ["where"]) else {
+            return false
+        }
+
+        return Token.swiftTypeKeywords.contains(lastKeyword)
+    }
+
     func isTrailingClosureLabel(at i: Int) -> Bool {
         if case .identifier? = token(at: i),
            last(.nonSpaceOrCommentOrLinebreak, before: i) == .endOfScope("}"),
@@ -1099,18 +1156,6 @@ extension Formatter {
         }
     }
 
-    /// Returns true if the token at the specified index is inside a single-line string literal (including inside an interpolation)
-    func isInSingleLineStringLiteral(at i: Int) -> Bool {
-        var i = i
-        while let token = token(at: i), !token.isLinebreak {
-            if token.isStringDelimiter {
-                return !token.isMultilineStringDelimiter
-            }
-            i -= 1
-        }
-        return false
-    }
-
     /// Crude check to detect if code is inside a Result Builder
     /// Note: this will produce false positives for any init that takes a closure
     func isInResultBuilder(at i: Int) -> Bool {
@@ -1123,6 +1168,21 @@ extension Formatter {
             }) else {
                 return false
             }
+
+            // Check if this is a type definition rather than a result builder
+            if tokens[startIndex] == .startOfScope("{"),
+               let lastKeyword = lastSignificantKeyword(at: startIndex, excluding: ["where"]),
+               Token.swiftTypeKeywords.contains(lastKeyword)
+            {
+                // This is a type body, not a result builder
+                if tokens[prevIndex].isStartOfScope, i != startIndex {
+                    i = startIndex
+                } else {
+                    i = prevIndex
+                }
+                continue
+            }
+
             if case let .identifier(name) = tokens[prevIndex], name.first?.isUppercase == true {
                 switch last(.nonSpaceOrCommentOrLinebreak, before: prevIndex) {
                 case .identifier("some")?, .delimiter?, .startOfScope?, .endOfScope?,
@@ -1665,7 +1725,7 @@ extension Formatter {
 
             // If the current rule is disabled at this index, don't keep the declaration.
             // This makes it easy for parseDeclarations-based rules to support directives
-            // like swiftformat:disable, swiftformat:disable:next.
+            // like disable and disable:next.
             if isEnabled {
                 declarations.append(_Declaration(
                     keyword: declarationKeyword,
@@ -1868,14 +1928,14 @@ extension Formatter {
     /// A property of the format `(let|var) identifier: Type = expression { ... }`.
     ///  - `: Type`, `= expression`, and the following `{ ... }` body are optional
     struct PropertyDeclaration {
-        /// The start index for this propery's list of modifiers.
+        /// The start index for this property's list of modifiers.
         /// If there are no modifiers, `startOfModifiersIndex` is just `introducerIndex`.
         let startOfModifiersIndex: Int
 
         /// The index of the `let` or `var` keyword
         let introducerIndex: Int
 
-        /// The identifier / name of this propery.
+        /// The identifier / name of this property.
         let identifier: String
 
         /// The index of this property's identifier / name.
@@ -1884,7 +1944,7 @@ extension Formatter {
         /// Information about the property's type definition, if written explicitly.
         let type: (colonIndex: Int, name: String, range: ClosedRange<Int>)?
 
-        /// Information about the value following the propery's `=` token, if present.
+        /// Information about the value following the property's `=` token, if present.
         let value: (assignmentIndex: Int, expressionRange: ClosedRange<Int>)?
 
         /// Information about the body following the property, which can include
@@ -1896,9 +1956,9 @@ extension Formatter {
         var range: ClosedRange<Int> {
             if let bodyScopeRange = body?.scopeRange {
                 return startOfModifiersIndex ... bodyScopeRange.upperBound
-            } else if let value = value {
+            } else if let value {
                 return startOfModifiersIndex ... value.expressionRange.upperBound
-            } else if let type = type {
+            } else if let type {
                 return startOfModifiersIndex ... type.range.upperBound
             } else {
                 return startOfModifiersIndex ... identifierIndex
@@ -1908,6 +1968,9 @@ extension Formatter {
 
     /// Parses a property of the format `(let|var) identifier: Type = expression`
     /// starting at the given introducer index (the `let` / `var` keyword).
+    ///
+    /// Does not attempt to parse less-common property declarations that define multiple identifiers,
+    /// like `let (foo, bar) = (1, 2)` or `let foo: Foo, bar: Bar`.
     func parsePropertyDeclaration(atIntroducerIndex introducerIndex: Int) -> PropertyDeclaration? {
         guard ["let", "var"].contains(tokens[introducerIndex].string),
               let propertyIdentifierIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: introducerIndex),
@@ -2095,8 +2158,27 @@ extension Formatter {
         })
     }
 
+    enum TestingFramework {
+        case xcTest
+        case swiftTesting
+    }
+
+    /// Detects which testing framework is being used in the file
+    func detectTestingFramework() -> TestingFramework? {
+        if hasImport("Testing") {
+            return .swiftTesting
+        } else if hasImport("XCTest") {
+            return .xcTest
+        } else {
+            return nil
+        }
+    }
+
     /// Adds imports for the given list of modules to this file if not already present
     func addImports(_ importsToAddIfNeeded: [String]) {
+        // Don't add imports in fragments
+        if options.fragment { return }
+
         let importRanges = parseImports()
         let currentImports = Set(importRanges.flatMap { $0.map(\.module) })
 
@@ -2440,11 +2522,7 @@ extension Formatter {
             switch tokens[startIndex] {
             case .startOfScope("//"):
                 if case let .commentBody(body)? = next(.nonSpace, after: startIndex) {
-                    processCommentBody(body, at: startIndex)
-                    defer {
-                        processLinebreak()
-                        processLinebreak()
-                    }
+                    updateEnablement(at: startIndex)
                     if !isEnabled || (body.hasPrefix("/") && !body.hasPrefix("//")) ||
                         body.hasPrefix("swift-tools-version")
                     {
@@ -2480,11 +2558,7 @@ extension Formatter {
                 }
             case .startOfScope("/*"):
                 if case let .commentBody(body)? = next(.nonSpace, after: startIndex) {
-                    processCommentBody(body, at: startIndex)
-                    defer {
-                        processLinebreak()
-                        processLinebreak()
-                    }
+                    updateEnablement(at: startIndex)
                     if !isEnabled || (body.hasPrefix("*") && !body.hasPrefix("**")) {
                         return nil
                     } else if body.isCommentDirective {
@@ -2507,6 +2581,8 @@ extension Formatter {
                     }
                     startIndex = nextIndex
                 }
+            case .endOfScope("*/"), .linebreak:
+                updateEnablement(at: startIndex)
             default:
                 break
             }
@@ -2791,7 +2867,7 @@ extension Formatter {
         while let effectIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex),
               let effect = token(at: effectIndex)?.string,
               ["async", "throws", "rethrows"].contains(effect),
-              let firstIndexAfterArguments = firstIndexAfterArguments
+              let firstIndexAfterArguments
         {
             // `throws` can optionally be typed throws with a `(Type)` component
             if effect == "throws",
@@ -2820,7 +2896,7 @@ extension Formatter {
             currentIndex = effectIndex
         }
 
-        if let effectsRange = effectsRange {
+        if let effectsRange {
             return (effects: effects, range: effectsRange)
         } else {
             return nil
@@ -2839,13 +2915,17 @@ extension Formatter {
     struct FunctionCallArgument {
         /// The label of the argument. `nil` if unlabeled.
         let label: String?
-        /// The value of the argument, including any leading or trailing whitespace / comments.
+        /// The index of the optional label
+        let labelIndex: Int?
+        /// The value of the argument
         let value: String
+        /// The index of the value
+        let valueRange: ClosedRange<Int>
     }
 
     /// Parses the parameter labels of the function call with its `(` start of scope
     /// token at the given index.
-    func parseFunctionCallArguments(startOfScope: Int) -> [FunctionCallArgument] {
+    func parseFunctionCallArguments(startOfScope: Int, preserveWhitespace: Bool = false) -> [FunctionCallArgument] {
         assert(tokens[startOfScope] == .startOfScope("("))
         guard let endOfScope = endOfScope(at: startOfScope),
               index(of: .nonSpaceOrCommentOrLinebreak, after: startOfScope) != endOfScope
@@ -2858,18 +2938,55 @@ extension Formatter {
             let endOfPreviousArgument = currentIndex
             let endOfCurrentArgument = index(of: .delimiter(","), in: endOfPreviousArgument + 1 ..< endOfScope) ?? endOfScope
 
+            // If we find a trailing comma, then there's nothing else to parse
+            if index(of: .nonSpaceOrCommentOrLinebreak, after: endOfPreviousArgument) == endOfScope {
+                return argumentLabels
+            }
+
             if let colonIndex = index(of: .delimiter(":"), in: (endOfPreviousArgument + 1) ..< endOfCurrentArgument),
                let argumentLabelIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: colonIndex),
                tokens[argumentLabelIndex].isIdentifier
             {
+                // Conditionally trim whitespace and newlines from the value range
+                var valueStart = colonIndex + 1
+                var valueEnd = endOfCurrentArgument - 1
+
+                if !preserveWhitespace {
+                    while valueStart <= valueEnd, tokens[valueStart].isSpaceOrLinebreak {
+                        valueStart += 1
+                    }
+                    while valueEnd >= valueStart, tokens[valueEnd].isSpaceOrLinebreak {
+                        valueEnd -= 1
+                    }
+                }
+
+                let valueRange = valueStart ... valueEnd
                 argumentLabels.append(FunctionCallArgument(
                     label: tokens[argumentLabelIndex].string,
-                    value: tokens[colonIndex + 1 ..< endOfCurrentArgument].string
+                    labelIndex: argumentLabelIndex,
+                    value: tokens[valueRange].string,
+                    valueRange: valueRange
                 ))
             } else {
+                // Conditionally trim whitespace and newlines from the value range
+                var valueStart = endOfPreviousArgument + 1
+                var valueEnd = endOfCurrentArgument - 1
+
+                if !preserveWhitespace {
+                    while valueStart <= valueEnd, tokens[valueStart].isSpaceOrLinebreak {
+                        valueStart += 1
+                    }
+                    while valueEnd >= valueStart, tokens[valueEnd].isSpaceOrLinebreak {
+                        valueEnd -= 1
+                    }
+                }
+
+                let valueRange = valueStart ... valueEnd
                 argumentLabels.append(FunctionCallArgument(
                     label: nil,
-                    value: tokens[endOfPreviousArgument + 1 ..< endOfCurrentArgument].string
+                    labelIndex: nil,
+                    value: tokens[valueRange].string,
+                    valueRange: valueRange
                 ))
             }
 
@@ -2881,6 +2998,12 @@ extension Formatter {
         }
 
         return argumentLabels
+    }
+
+    /// Parses the parameter labels of the tuple type or value with its `(` start of scope
+    /// token at the given index.
+    func parseTupleArguments(startOfScope: Int) -> [FunctionCallArgument] {
+        parseFunctionCallArguments(startOfScope: startOfScope)
     }
 
     /// Parses the list of conformances on this type, starting at
@@ -3014,6 +3137,92 @@ extension Formatter {
         } else {
             return tokens[nameIndex].string
         }
+    }
+
+    /// Represents a condition in a guard or if statement
+    enum ConditionalStatementElement {
+        // A boolean expression like `foo == bar`
+        case booleanExpression(range: ClosedRange<Int>)
+        // An optional binding / unwrap condition like `let foo` or `let foo = foo`
+        case optionalBinding(range: ClosedRange<Int>, property: PropertyDeclaration)
+        /// A pattern matching condition like `case .foo(let bar) = baaz`
+        case patternMatching(range: ClosedRange<Int>)
+
+        var range: ClosedRange<Int> {
+            switch self {
+            case let .booleanExpression(range), let .optionalBinding(range, _), let .patternMatching(range):
+                return range
+            }
+        }
+    }
+
+    /// Parse conditions in a guard or if statement
+    func parseConditionalStatement(at guardOrIfIndex: Int) -> [ConditionalStatementElement] {
+        assert(tokens[guardOrIfIndex] == .keyword("guard") || tokens[guardOrIfIndex] == .keyword("if"))
+
+        // Find the else keyword (or opening brace for if)
+        var endIndex: Int?
+
+        if let braceIndex = index(of: .startOfScope("{"), after: guardOrIfIndex) {
+            if tokens[guardOrIfIndex] == .keyword("if") {
+                // For if statements without else
+                endIndex = braceIndex
+            } else if let prevTokenIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: braceIndex),
+                      tokens[prevTokenIndex] == .keyword("else")
+            {
+                // For guard statements with else
+                endIndex = prevTokenIndex
+            }
+        }
+
+        guard let endIndex else { return [] }
+
+        var conditions: [ConditionalStatementElement] = []
+        var currentPos = guardOrIfIndex + 1
+
+        while currentPos < endIndex {
+            // Skip whitespace and comments
+            guard let conditionStart = index(of: .nonSpaceOrCommentOrLinebreak, after: currentPos - 1),
+                  conditionStart < endIndex
+            else {
+                break
+            }
+
+            let conditionEnd: Int
+            if let commaIndex = index(of: .delimiter(","), after: conditionStart),
+               commaIndex < endIndex
+            {
+                conditionEnd = index(of: .nonSpaceOrCommentOrLinebreak, before: commaIndex) ?? conditionStart
+            } else {
+                conditionEnd = index(of: .nonSpaceOrCommentOrLinebreak, before: endIndex) ?? conditionStart
+            }
+
+            let element: ConditionalStatementElement
+            if tokens[conditionStart] == .keyword("case") {
+                element = .patternMatching(range: conditionStart ... conditionEnd)
+            } else if tokens[conditionStart] == .keyword("let") || tokens[conditionStart] == .keyword("var") {
+                guard let property = parsePropertyDeclaration(atIntroducerIndex: conditionStart) else {
+                    return []
+                }
+
+                element = .optionalBinding(range: conditionStart ... conditionEnd, property: property)
+            } else {
+                element = .booleanExpression(range: conditionStart ... conditionEnd)
+            }
+
+            conditions.append(element)
+
+            // Find next condition (after comma)
+            if let commaIndex = index(of: .delimiter(","), after: conditionEnd),
+               commaIndex < endIndex
+            {
+                currentPos = commaIndex + 1
+            } else {
+                break
+            }
+        }
+
+        return conditions
     }
 }
 

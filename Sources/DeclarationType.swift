@@ -228,7 +228,7 @@ extension Declaration {
                 //    immediately follows the `func` keyword:
                 //    https://docs.swift.org/swift-book/ReferenceManual/Declarations.html#grammar_function-name
                 let methodName = formatter.next(.nonSpaceOrCommentOrLinebreak, after: keywordIndex)
-                if let methodName = methodName, lifecycleMethods.contains(methodName.string) {
+                if let methodName, lifecycleMethods.contains(methodName.string) {
                     return .instanceLifecycle
                 }
                 if isOverriddenDeclaration, availableTypes.contains(.overriddenMethod) {
@@ -274,6 +274,7 @@ extension Declaration {
         [
             "@AccessibilityFocusState",
             "@AppStorage",
+            "@Bindable",
             "@Binding",
             "@Environment",
             "@EnvironmentObject",

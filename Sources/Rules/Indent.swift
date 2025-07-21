@@ -15,8 +15,8 @@ public extension FormatRule {
     static let indent = FormatRule(
         help: "Indent code in accordance with the scope level.",
         orderAfter: [.trailingSpace, .wrap, .wrapArguments],
-        options: ["indent", "tabwidth", "smarttabs", "indentcase", "ifdef", "xcodeindentation", "indentstrings"],
-        sharedOptions: ["trimwhitespace", "allman", "wrapconditions", "wrapternary"]
+        options: ["indent", "tab-width", "smart-tabs", "indent-case", "ifdef", "xcode-indentation", "indent-strings"],
+        sharedOptions: ["trim-whitespace", "allman", "wrap-conditions", "wrap-ternary"]
     ) { formatter in
         var scopeStack: [Token] = []
         var scopeStartLineIndexes: [Int] = []
@@ -266,7 +266,7 @@ public extension FormatRule {
                         // Make sure the `=` actually created a new scope
                         if scopeStack.last == .operator("=", .infix),
                            // Parse the conditional branches following the `=` assignment operator
-                           let previousAssignmentIndex = previousAssignmentIndex,
+                           let previousAssignmentIndex,
                            let nextTokenAfterAssignment = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: previousAssignmentIndex),
                            let conditionalBranches = formatter.conditionalBranches(at: nextTokenAfterAssignment),
                            // If this is the very end of the conditional assignment following the `=`,
@@ -562,7 +562,7 @@ public extension FormatRule {
                     {
                         var lineStart = formatter.startOfLine(at: lastNonSpaceOrLinebreakIndex, excludingIndent: true)
                         let startToken = formatter.token(at: lineStart)
-                        if let startToken = startToken, [
+                        if let startToken, [
                             .startOfScope("#if"), .keyword("#else"), .keyword("#elseif"), .endOfScope("#endif")
                         ].contains(startToken) {
                             if let index = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: lineStart) {
@@ -663,7 +663,7 @@ public extension FormatRule {
                         ) ?? index
                     }
                     let lastToken = formatter.tokens[lastIndex]
-                    if formatter.options.fragment, lastToken == .delimiter(",") {
+                    if formatter.options.fragment, lastToken == .delimiter(","), formatter.startOfScope(at: i) == nil {
                         break // Can't reliably indent
                     }
                     if lastIndex == formatter.startOfLine(at: lastIndex, excludingIndent: true) {
@@ -826,7 +826,7 @@ extension Formatter {
         // If there is a linebreak after certain symbols, we should add
         // an additional indentation to the lines at the same indention scope
         // after this line.
-        let endOfLine = self.endOfLine(at: i)
+        let endOfLine = endOfLine(at: i)
         switch token(at: endOfLine - 1) {
         case .keyword("return")?, .operator("=", .infix)?:
             let endOfNextLine = self.endOfLine(at: endOfLine + 1)

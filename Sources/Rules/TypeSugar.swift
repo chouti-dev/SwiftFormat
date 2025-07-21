@@ -12,7 +12,7 @@ public extension FormatRule {
     /// Replace Array<T>, Dictionary<T, U> and Optional<T> with [T], [T: U] and T?
     static let typeSugar = FormatRule(
         help: "Prefer shorthand syntax for Arrays, Dictionaries and Optionals.",
-        options: ["shortoptionals"]
+        options: ["short-optionals"]
     ) { formatter in
         formatter.forEach(.startOfScope("<")) { i, _ in
             guard let typeIndex = formatter.index(of: .nonSpaceOrLinebreak, before: i),
@@ -26,7 +26,7 @@ public extension FormatRule {
             let dotIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: endIndex, if: {
                 $0.isOperator(".")
             })
-            if let dotIndex = dotIndex, formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: dotIndex, if: {
+            if let dotIndex, formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: dotIndex, if: {
                 ![.identifier("self"), .identifier("Type")].contains($0)
             }) != nil, identifier != "Optional" {
                 return

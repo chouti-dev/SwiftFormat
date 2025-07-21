@@ -22,6 +22,13 @@ class TrailingCommasTests: XCTestCase {
         testFormatting(for: input, output, rule: .trailingCommas)
     }
 
+    func testCommaAddedToLastItemCollectionsOnly() {
+        let input = "[\n    foo,\n    bar\n]"
+        let output = "[\n    foo,\n    bar,\n]"
+        let options = FormatOptions(trailingCommas: .collectionsOnly)
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
     func testCommaAddedToDictionary() {
         let input = "[\n    foo: bar\n]"
         let output = "[\n    foo: bar,\n]"
@@ -262,14 +269,14 @@ class TrailingCommasTests: XCTestCase {
 
     func testCommaNotAddedToLastItem() {
         let input = "[\n    foo,\n    bar\n]"
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
     func testCommaRemovedFromLastItem() {
         let input = "[\n    foo,\n    bar,\n]"
         let output = "[\n    foo,\n    bar\n]"
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -294,8 +301,39 @@ class TrailingCommasTests: XCTestCase {
             }
         }
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommasAddedToGenericFunctionParameters() {
+        let input = """
+        struct Foo {
+            func foo<
+                Bar,
+                Baaz
+            >(
+                bar: Bar,
+                baaz: Baaz
+            ) -> Int {
+                bar + baaz
+            }
+        }
+        """
+        let output = """
+        struct Foo {
+            func foo<
+                Bar,
+                Baaz,
+            >(
+                bar: Bar,
+                baaz: Baaz,
+            ) -> Int {
+                bar + baaz
+            }
+        }
+        """
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options, exclude: [.opaqueGenericParameters])
     }
 
     func testTrailingCommasNotAddedToFunctionParametersBeforeSwift6_1() {
@@ -304,7 +342,7 @@ class TrailingCommasTests: XCTestCase {
             bar _: Int
         ) {}
         """
-        let options = FormatOptions(trailingCommas: true)
+        let options = FormatOptions(trailingCommas: .always)
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
@@ -319,7 +357,7 @@ class TrailingCommasTests: XCTestCase {
             bar _: Int
         ) {}
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -336,7 +374,7 @@ class TrailingCommasTests: XCTestCase {
             baaz _: Int)
         {}
         """
-        let options = FormatOptions(trailingCommas: false, closingParenPosition: .sameLine)
+        let options = FormatOptions(trailingCommas: .never, closingParenPosition: .sameLine)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -353,7 +391,7 @@ class TrailingCommasTests: XCTestCase {
             baaz _: Int)
         {}
         """
-        let options = FormatOptions(trailingCommas: true, closingParenPosition: .sameLine)
+        let options = FormatOptions(trailingCommas: .always, closingParenPosition: .sameLine)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -368,7 +406,7 @@ class TrailingCommasTests: XCTestCase {
             bar _: Int,
         ) {}
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -383,7 +421,7 @@ class TrailingCommasTests: XCTestCase {
             bar _: Int
         ) {}
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -402,7 +440,7 @@ class TrailingCommasTests: XCTestCase {
             )
         }
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -421,7 +459,7 @@ class TrailingCommasTests: XCTestCase {
             )
         }
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -436,7 +474,7 @@ class TrailingCommasTests: XCTestCase {
             1,
         )
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -451,7 +489,7 @@ class TrailingCommasTests: XCTestCase {
             1
         )
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -478,7 +516,7 @@ class TrailingCommasTests: XCTestCase {
             baz: 2,
         )
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -513,7 +551,7 @@ class TrailingCommasTests: XCTestCase {
             )
         }
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options, exclude: [.redundantReturn])
     }
 
@@ -537,8 +575,28 @@ class TrailingCommasTests: XCTestCase {
             ),
         )
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options, exclude: [.redundantReturn])
+    }
+
+    func testTrailingCommasAddedToTupleInGenericInitCall() {
+        let input = """
+        let setModeSwizzle = Swizzle<AVAudioSession>(
+            instance: instance,
+            original: #selector(AVAudioSession.setMode(_:)),
+            swizzled: #selector(AVAudioSession.swizzled_setMode(_:))
+        )
+        """
+
+        let output = """
+        let setModeSwizzle = Swizzle<AVAudioSession>(
+            instance: instance,
+            original: #selector(AVAudioSession.setMode(_:)),
+            swizzled: #selector(AVAudioSession.swizzled_setMode(_:)),
+        )
+        """
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options, exclude: [.redundantReturn, .propertyTypes])
     }
 
     func testTrailingCommasAddedToParensAroundSingleValue() {
@@ -552,7 +610,7 @@ class TrailingCommasTests: XCTestCase {
             0,
         )
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options, exclude: [.redundantParens])
     }
 
@@ -569,7 +627,7 @@ class TrailingCommasTests: XCTestCase {
             1,
         )
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -586,7 +644,7 @@ class TrailingCommasTests: XCTestCase {
             baz: 1
         )
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -600,7 +658,21 @@ class TrailingCommasTests: XCTestCase {
         )
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommasPreservedInTupleTypeInSwift6_1_multiElementLists() {
+        // Trailing commas are unexpectedly not supported in tuple types in Swift 6.1
+        // https://github.com/swiftlang/swift/issues/81485
+        let input = """
+        let foo: (
+            bar: String,
+            quux: String // trailing comma not supported
+        )
+        """
+
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
@@ -619,7 +691,7 @@ class TrailingCommasTests: XCTestCase {
         )]]()
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, rule: .trailingCommas, options: options, exclude: [.propertyTypes])
     }
 
@@ -638,7 +710,7 @@ class TrailingCommasTests: XCTestCase {
         )>()
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, rule: .trailingCommas, options: options, exclude: [.typeSugar, .propertyTypes])
     }
 
@@ -654,7 +726,7 @@ class TrailingCommasTests: XCTestCase {
         ) {}
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
@@ -700,7 +772,31 @@ class TrailingCommasTests: XCTestCase {
         ) -> Void) {}
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommasPreservedInClosureTypeInSwift6_1_multiElementList() {
+        // Trailing commas are unexpectedly not supported in closure types in Swift 6.1
+        // https://github.com/swiftlang/swift/issues/81485
+        let input = """
+        let closure: (
+            String,
+            String // trailing comma not supported
+        ) -> (
+            bar: String,
+            quux: String // trailing comma not supported
+        )
+
+        let closure: @Sendable (
+            String // trailing comma not supported
+        ) -> (
+            bar: String,
+            quux: String // trailing comma not supported
+        )
+        """
+
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
@@ -715,7 +811,7 @@ class TrailingCommasTests: XCTestCase {
         )?) {}
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
@@ -725,7 +821,7 @@ class TrailingCommasTests: XCTestCase {
             String
         ) -> Int
 
-        enum Toster {
+        public enum Toster {
             public typealias StringToInt = ((
                 String
             ) -> Int)?
@@ -743,7 +839,7 @@ class TrailingCommasTests: XCTestCase {
         )?
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
@@ -770,7 +866,7 @@ class TrailingCommasTests: XCTestCase {
             )
         }
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -797,7 +893,7 @@ class TrailingCommasTests: XCTestCase {
             )
         }
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -824,7 +920,7 @@ class TrailingCommasTests: XCTestCase {
             )
         }
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -851,7 +947,7 @@ class TrailingCommasTests: XCTestCase {
             )
         }
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -888,7 +984,7 @@ class TrailingCommasTests: XCTestCase {
         default: break
         }
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -899,7 +995,7 @@ class TrailingCommasTests: XCTestCase {
             baz: Int
         )
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
@@ -922,7 +1018,7 @@ class TrailingCommasTests: XCTestCase {
         ): break
         }
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -939,8 +1035,8 @@ class TrailingCommasTests: XCTestCase {
             bar
         ) = (0, 1)
         """
-        let options = FormatOptions(trailingCommas: false)
-        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+        let options = FormatOptions(trailingCommas: .never)
+        testFormatting(for: input, output, rule: .trailingCommas, options: options, exclude: [.singlePropertyPerLine])
     }
 
     func testTrailingCommasNotAddedToEmptyParentheses() {
@@ -949,7 +1045,7 @@ class TrailingCommasTests: XCTestCase {
 
         )
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, rule: .trailingCommas,
                        options: options, exclude: [
                            .blankLinesAtEndOfScope,
@@ -974,7 +1070,7 @@ class TrailingCommasTests: XCTestCase {
         )
         \"""
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -993,7 +1089,7 @@ class TrailingCommasTests: XCTestCase {
         )
         struct Qux {}
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1038,7 +1134,29 @@ class TrailingCommasTests: XCTestCase {
         extension CoreFoundation.CGFloat: Swift.SignedNumeric {}
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommasNotAddedToBuiltInAttributesInSwift6_1_multiElementList() {
+        // Built-in attributes unexpectedly don't support trailing commas in Swift 6.1.
+        // Property wrappers and macros are supported properly.
+        // https://github.com/swiftlang/swift/issues/81475
+        let input = """
+        @available(
+            *,
+            deprecated,
+            renamed: "bar"
+        )
+        func foo() {}
+
+        @objc(
+            custom_objc_name
+        )
+        class MyClass: NSObject()
+        """
+
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
@@ -1057,7 +1175,7 @@ class TrailingCommasTests: XCTestCase {
         )
         struct Qux {}
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1074,7 +1192,7 @@ class TrailingCommasTests: XCTestCase {
             "baz",
         )
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1091,7 +1209,7 @@ class TrailingCommasTests: XCTestCase {
             "baz"
         )
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1130,7 +1248,7 @@ class TrailingCommasTests: XCTestCase {
             T2,
         >() -> (T1, T2) {}
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1170,7 +1288,7 @@ class TrailingCommasTests: XCTestCase {
         > {}
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, rule: .trailingCommas, options: options, exclude: [.emptyExtensions, .typeSugar])
     }
 
@@ -1189,7 +1307,7 @@ class TrailingCommasTests: XCTestCase {
             T3
         > {}
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1200,7 +1318,7 @@ class TrailingCommasTests: XCTestCase {
         let output = """
         struct S<T1, T2, T3> {}
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1219,7 +1337,24 @@ class TrailingCommasTests: XCTestCase {
         ] in
         }
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommasRemovedFromSingleElementCaptureList() {
+        let input = """
+        { [
+            capturedValue1,
+        ] in
+        }
+        """
+        let output = """
+        { [
+            capturedValue1
+        ] in
+        }
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1238,7 +1373,7 @@ class TrailingCommasTests: XCTestCase {
         ] in
         }
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1253,7 +1388,7 @@ class TrailingCommasTests: XCTestCase {
             print(capturedValue1, capturedValue2)
         }
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1270,7 +1405,24 @@ class TrailingCommasTests: XCTestCase {
             y,
         ]
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommasRemoveFromSubscriptWhenCollectionsOnly() {
+        let input = """
+        let value = m[
+            x,
+            y,
+        ]
+        """
+        let output = """
+        let value = m[
+            x,
+            y
+        ]
+        """
+        let options = FormatOptions(trailingCommas: .collectionsOnly, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1287,7 +1439,7 @@ class TrailingCommasTests: XCTestCase {
             y
         ]
         """
-        let options = FormatOptions(trailingCommas: false)
+        let options = FormatOptions(trailingCommas: .never)
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1298,7 +1450,7 @@ class TrailingCommasTests: XCTestCase {
         let output = """
         let value = m[x, y]
         """
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 
@@ -1325,8 +1477,20 @@ class TrailingCommasTests: XCTestCase {
         }
         """
 
-        let options = FormatOptions(trailingCommas: true, swiftVersion: "6.1")
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
         testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testSingleLineArrayWithMultipleElements() {
+        let input = """
+        for file in files where
+            file != "build" && !file.hasPrefix(".") && ![
+                ".build", ".app", ".framework", ".xcodeproj", ".xcassets",
+            ].contains(where: { file.hasSuffix($0) }) {}
+        """
+
+        let options = FormatOptions(trailingCommas: .always)
+        testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
     func testSingleLineArrayWithMultipleElementsFollowingNotOperator() {
@@ -1337,7 +1501,7 @@ class TrailingCommasTests: XCTestCase {
             ].contains(where: { file.hasSuffix($0) }) {}
         """
 
-        let options = FormatOptions(trailingCommas: true)
+        let options = FormatOptions(trailingCommas: .always)
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 
@@ -1352,7 +1516,256 @@ class TrailingCommasTests: XCTestCase {
         ].throwingOperation()
         """
 
-        let options = FormatOptions(trailingCommas: true)
+        let options = FormatOptions(trailingCommas: .always)
         testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testCollectionsOnlyAddsCollectionCommasAndRemovesNonCollectionCommas() {
+        let input = """
+        let array = [
+            1,
+            2
+        ]
+
+        func foo(
+            a: Int,
+            b: Int,
+        ) {
+            print(a, b)
+        }
+        """
+        let output = """
+        let array = [
+            1,
+            2,
+        ]
+
+        func foo(
+            a: Int,
+            b: Int
+        ) {
+            print(a, b)
+        }
+        """
+        let options = FormatOptions(trailingCommas: .collectionsOnly, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    // MARK: - Multi-element lists tests
+
+    func testMultiElementListsAddsCommaToMultiElementArray() {
+        let input = """
+        let array = [
+            1,
+            2
+        ]
+        """
+        let output = """
+        let array = [
+            1,
+            2,
+        ]
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testMultiElementListsDoesNotAddCommaToSingleElementArray() {
+        let input = """
+        let array = [
+            1
+        ]
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testMultiElementListsAddsCommaToMultiElementFunction() {
+        let input = """
+        func foo(
+            a: Int,
+            b: Int
+        ) {
+            print(a, b)
+        }
+        """
+        let output = """
+        func foo(
+            a: Int,
+            b: Int,
+        ) {
+            print(a, b)
+        }
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testMultiElementListsDoesNotAddCommaToSingleElementFunction() {
+        let input = """
+        func foo(
+            a: Int
+        ) {
+            print(a)
+        }
+
+        init(
+            a: Int
+        ) {
+            print(a)
+        }
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testMultiElementListsAddsCommaToMultiElementFunctionCall() {
+        let input = """
+        foo(
+            a: 1,
+            b: 2
+        )
+        """
+        let output = """
+        foo(
+            a: 1,
+            b: 2,
+        )
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testMultiElementListsDoesNotAddCommaToSingleElementFunctionCall() {
+        let input = """
+        foo(
+            a: 1
+        )
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testMultiElementListsAddsCommaToMultiElementGenericList() {
+        let input = """
+        struct Foo<
+            T,
+            U
+        > {}
+        """
+        let output = """
+        struct Foo<
+            T,
+            U,
+        > {}
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testMultiElementListsDoesNotAddCommaToSingleElementGenericList() {
+        let input = """
+        struct Foo<
+            T
+        > {}
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testMultiElementListsRemovesCommaFromSingleElementArray() {
+        let input = """
+        let array = [
+            1,
+        ]
+        """
+        let output = """
+        let array = [
+            1
+        ]
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testMultiElementListsRemovesCommaFromSingleElementFunction() {
+        let input = """
+        func foo(
+            a: Int,
+        ) {
+            print(a)
+        }
+        """
+        let output = """
+        func foo(
+            a: Int
+        ) {
+            print(a)
+        }
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommasNotRemovedFromInitParametersWithAlwaysOption() {
+        let input = """
+        public init(
+            parameter: Parameter,
+        ) {
+            // test
+        }
+        """
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options, exclude: [.unusedArguments])
+    }
+
+    func testTrailingCommaNotRemovedFromTupleTypeSwift6_1() {
+        let input = """
+        let foo: (
+            bar: String,
+            quux: String,
+        )
+
+        let bar: (
+            bar: String,
+            baaz: String,
+        ) -> Void
+
+        public func testClosureArgumentInTuple() {
+            _ = object.methodWithTupleArgument((
+                closureArgument: { capturedObject in
+                    _ = capturedObject
+                },
+            ))
+        }
+        """
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommaNotRemovedFromClosureTypeSwift6_1_mutliElementLists() {
+        let input = """
+        let foo: (
+            bar: String,
+        ) -> Void
+
+        let foo: (
+            bar: String,
+            baaz: String,
+        ) -> Void
+        """
+
+        let output = """
+        let foo: (
+            bar: String
+        ) -> Void
+
+        let foo: (
+            bar: String,
+            baaz: String,
+        ) -> Void
+        """
+        let options = FormatOptions(trailingCommas: .multiElementLists, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
     }
 }

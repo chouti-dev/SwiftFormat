@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.56.4"
+let swiftFormatVersion = "0.57.2"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -45,7 +45,7 @@ public let swiftVersionFile = ".swift-version"
 public let swiftVersions = [
     "3.x", "4.0", "4.1", "4.2",
     "5.0", "5.1", "5.2", "5.3", "5.4", "5.5", "5.6", "5.7", "5.8", "5.9", "5.10",
-    "6.0", "6.1",
+    "6.0", "6.1", "6.2",
 ]
 
 /// Supported Swift language modes
@@ -322,8 +322,9 @@ private func processDirectory(_ inputURL: URL, with options: inout Options, logg
     let manager = FileManager.default
     let configFile = inputURL.appendingPathComponent(swiftFormatConfigurationFile)
     if manager.fileExists(atPath: configFile.path) {
-        if let configURL = options.configURL {
-            if configURL.standardizedFileURL != configFile.standardizedFileURL {
+        if let configURLs = options.configURLs {
+            let standardizedConfigFile = configFile.standardizedFileURL
+            if !configURLs.contains(where: { $0.standardizedFileURL == standardizedConfigFile }) {
                 logger?("Ignoring config file at \(configFile.path)")
             }
         } else {
@@ -336,11 +337,11 @@ private func processDirectory(_ inputURL: URL, with options: inout Options, logg
     if manager.fileExists(atPath: versionFile.path) {
         let versionString = try String(contentsOf: versionFile, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if args["swiftversion"] != nil {
+        if args["swift-version"] != nil {
             logger?("Ignoring swift-version file at \(versionFile.path)")
         } else if Version(rawValue: versionString) != nil {
             logger?("Reading swift-version file at \(versionFile.path) (version \(versionString))")
-            args["swiftversion"] = versionString
+            args["swift-version"] = versionString
         } else {
             // Don't treat as error, per: https://github.com/nicklockwood/SwiftFormat/issues/639
             // TODO: find a better solution for logging warnings here
@@ -448,9 +449,9 @@ public func newOffset(for offset: SourceOffset, in tokens: [Token], tabWidth: In
 }
 
 /// Process parsing errors
-public func parsingError(for tokens: [Token], options: FormatOptions) -> FormatError? {
+public func parsingError(for tokens: [Token], options: FormatOptions, allowErrorsInFragments: Bool = true) -> FormatError? {
     guard let index = tokens.firstIndex(where: {
-        guard options.fragment || !$0.isError else { return true }
+        guard (options.fragment && allowErrorsInFragments) || !$0.isError else { return true }
         guard !options.ignoreConflictMarkers, case let .operator(string, _) = $0 else { return false }
         return string.hasPrefix("<<<<<") || string.hasPrefix("=====") || string.hasPrefix(">>>>>")
     }) else {

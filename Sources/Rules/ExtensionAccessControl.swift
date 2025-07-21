@@ -11,10 +11,8 @@ import Foundation
 public extension FormatRule {
     static let extensionAccessControl = FormatRule(
         help: "Configure the placement of an extension's access control keyword.",
-        options: ["extensionacl"]
+        options: ["extension-acl"]
     ) { formatter in
-        guard !formatter.options.fragment else { return }
-
         let declarations = formatter.parseDeclarations()
         declarations.forEachRecursiveDeclaration { declaration in
             guard let extensionDeclaration = declaration.asTypeDeclaration,
@@ -91,7 +89,7 @@ public extension FormatRule {
             // Move the extension's visibility keyword to each individual declaration
             case .onDeclarations:
                 // If the extension visibility is unspecified then there isn't any work to do
-                guard let extensionVisibility = extensionVisibility else { return }
+                guard let extensionVisibility else { return }
 
                 // Remove the visibility keyword from the extension declaration itself
                 extensionDeclaration.removeVisibility(visibilityKeyword!)
@@ -109,7 +107,7 @@ public extension FormatRule {
         }
     } examples: {
         """
-        `--extensionacl on-extension` (default)
+        `--extension-acl on-extension` (default)
 
         ```diff
         - extension Foo {
@@ -123,7 +121,7 @@ public extension FormatRule {
           }
         ```
 
-        `--extensionacl on-declarations`
+        `--extension-acl on-declarations`
 
         ```diff
         - public extension Foo {
@@ -142,7 +140,7 @@ public extension FormatRule {
     }
 }
 
-extension Collection where Element == Declaration {
+extension Collection<Declaration> {
     // Performs the given operation for each declaration in this tree of declarations,
     // including the body of any child conditional compilation blocks,
     // but not the body of any child types. All of the iterated declarations belong

@@ -5,7 +5,7 @@ public extension FormatRule {
     static let redundantEquatable = FormatRule(
         help: "Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.",
         disabledByDefault: true,
-        options: ["equatablemacro"]
+        options: ["equatable-macro"]
     ) { formatter in
         // Find all of the types with an `Equatable` conformance and a manually-implemented `static func ==` implementation.
         let declarations = formatter.parseDeclarations()
@@ -80,7 +80,7 @@ public extension FormatRule {
                 // Add the `@Equatable` macro
                 formatter.insert(
                     [.keyword(macro), .space(" ")],
-                    at: equatableType.typeDeclaration.startOfModifiersIndex
+                    at: equatableType.typeDeclaration.startOfModifiersIndex(includingAttributes: true)
                 )
 
                 // Import the module that defines the `@Equatable` macro if needed
@@ -110,12 +110,12 @@ public extension FormatRule {
         ```
 
         If your project includes a macro that generates the `static func ==` implementation
-        for the attached class, you can specify `--equatablemacro @Equatable,MyMacroLib`
+        for the attached class, you can specify `--equatable-macro @Equatable,MyMacroLib`
         and this rule will also migrate eligible classes to use your macro instead of
         a hand-written Equatable conformance:
 
         ```diff
-          // --equatablemacro @Equatable,MyMacroLib
+          // --equatable-macro @Equatable,MyMacroLib
           import FooLib
         + import MyMacroLib
 

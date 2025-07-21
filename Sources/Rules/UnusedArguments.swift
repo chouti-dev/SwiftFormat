@@ -12,7 +12,7 @@ public extension FormatRule {
     /// Replace unused arguments with an underscore
     static let unusedArguments = FormatRule(
         help: "Mark unused function arguments with `_`.",
-        options: ["stripunusedargs"]
+        options: ["strip-unused-args"]
     ) { formatter in
         guard !formatter.options.fragment else { return }
 
@@ -189,8 +189,8 @@ public extension FormatRule {
 }
 
 extension Formatter {
-    func removeUsed<T>(from argNames: inout [String], with associatedData: inout [T],
-                       locals: Set<String> = [], in range: CountableRange<Int>)
+    func removeUsed(from argNames: inout [String], with associatedData: inout [some Any],
+                    locals: Set<String> = [], in range: CountableRange<Int>)
     {
         var isDeclaration = false
         var wasDeclaration = false
