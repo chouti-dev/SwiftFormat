@@ -176,6 +176,11 @@ extension Declaration {
         }
     }
 
+    /// The range of the doc comment or regular comment immediately preceding this declaration
+    var docCommentRange: ClosedRange<Int>? {
+        formatter.parseDocCommentRange(forDeclarationAt: keywordIndex)
+    }
+
     /// The `CustomDebugStringConvertible` representation of this declaration
     var debugDescription: String {
         guard isValid else {
@@ -329,7 +334,7 @@ extension TypeDeclaration {
     }
 
     /// The list of conformances of this type, not including any constraints following a `where` clause.
-    var conformances: [(conformance: String, index: Int)] {
+    var conformances: [(conformance: TypeName, index: Int)] {
         formatter.parseConformancesOfType(atKeywordIndex: keywordIndex)
     }
 }

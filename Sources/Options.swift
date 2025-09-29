@@ -97,8 +97,14 @@ public enum AttributeMode: String, CaseIterable {
     case preserve
 }
 
-/// Argument type for else position
+/// Where to place the else or catch in an if/else or do/catch statement
 public enum ElsePosition: String, CaseIterable {
+    case sameLine = "same-line"
+    case nextLine = "next-line"
+}
+
+/// Where to place the else in a guard statement
+public enum GuardElsePosition: String, CaseIterable {
     case sameLine = "same-line"
     case nextLine = "next-line"
     case auto
@@ -491,11 +497,25 @@ public enum DeclarationOrganizationMode: String, CaseIterable {
     case type
 }
 
+/// Treatment of MARK comments in type bodies
+public enum TypeBodyMarks: String, CaseIterable {
+    /// Preserve all existing MARK comments in type bodies
+    case preserve
+    /// Remove MARK comments that don't match expected visibility/declaration kind marks
+    case remove
+}
+
 /// Whether to insert or remove blank lines from the start / end of type bodies
 public enum TypeBlankLines: String, CaseIterable {
     case remove
     case insert
     case preserve
+}
+
+/// Treatment of semicolons
+public enum SemicolonsMode: String, CaseIterable {
+    case inlineOnly = "inline-only"
+    case never
 }
 
 /// Format to use when printing dates
@@ -647,6 +667,13 @@ public enum EquatableMacro: Equatable, RawRepresentable, CustomStringConvertible
     }
 }
 
+public enum BlankLineAfterSwitchCase: String, CaseIterable {
+    /// Always add blank lines after switch cases
+    case always
+    /// Add blank lines after multiline switch cases only
+    case multilineOnly = "multiline-only"
+}
+
 public enum URLMacro: Equatable, RawRepresentable, CustomStringConvertible {
     /// No URL macro
     case none
@@ -684,7 +711,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var lineAfterMarks: Bool
     public var indent: String
     public var linebreak: String
-    public var allowInlineSemicolons: Bool
+    public var semicolons: SemicolonsMode
     public var spaceAroundRangeOperators: OperatorSpacingMode
     public var spaceAroundOperatorDeclarations: OperatorSpacingMode
     public var useVoid: Bool
@@ -717,8 +744,8 @@ public struct FormatOptions: CustomStringConvertible {
     public var exponentGrouping: Bool
     public var hoistPatternLet: Bool
     public var stripUnusedArguments: ArgumentStrippingMode
-    public var elseOnNextLine: Bool
-    public var guardElsePosition: ElsePosition
+    public var elsePosition: ElsePosition
+    public var guardElsePosition: GuardElsePosition
     public var explicitSelf: SelfMode
     public var selfRequired: Set<String>
     public var throwCapturing: Set<String>
@@ -757,7 +784,12 @@ public struct FormatOptions: CustomStringConvertible {
     public var organizeStructThreshold: Int
     public var organizeEnumThreshold: Int
     public var organizeExtensionThreshold: Int
+    public var markStructThreshold: Int
+    public var markClassThreshold: Int
+    public var markEnumThreshold: Int
+    public var markExtensionThreshold: Int
     public var organizationMode: DeclarationOrganizationMode
+    public var typeBodyMarks: TypeBodyMarks
     public var visibilityOrder: [String]?
     public var typeOrder: [String]?
     public var customVisibilityMarks: Set<String>
@@ -791,10 +823,15 @@ public struct FormatOptions: CustomStringConvertible {
     public var nilInit: NilInitType
     public var preservedPrivateDeclarations: Set<String>
     public var additionalXCTestSymbols: Set<String>
+    public var defaultTestSuiteAttributes: [String]
     public var equatableMacro: EquatableMacro
     public var urlMacro: URLMacro
     public var preferFileMacro: Bool
     public var lineBetweenConsecutiveGuards: Bool
+    public var blankLineAfterSwitchCase: BlankLineAfterSwitchCase
+    public var redundantThrows: RedundantEffectMode
+    public var redundantAsync: RedundantEffectMode
+    public var allowPartialWrapping: Bool
 
     /// Deprecated
     public var indentComments: Bool
@@ -805,6 +842,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var swiftVersion: Version
     public var languageMode: Version
     public var fileInfo: FileInfo
+    public var markdownFiles: MarkdownFormattingMode
     public var timeout: TimeInterval
 
     /// Enabled rules - this is a hack used to allow rules to vary their behavior
@@ -816,7 +854,7 @@ public struct FormatOptions: CustomStringConvertible {
     public init(lineAfterMarks: Bool = true,
                 indent: String = "    ",
                 linebreak: String = "\n",
-                allowInlineSemicolons: Bool = true,
+                semicolons: SemicolonsMode = .inlineOnly,
                 spaceAroundRangeOperators: OperatorSpacingMode = .insert,
                 spaceAroundOperatorDeclarations: OperatorSpacingMode = .insert,
                 useVoid: Bool = true,
@@ -850,8 +888,8 @@ public struct FormatOptions: CustomStringConvertible {
                 exponentGrouping: Bool = false,
                 hoistPatternLet: Bool = true,
                 stripUnusedArguments: ArgumentStrippingMode = .all,
-                elseOnNextLine: Bool = false,
-                guardElsePosition: ElsePosition = .auto,
+                elsePosition: ElsePosition = .sameLine,
+                guardElsePosition: GuardElsePosition = .auto,
                 explicitSelf: SelfMode = .remove,
                 selfRequired: Set<String> = [],
                 throwCapturing: Set<String> = [],
@@ -890,7 +928,12 @@ public struct FormatOptions: CustomStringConvertible {
                 organizeStructThreshold: Int = 0,
                 organizeEnumThreshold: Int = 0,
                 organizeExtensionThreshold: Int = 0,
+                markStructThreshold: Int = 0,
+                markClassThreshold: Int = 0,
+                markEnumThreshold: Int = 0,
+                markExtensionThreshold: Int = 0,
                 organizationMode: DeclarationOrganizationMode = .visibility,
+                typeBodyMarks: TypeBodyMarks = .preserve,
                 visibilityOrder: [String]? = nil,
                 typeOrder: [String]? = nil,
                 customVisibilityMarks: Set<String> = [],
@@ -924,22 +967,28 @@ public struct FormatOptions: CustomStringConvertible {
                 nilInit: NilInitType = .remove,
                 preservedPrivateDeclarations: Set<String> = [],
                 additionalXCTestSymbols: Set<String> = [],
+                defaultTestSuiteAttributes: [String] = [],
                 equatableMacro: EquatableMacro = .none,
                 urlMacro: URLMacro = .none,
                 preferFileMacro: Bool = true,
                 lineBetweenConsecutiveGuards: Bool = false,
+                blankLineAfterSwitchCase: BlankLineAfterSwitchCase = .multilineOnly,
+                redundantThrows: RedundantEffectMode = .testsOnly,
+                redundantAsync: RedundantEffectMode = .testsOnly,
+                allowPartialWrapping: Bool = true,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
                 swiftVersion: Version = .undefined,
                 languageMode: Version? = nil,
                 fileInfo: FileInfo = FileInfo(),
+                markdownFiles: MarkdownFormattingMode = .ignore,
                 timeout: TimeInterval = 1)
     {
         self.lineAfterMarks = lineAfterMarks
         self.indent = indent
         self.linebreak = linebreak
-        self.allowInlineSemicolons = allowInlineSemicolons
+        self.semicolons = semicolons
         self.spaceAroundRangeOperators = spaceAroundRangeOperators
         self.spaceAroundOperatorDeclarations = spaceAroundOperatorDeclarations
         self.useVoid = useVoid
@@ -972,7 +1021,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.hexGrouping = hexGrouping
         self.hoistPatternLet = hoistPatternLet
         self.stripUnusedArguments = stripUnusedArguments
-        self.elseOnNextLine = elseOnNextLine
+        self.elsePosition = elsePosition
         self.guardElsePosition = guardElsePosition
         self.explicitSelf = explicitSelf
         self.selfRequired = selfRequired
@@ -1012,7 +1061,12 @@ public struct FormatOptions: CustomStringConvertible {
         self.organizeStructThreshold = organizeStructThreshold
         self.organizeEnumThreshold = organizeEnumThreshold
         self.organizeExtensionThreshold = organizeExtensionThreshold
+        self.markStructThreshold = markStructThreshold
+        self.markClassThreshold = markClassThreshold
+        self.markEnumThreshold = markEnumThreshold
+        self.markExtensionThreshold = markExtensionThreshold
         self.organizationMode = organizationMode
+        self.typeBodyMarks = typeBodyMarks
         self.visibilityOrder = visibilityOrder
         self.typeOrder = typeOrder
         self.customVisibilityMarks = customVisibilityMarks
@@ -1046,17 +1100,22 @@ public struct FormatOptions: CustomStringConvertible {
         self.nilInit = nilInit
         self.preservedPrivateDeclarations = preservedPrivateDeclarations
         self.additionalXCTestSymbols = additionalXCTestSymbols
+        self.defaultTestSuiteAttributes = defaultTestSuiteAttributes
         self.equatableMacro = equatableMacro
         self.urlMacro = urlMacro
         self.preferFileMacro = preferFileMacro
         self.lineBetweenConsecutiveGuards = lineBetweenConsecutiveGuards
-        // Doesn't really belong here, but hard to put elsewhere
+        self.blankLineAfterSwitchCase = blankLineAfterSwitchCase
+        self.redundantThrows = redundantThrows
+        self.redundantAsync = redundantAsync
+        self.allowPartialWrapping = allowPartialWrapping
         self.indentComments = indentComments
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers
         self.swiftVersion = swiftVersion
         self.languageMode = languageMode ?? defaultLanguageMode(for: swiftVersion)
         self.fileInfo = fileInfo
+        self.markdownFiles = markdownFiles
         self.timeout = timeout
     }
 
@@ -1095,19 +1154,21 @@ public struct FormatOptions: CustomStringConvertible {
     }
 }
 
+/// When to remove redundant `throws` / `async` effects
+public enum RedundantEffectMode: String, CaseIterable {
+    /// Only remove redundant effects from test functions (default)
+    case testsOnly = "tests-only"
+    /// Remove redundant effects from all functions (can cause additional warnings / errors)
+    case always
+}
+
 public enum MarkdownFormattingMode: String, CaseIterable {
     /// Swift code in markdown files is ignored (default)
     case ignore
     /// Errors in markdown code blocks are ignored
-    case lenient = "format-lenient"
+    case lenient
     /// Errors in markdown code blocks are reported
-    case strict = "format-strict"
-
-    public static let `default`: Self = .ignore
-
-    public static var help: String {
-        allCases.formattedList(default: .default)
-    }
+    case strict
 }
 
 /// File enumeration options
@@ -1117,23 +1178,20 @@ public struct FileOptions {
     public var excludedGlobs: [Glob]
     public var unexcludedGlobs: [Glob]
     public var minVersion: Version
-    public var markdownFormattingMode: MarkdownFormattingMode
 
     public static let `default` = FileOptions()
 
     public init(followSymlinks: Bool = false,
-                supportedFileExtensions: [String] = ["swift"],
+                supportedFileExtensions: [String] = ["swift", "md"],
                 excludedGlobs: [Glob] = [],
                 unexcludedGlobs: [Glob] = [],
-                minVersion: Version = .undefined,
-                markdownFormattingMode: MarkdownFormattingMode = .ignore)
+                minVersion: Version = .undefined)
     {
         self.followSymlinks = followSymlinks
         self.supportedFileExtensions = supportedFileExtensions
         self.excludedGlobs = excludedGlobs
         self.unexcludedGlobs = unexcludedGlobs
         self.minVersion = minVersion
-        self.markdownFormattingMode = markdownFormattingMode
     }
 
     public func shouldSkipFile(_ inputURL: URL) -> Bool {
@@ -1160,6 +1218,7 @@ public struct Options {
     public var rules: Set<String>?
     public var configURLs: [URL]?
     public var lint: Bool
+    public var filterOptions: [Glob: [String: String]]
 
     public static let `default` = Options(
         fileOptions: .default,
@@ -1173,16 +1232,23 @@ public struct Options {
                 formatOptions: FormatOptions? = nil,
                 rules: Set<String>? = nil,
                 configURLs: [URL]? = nil,
-                lint: Bool = false)
+                lint: Bool = false,
+                filterOptions: [Glob: [String: String]] = [:])
     {
         self.fileOptions = fileOptions
         self.formatOptions = formatOptions
         self.rules = rules
         self.configURLs = configURLs
         self.lint = lint
+        self.filterOptions = filterOptions
     }
 
     public func shouldSkipFile(_ inputURL: URL) -> Bool {
-        fileOptions?.shouldSkipFile(inputURL) ?? false
+        if inputURL.pathExtension == "md",
+           (formatOptions ?? .default).markdownFiles == .ignore
+        {
+            return true
+        }
+        return fileOptions?.shouldSkipFile(inputURL) ?? false
     }
 }

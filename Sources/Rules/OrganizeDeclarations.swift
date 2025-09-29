@@ -17,9 +17,10 @@ public extension FormatRule {
         options: [
             "category-mark", "mark-categories", "before-marks",
             "lifecycle", "organize-types", "struct-threshold", "class-threshold",
-            "enum-threshold", "extension-threshold", "organization-mode",
-            "visibility-order", "type-order", "visibility-marks", "type-marks",
-            "group-blank-lines", "sort-swiftui-properties",
+            "enum-threshold", "extension-threshold", "mark-struct-threshold",
+            "mark-class-threshold", "mark-enum-threshold", "mark-extension-threshold",
+            "organization-mode", "type-body-marks", "visibility-order", "type-order", "visibility-marks",
+            "type-marks", "group-blank-lines", "sort-swiftui-properties",
         ],
         sharedOptions: ["sorted-patterns", "line-after-marks", "linebreaks"]
     ) { formatter in
@@ -354,10 +355,18 @@ extension Formatter {
         in typeDeclaration: TypeDeclaration,
         order: ParsedOrder
     ) {
+        let typeExceedsThresholdToAddMarks = typeLengthExceedsMarkThreshold(at: typeDeclaration.keywordIndex)
+
         let numberOfCategories: Int = {
             switch options.organizationMode {
             case .visibility:
-                return Set(sortedDeclarations.map(\.category).map(\.visibility)).count
+                if typeDeclaration.keyword == "protocol" {
+                    // There is no access control in protocols, so all declarations are part of the same category.
+                    return 1
+                } else {
+                    return Set(sortedDeclarations.map(\.category).map(\.visibility)).count
+                }
+
             case .type:
                 return Set(sortedDeclarations.map(\.category).map(\.type)).count
             }
@@ -367,6 +376,7 @@ extension Formatter {
 
         for (index, (declaration, category)) in sortedDeclarations.enumerated() {
             if options.markCategories,
+               typeExceedsThresholdToAddMarks,
                numberOfCategories > 1,
                let markCommentBody = category.markCommentBody(from: options.categoryMarkComment, with: options.organizationMode),
                category.shouldBeMarked(in: Set(formattedCategories), for: options.organizationMode)
@@ -377,12 +387,22 @@ extension Formatter {
                 let markDeclaration = tokenize("\(indentation)// \(markCommentBody)")
                 let eligibleCommentRange = declaration.range.lowerBound ..< self.index(of: .nonSpaceOrCommentOrLinebreak, after: declaration.range.lowerBound - 1)!
 
+                // Remove any comments other than the expected mark comment if present
+                removeExistingCategorySeparators(
+                    from: declaration,
+                    previousDeclaration: index == 0 ? nil : sortedDeclarations[index - 1].declaration,
+                    order: order,
+                    preserving: { commentBody in
+                        commentBody == markCommentBody
+                    }
+                )
+
                 let matchingComments = singleLineComments(in: eligibleCommentRange, matching: { commentBody in
                     commentBody == markCommentBody
                 })
 
                 if matchingComments.count == 1, let matchingComment = matchingComments.first {
-                    // The declaration already has the expetced mark comment.
+                    // The declaration already has the expected mark comment.
                     // However, we need to make sure it also has a trailing blank line.
                     if options.lineAfterMarks,
                        let tokenAfterComment = self.index(of: .nonSpaceOrComment, after: matchingComment.upperBound),
@@ -393,12 +413,6 @@ extension Formatter {
                         insertLinebreak(at: tokenAfterComment)
                     }
                 } else {
-                    removeExistingCategorySeparators(
-                        from: declaration,
-                        previousDeclaration: index == 0 ? nil : sortedDeclarations[index - 1].declaration,
-                        order: order
-                    )
-
                     insertLinebreak(at: declaration.range.lowerBound)
                     if options.lineAfterMarks {
                         insertLinebreak(at: declaration.range.lowerBound)
@@ -419,8 +433,9 @@ extension Formatter {
                         insertLinebreak(at: typeDeclaration.openBraceIndex + 1)
                     }
                 }
-            } else {
-                // Otherwise, this declaration shouldn't have separators
+            } else if typeExceedsThresholdToAddMarks {
+                // Otherwise, this declaration shouldn't have separators.
+                // If the type is under the mark threshold, preserve any marks that were added manually.
                 removeExistingCategorySeparators(
                     from: declaration,
                     previousDeclaration: index == 0 ? nil : sortedDeclarations[index - 1].declaration,
@@ -436,18 +451,38 @@ extension Formatter {
                 declaration.addTrailingBlankLineIfNeeded()
             }
         }
+
+        // If the type was originally below the MARK threshold, but now meets the MARK threshold after being organized,
+        // ensure we do add the marks. Otherwise the marks would just be added next the this rule is ran.
+        if !typeExceedsThresholdToAddMarks,
+           typeLengthExceedsMarkThreshold(at: typeDeclaration.keywordIndex)
+        {
+            addCategorySeparators(to: sortedDeclarations, in: typeDeclaration, order: order)
+        }
     }
 
     /// Removes any existing category separators from the given declarations
     func removeExistingCategorySeparators(
         from declaration: Declaration,
         previousDeclaration: Declaration?,
-        order: ParsedOrder
+        order: ParsedOrder,
+        preserving shouldPreserveComment: (_ commentBody: String) -> Bool = { _ in false }
     ) {
         var matchingComments = matchingCategorySeparatorComments(in: declaration.leadingCommentRange, order: order)
+            .map { $0.autoUpdating(in: self) }
+        var preservedComment = false
 
         while !matchingComments.isEmpty {
             let commentRange = matchingComments.removeFirst()
+
+            // Preserve the first comment matching the given closure
+            if !preservedComment,
+               let commentBody = index(after: commentRange.lowerBound, where: \.isCommentBody),
+               shouldPreserveComment(tokens[commentBody].string)
+            {
+                preservedComment = true
+                continue
+            }
 
             // Makes sure there are only whitespace or other comments before this comment.
             // Otherwise, we don't want to remove it.
@@ -464,16 +499,10 @@ extension Formatter {
             let rangeToRemove = startOfCommentLine ..< startOfNextDeclaration
             removeTokens(in: rangeToRemove)
 
-            // We specifically iterate from start to end here, instead of in reverse,
-            // so we have to manually keep the existing inidices up to date.
-            matchingComments = matchingComments.map { commentRange in
-                (commentRange.lowerBound - rangeToRemove.count)
-                    ... (commentRange.upperBound - rangeToRemove.count)
-            }
-
             // Move any tokens from before the category separator into the previous declaration.
             // This makes sure that things like comments stay grouped in the same category.
-            if let previousDeclaration, startOfCommentLine != 0 {
+            // Don't do this is we preserved a previous comment, since this following comment is no longer the first one.
+            if let previousDeclaration, startOfCommentLine != 0, !preservedComment {
                 // Remove the tokens before the category separator from this declaration...
                 let rangeBeforeComment = min(startOfCommentLine, declaration.range.lowerBound) ..< startOfCommentLine
                 let tokensBeforeCommentLine = Array(tokens[rangeBeforeComment])
@@ -488,40 +517,48 @@ extension Formatter {
     /// The set of category separate comments like `// MARK: - Public` in the given range.
     /// Looks for approximate matches using edit distance, not exact matches.
     func matchingCategorySeparatorComments(in range: Range<Int>, order: ParsedOrder) -> [ClosedRange<Int>] {
-        // Current amount of variants to pair visibility-type is over 300,
-        // so we take only categories that could provide typemark that we want to erase
-        let potentialCategorySeparatorCommentBodies = (
-            VisibilityCategory.allCases.map { Category(visibility: $0, type: .classMethod, order: 0) }
-                + DeclarationType.allCases.map { Category(visibility: .visibility(.open), type: $0, order: 0) }
-                + DeclarationType.allCases.map { Category(visibility: .explicit($0), type: .classMethod, order: 0) }
-                + order.filter { $0.comment != nil }
-        ).flatMap {
-            Array(Set([
-                // The user's specific category separator template
-                $0.markCommentBody(from: options.categoryMarkComment, with: options.organizationMode),
-                // Always look for MARKs even if the user is using a different template
-                $0.markCommentBody(from: "MARK: %c", with: options.organizationMode),
-            ]))
-        }.compactMap { $0 }
+        switch options.typeBodyMarks {
+        case .remove:
+            return singleLineComments(in: range, matching: { commentBody in
+                commentBody.uppercased().trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("MARK:")
+            })
 
-        return singleLineComments(in: range, matching: { commentBody in
-            // Check if this comment matches an expected category separator comment
-            for potentialSeparatorCommentBody in potentialCategorySeparatorCommentBodies {
-                let existingComment = "// \(commentBody)".lowercased()
-                let potentialMatch = "// \(potentialSeparatorCommentBody)".lowercased()
+        case .preserve:
+            // Current amount of variants to pair visibility-type is over 300,
+            // so we take only categories that could provide typemark that we want to erase
+            let potentialCategorySeparatorCommentBodies = (
+                VisibilityCategory.allCases.map { Category(visibility: $0, type: .classMethod, order: 0) }
+                    + DeclarationType.allCases.map { Category(visibility: .visibility(.open), type: $0, order: 0) }
+                    + DeclarationType.allCases.map { Category(visibility: .explicit($0), type: .classMethod, order: 0) }
+                    + order.filter { $0.comment != nil }
+            ).flatMap {
+                Array(Set([
+                    // The user's specific category separator template
+                    $0.markCommentBody(from: options.categoryMarkComment, with: options.organizationMode),
+                    // Always look for MARKs even if the user is using a different template
+                    $0.markCommentBody(from: "MARK: %c", with: options.organizationMode),
+                ]))
+            }.compactMap { $0 }
 
-                // Check the edit distance of this existing comment with the potential
-                // valid category separators for this category. If they are similar or identical,
-                // we'll want to replace the existing comment with the correct comment.
-                let minimumEditDistance = Int(0.2 * Float(existingComment.count))
+            return singleLineComments(in: range, matching: { commentBody in
+                // Check if this comment matches an expected category separator comment
+                for potentialSeparatorCommentBody in potentialCategorySeparatorCommentBodies {
+                    let existingComment = "// \(commentBody)".lowercased()
+                    let potentialMatch = "// \(potentialSeparatorCommentBody)".lowercased()
 
-                if existingComment.editDistance(from: potentialMatch) <= minimumEditDistance {
-                    return true
+                    // Check the edit distance of this existing comment with the potential
+                    // valid category separators for this category. If they are similar or identical,
+                    // we'll want to replace the existing comment with the correct comment.
+                    let minimumEditDistance = Int(0.2 * Float(existingComment.count))
+
+                    if existingComment.editDistance(from: potentialMatch) <= minimumEditDistance {
+                        return true
+                    }
                 }
-            }
 
-            return false
-        })
+                return false
+            })
+        }
     }
 
     // Preserves the original spacing for groups of properties that were originally consecutive.
@@ -841,6 +878,33 @@ extension Formatter {
         .reduce(into: [:]) { dictionary, option in
             dictionary[option.0] = option.1
         }
+    }
+
+    func typeLengthExceedsMarkThreshold(at typeKeywordIndex: Int) -> Bool {
+        let markThreshold: Int
+        switch tokens[typeKeywordIndex].string {
+        case "class", "actor":
+            markThreshold = options.markClassThreshold
+        case "struct":
+            markThreshold = options.markStructThreshold
+        case "enum":
+            markThreshold = options.markEnumThreshold
+        case "extension":
+            markThreshold = options.markExtensionThreshold
+        default:
+            markThreshold = 0
+        }
+        guard markThreshold != 0,
+              let startOfScope = index(of: .startOfScope("{"), after: typeKeywordIndex),
+              let endOfScope = endOfScope(at: startOfScope)
+        else {
+            return true
+        }
+        let lineCount = tokens[startOfScope ... endOfScope]
+            .filter(\.isLinebreak)
+            .count
+            - 1
+        return lineCount >= markThreshold
     }
 }
 

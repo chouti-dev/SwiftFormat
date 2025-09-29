@@ -20,7 +20,9 @@ class EnumNamespacesTests: XCTestCase {
     }
 
     func testEnumNamespacesConformingOtherType() {
-        let input = "private final class CustomUITableViewCell: UITableViewCell {}"
+        let input = """
+        private final class CustomUITableViewCell: UITableViewCell {}
+        """
         testFormatting(for: input, rule: .enumNamespaces)
     }
 
@@ -451,5 +453,16 @@ class EnumNamespacesTests: XCTestCase {
         }
         """
         testFormatting(for: input, rule: .enumNamespaces)
+    }
+
+    func testEnumNamespacesNotAppliedToStructWithInstanceSubscript() {
+        let input = """
+        struct MyStruct {
+            subscript(key: String) -> String {
+                return key
+            }
+        }
+        """
+        testFormatting(for: input, rule: .enumNamespaces, exclude: [.unusedArguments])
     }
 }

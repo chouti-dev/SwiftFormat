@@ -106,7 +106,9 @@ class CodeOrganizationTests: XCTestCase {
                 // If this is a function call, parse the labels to disambiguate
                 // between methods with the same base name
                 var functionCallArguments: [String?]?
-                if let functionCallStartOfScope = formatter.index(of: .startOfScope("("), after: index) {
+                if let functionCallStartOfScope = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: index),
+                   formatter.tokens[functionCallStartOfScope] == .startOfScope("(")
+                {
                     functionCallArguments = formatter.parseFunctionCallArguments(startOfScope: functionCallStartOfScope).map(\.label)
                 }
 
@@ -184,6 +186,48 @@ class CodeOrganizationTests: XCTestCase {
             XCTAssertEqual(testClass.name!, expectedTestClassName, """
             class \(testClass.name!) and file \(testFileName) should have same name.
             """)
+        }
+    }
+
+    func testTestCasesUseMultiLineStrings() throws {
+        for ruleTestFile in allRuleTestFiles {
+            let content = try String(contentsOf: ruleTestFile)
+            let formatter = Formatter(tokenize(content))
+            var hasChanges = false
+
+            formatter.forEach(.keyword) { index, keyword in
+                guard ["let", "var"].contains(keyword.string),
+                      let propertyDeclaration = formatter.parsePropertyDeclaration(atIntroducerIndex: index),
+                      let valueRange = propertyDeclaration.value?.expressionRange,
+                      formatter.tokens[valueRange.lowerBound] == .startOfScope("\""),
+                      let endOfString = formatter.endOfScope(at: valueRange.lowerBound)
+                else { return }
+
+                let startOfString = valueRange.lowerBound
+                let stringBodyRange = (startOfString + 1) ..< endOfString
+
+                let stringContent = formatter.tokens[stringBodyRange].map(\.string).joined()
+                let currentIndent = formatter.currentIndentForLine(at: startOfString)
+                let convertedContent = stringContent.replacingOccurrences(of: "\\n", with: "\n\(currentIndent)")
+
+                let newTokens: [Token] = [
+                    .startOfScope("\"\"\""),
+                    .linebreak("\n", 0),
+                    .space(currentIndent),
+                    .stringBody(convertedContent),
+                    .linebreak("\n", 0),
+                    .space(currentIndent),
+                    .endOfScope("\"\"\""),
+                ]
+
+                formatter.replaceTokens(in: startOfString ... endOfString, with: newTokens)
+                hasChanges = true
+            }
+
+            if hasChanges {
+                try formatter.tokens.string.write(to: ruleTestFile, atomically: true, encoding: .utf8)
+                XCTFail("Updated test cases in \(ruleTestFile.lastPathComponent) to use multi-line strings.")
+            }
         }
     }
 }

@@ -765,6 +765,19 @@ The config file format is designed to be edited by hand. You may include blank l
 --disable elseOnSameLine,semicolons
 ```
 
+You can create multiple configuration sections within a single `.swiftformat` file to apply different formatting options to different parts of your project. Each section should specify a `--filter` glob pattern to determine which files the configuration applies to. Options in that section are used when formatting files that match `--filter` glob, in addition to the base options in the file.
+
+```
+--enable indent
+--indent 4
+
+[Tests]
+--filter **/Tests/**
+--enable noForceUnwrapInTests
+--enable noForceTryInTests
+--indent 2
+```
+
 If you would prefer not to edit the configuration file by hand, you can use the [SwiftFormat for Xcode](#xcode-source-editor-extension) app to edit the configuration and export a configuration file. You can also use the swiftformat command-line-tool's `--inferoptions` command to generate a config file from your existing project, like this:
 
 ```bash
@@ -935,26 +948,25 @@ SwiftFormat can format Swift code blocks inside Markdown files (`.md`). This is 
   ```
 ````
 
-To format Swift code blocks in markdown files, use the `--markdown-files` option with either `format-strict` or `format-lenient`:
+To format Swift code blocks in markdown files, use the `--markdown-files` option with either `strict` or `lenient`:
 
 ```bash
-$ swiftformat . --markdown-files format-strict
-$ swiftformat . --markdown-files format-lenient
+$ swiftformat . --markdown-files strict
+$ swiftformat . --markdown-files lenient
 ```
 
 Or add it to your `.swiftformat` config file:
 
 ```
---markdown-files format-strict
---markdown-files format-lenient
+--markdown-files strict
 ```
 
 **Formatting modes:**
 
 SwiftFormat supports two modes for handling markdown files:
 
-- `format-lenient` (default): Ignores parsing errors in code blocks and continues formatting
-- `format-strict`: Fails if any code blocks contain parsing errors
+- `lenient` (default): Ignores parsing errors in code blocks and continues formatting
+- `strict`: Fails if any code blocks contain parsing errors
 
 SwiftFormat's tokenizer is more permissive than the Swift compiler and typically only emits errors when encountering unbalanced scope tokens like `(` or `{`.
 

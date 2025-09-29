@@ -138,7 +138,7 @@ private struct Inference {
         options.linebreak = linebreak
     }
 
-    let allowInlineSemicolons = OptionInferrer { formatter, options in
+    let semicolons = OptionInferrer { formatter, options in
         var allow = false
         for (i, token) in formatter.tokens.enumerated() {
             guard case .delimiter(";") = token else {
@@ -149,7 +149,7 @@ private struct Inference {
                 break
             }
         }
-        options.allowInlineSemicolons = allow
+        options.semicolons = allow ? .inlineOnly : .never
     }
 
     let noSpaceOperators = OptionInferrer { formatter, options in
@@ -1271,7 +1271,7 @@ private struct Inference {
         options.spaceAroundOperatorDeclarations = nospace > space ? .remove : .insert
     }
 
-    let elseOnNextLine = OptionInferrer { formatter, options in
+    let elsePosition = OptionInferrer { formatter, options in
         var sameLine = 0, nextLine = 0
         formatter.forEach(.keyword) { i, token in
             guard [.keyword("else"), .keyword("catch"), .keyword("while")].contains(token) else { return }
@@ -1292,7 +1292,7 @@ private struct Inference {
                 sameLine += 1
             }
         }
-        options.elseOnNextLine = (sameLine < nextLine)
+        options.elsePosition = sameLine < nextLine ? .nextLine : .sameLine
     }
 
     let indentCase = OptionInferrer { formatter, options in

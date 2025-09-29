@@ -3,7 +3,7 @@
 
 import XCTest
 
-final class ThrowingTestsTests: XCTestCase {
+final class NoForceTryInTestsTests: XCTestCase {
     func testTestCaseIsUpdated_for_Testing() throws {
         let input = """
         import Testing
@@ -19,7 +19,7 @@ final class ThrowingTestsTests: XCTestCase {
             try somethingThatThrows()
         }
         """
-        testFormatting(for: input, output, rule: .throwingTests)
+        testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
     func test_nonTestCaseFunction_IsNotUpdated_for_Testing() throws {
@@ -36,7 +36,7 @@ final class ThrowingTestsTests: XCTestCase {
             try! somethingThatThrows()
         }
         """
-        testFormatting(for: input, rule: .throwingTests)
+        testFormatting(for: input, rule: .noForceTryInTests)
     }
 
     func testTestCaseIsUpdated_for_XCTest() throws {
@@ -58,7 +58,7 @@ final class ThrowingTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .throwingTests)
+        testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
     func test_nonTestCaseFunction_IsNotUpdated_for_XCTest() throws {
@@ -69,9 +69,13 @@ final class ThrowingTestsTests: XCTestCase {
             func something() {
                 try! somethingThatThrows()
             }
+
+            func testHelper() -> String {
+                try! generateString()
+            }
         }
         """
-        testFormatting(for: input, rule: .throwingTests)
+        testFormatting(for: input, rule: .noForceTryInTests)
     }
 
     func testTestCaseIsUpdated_for_async_test() throws {
@@ -79,17 +83,17 @@ final class ThrowingTestsTests: XCTestCase {
         import Testing
 
         @Test func something() async {
-            try! somethingThatThrows()
+            try! await somethingThatThrows()
         }
         """
         let output = """
         import Testing
 
         @Test func something() async throws {
-            try somethingThatThrows()
+            try await somethingThatThrows()
         }
         """
-        testFormatting(for: input, output, rule: .throwingTests)
+        testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
     func testTestCaseIsUpdated_for_already_throws() throws {
@@ -107,7 +111,7 @@ final class ThrowingTestsTests: XCTestCase {
             try somethingThatThrows()
         }
         """
-        testFormatting(for: input, output, rule: .throwingTests)
+        testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
     func testTestCaseIsUpdated_for_multiple_try_exclamationMarks() throws {
@@ -127,7 +131,7 @@ final class ThrowingTestsTests: XCTestCase {
             try somethingThatThrows()
         }
         """
-        testFormatting(for: input, output, rule: .throwingTests)
+        testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
     func testTestCaseIsNotUpdated_for_try_exclamationMark_in_closoure() throws {
@@ -140,7 +144,7 @@ final class ThrowingTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, rule: .throwingTests)
+        testFormatting(for: input, rule: .noForceTryInTests)
     }
 
     func testTestCaseIsUpdated_for_try_exclamationMark_in_if_statement() throws {
@@ -162,7 +166,7 @@ final class ThrowingTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .throwingTests)
+        testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
     func testCaseIsNotUpdated_for_try_exclamationMark_in_closure_inside_if_statement() throws {
@@ -177,7 +181,7 @@ final class ThrowingTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, rule: .throwingTests)
+        testFormatting(for: input, rule: .noForceTryInTests)
     }
 
     func testCaseIsNotUpdated_for_try_exclamationMark_in_closure_inside_nested_function() throws {
@@ -192,6 +196,6 @@ final class ThrowingTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, rule: .throwingTests)
+        testFormatting(for: input, rule: .noForceTryInTests)
     }
 }

@@ -32,8 +32,7 @@
 import XCTest
 @testable import SwiftFormat
 
-private func createTmpFile(_ path: String? = nil, contents: String) throws -> URL {
-    let path = path ?? (UUID().uuidString + ".swift")
+private func createTmpFile(_ path: String, contents: String) throws -> URL {
     let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(path)
     let directory = url.deletingLastPathComponent()
     if !FileManager.default.fileExists(atPath: directory.path) {
@@ -57,15 +56,17 @@ private func withTmpFile(_ path: String? = nil, contents: String, fn: (URL) -> V
 
 private func withTmpFiles(_ files: [String: String], fn: (URL) throws -> Void) throws {
     var urls = [URL]()
+    defer {
+        for url in urls {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
     let prefix = UUID().uuidString
     for (path, contents) in files {
         try urls.append(createTmpFile("\(prefix)/\(path)", contents: contents))
     }
-    for url in urls where url.pathExtension == "swift" || url.pathExtension == "md" {
+    for url in urls where ["swift", "md"].contains(url.pathExtension) {
         try fn(url)
-    }
-    for url in urls {
-        try FileManager.default.removeItem(at: url)
     }
 }
 
@@ -348,18 +349,21 @@ class CommandLineTests: XCTestCase {
             argumentName: "option",
             displayName: "option",
             help: "Short option description",
-            keyPath: \.fragment,
-            trueValues: [],
-            falseValues: []
+            keyPath: \.fragment
         )
 
         let mediumOption = OptionDescriptor(
             argumentName: "option-medium",
             displayName: "option-medium",
             help: "Option with a medium name and description length",
-            keyPath: \.fragment,
-            trueValues: [],
-            falseValues: []
+            keyPath: \.fragment
+        )
+
+        let optionWithArgs = OptionDescriptor(
+            argumentName: "option-with-args",
+            displayName: "option-with-args",
+            help: "Option description with arguments:",
+            keyPath: \.fragment
         )
 
         let longOption = OptionDescriptor(
@@ -369,26 +373,21 @@ class CommandLineTests: XCTestCase {
             This is a longer option with a name over the original 16 character limit, \
             and a help text over the original 80 character limit.
             """,
-            keyPath: \.fragment,
-            trueValues: [],
-            falseValues: []
+            keyPath: \.fragment
         )
 
         CLI.print = { output, _ in
             guard !output.isEmpty else { return }
             XCTAssertEqual(output, """
             --option           Short option description
-            --option           Short option description
             --option-medium    Option with a medium name and description length
-            --option-medium    Option with a medium name and description length
-            --option-with-longer-name
-                               This is a longer option with a name over the original 16 character limit, and a help text over the original 80 character limit.
+            --option-with-args Option description with arguments: "true" or "false" (default)
             --option-with-longer-name
                                This is a longer option with a name over the original 16 character limit, and a help text over the original 80 character limit.
             """)
         }
 
-        printOptions([shortOption, shortOption, mediumOption, mediumOption, longOption, longOption], as: .content)
+        printOptions([shortOption, mediumOption, optionWithArgs, longOption], as: .content)
     }
 
     // MARK: cache
@@ -716,7 +715,7 @@ class CommandLineTests: XCTestCase {
                 case .raw, .warning, .info:
                     break
                 case .error:
-                    XCTAssert(message.contains("did you mean 'github-actions-log'?"))
+                    XCTAssert(message.contains("Did you mean 'github-actions-log'?"))
                 case .content, .success:
                     XCTFail()
                 }
@@ -1018,6 +1017,62 @@ class CommandLineTests: XCTestCase {
         XCTAssert(errors[0].contains("Unexpected end of file at 7:11"))
     }
 
+    func testDoesntFormatSwiftBlockInDiffBlock() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        try withTmpFiles([
+            "README.md": """
+            ````diff
+              ```swift
+            - func    foo(   ) {    }
+            + func foo() {    }
+              ```
+            ````
+
+            ```swift
+            func    foo(   ) {    }
+            ```
+
+            ```swift
+            ```
+            """,
+        ]) { url in
+            _ = processArguments([
+                "",
+                url.path,
+                "--markdownfiles", "format-strict",
+                "--rules", "consecutiveSpaces",
+                "--rules", "spaceInsideBrackets",
+                "--rules", "spaceInsideParens",
+            ], in: "")
+
+            let updatedReadme = try String(contentsOf: url, encoding: .utf8)
+            XCTAssertEqual(updatedReadme, """
+            ````diff
+              ```swift
+            - func    foo(   ) {    }
+            + func foo() {    }
+              ```
+            ````
+
+            ```swift
+            func foo() { }
+            ```
+
+            ```swift
+            ```
+            """)
+        }
+
+        XCTAssertEqual(errors, [])
+    }
+
     func testUnbalancedCodeBlockTokens() throws {
         var errors = [String]()
 
@@ -1068,5 +1123,379 @@ class CommandLineTests: XCTestCase {
 
         // Should not contain the deprecation warning about --commas
         XCTAssertEqual(warnings, [])
+    }
+
+    func testConfigFilesWithFilter() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            print(message)
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        let configURL = try createTmpFile("Test/config.swiftformat", contents: """
+        --rules indent
+        --rules braces
+        --indent 1
+        """)
+
+        let testsConfigURL = try createTmpFile("Test/tests.swiftformat", contents: """
+        --filter **/Tests/**
+        --indent 2
+        --enable linebreakAtEndOfFile
+        """)
+
+        let toolsConfigURL = try createTmpFile("Test/tools.swiftformat", contents: """
+        --filter **/Tools/**
+        --indent 3
+        --disable braces
+        """)
+
+        let nonTestFile = try createTmpFile("Test/Foo/Sources/Foo.swift", contents: """
+        func foo()
+        {
+        print("bar")
+        }
+        """)
+
+        let testFile = try createTmpFile("Test/Foo/Tests/FooTests.swift", contents: """
+        func foo()
+        {
+        print("bar")
+        }
+        """)
+
+        let toolsFile = try createTmpFile("Test/Tools/MyTool/FooTool.swift", contents: """
+        func foo()
+        {
+        print("bar")
+        }
+        """)
+
+        _ = processArguments([
+            "",
+            configURL.deletingLastPathComponent().path,
+            "--config", configURL.path,
+            "--config", testsConfigURL.path,
+            "--config", toolsConfigURL.path,
+        ], in: "")
+
+        XCTAssertEqual(try String(contentsOf: nonTestFile, encoding: .utf8), """
+        func foo() {
+         print("bar")
+        }
+        """)
+
+        XCTAssertEqual(try String(contentsOf: testFile, encoding: .utf8), """
+        func foo() {
+          print("bar")
+        }
+
+        """)
+
+        XCTAssertEqual(try String(contentsOf: toolsFile, encoding: .utf8), """
+        func foo()
+        {
+           print("bar")
+        }
+        """)
+
+        let tempFiles = [configURL, testsConfigURL, toolsConfigURL, nonTestFile, testFile, toolsFile]
+        for tempFile in tempFiles {
+            try FileManager.default.removeItem(at: tempFile)
+        }
+
+        XCTAssertEqual(errors, [])
+    }
+
+    func testSingleConfigFileWithFilters() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            print(message)
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        let configURL = try createTmpFile("Test/config.swiftformat", contents: """
+        --indent 1
+
+        [Tests]
+        --filter **/Tests/**
+        --indent 2
+
+        [Tools Directory]
+        --filter **/Tools/**
+        --indent 3
+        """)
+
+        let nonTestFile = try createTmpFile("Test/Foo/Sources/Foo.swift", contents: """
+        func foo() {
+        print("bar")
+        }
+        """)
+
+        let testFile = try createTmpFile("Test/Foo/Tests/FooTests.swift", contents: """
+        func foo() {
+        print("bar")
+        }
+        """)
+
+        let toolsFile = try createTmpFile("Test/Tools/MyTool/FooTool.swift", contents: """
+        func foo() {
+        print("bar")
+        }
+        """)
+
+        _ = processArguments([
+            "",
+            configURL.deletingLastPathComponent().path,
+            "--config", configURL.path,
+        ], in: "")
+
+        XCTAssertEqual(try String(contentsOf: nonTestFile, encoding: .utf8), """
+        func foo() {
+         print("bar")
+        }
+
+        """)
+
+        XCTAssertEqual(try String(contentsOf: testFile, encoding: .utf8), """
+        func foo() {
+          print("bar")
+        }
+
+        """)
+
+        XCTAssertEqual(try String(contentsOf: toolsFile, encoding: .utf8), """
+        func foo() {
+           print("bar")
+        }
+
+        """)
+
+        let tempFiles = [configURL, nonTestFile, testFile, toolsFile]
+        for tempFile in tempFiles {
+            try FileManager.default.removeItem(at: tempFile)
+        }
+
+        XCTAssertEqual(errors, [])
+    }
+
+    func testBaseConfigFileWithFilters() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            print(message)
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        let configURL = try createTmpFile("Test/config.swiftformat", contents: """
+        --indent 1
+
+        [Tests]
+        --filter **/Tests/**
+        --indent 2
+
+        [Tools Directory]
+        --filter **/Tools/**
+        --indent 3
+        """)
+
+        let nonTestFile = try createTmpFile("Test/Foo/Sources/Foo.swift", contents: """
+        func foo() {
+        print("bar")
+        }
+        """)
+
+        let testFile = try createTmpFile("Test/Foo/Tests/FooTests.swift", contents: """
+        func foo() {
+        print("bar")
+        }
+        """)
+
+        let toolsFile = try createTmpFile("Test/Tools/MyTool/FooTool.swift", contents: """
+        func foo() {
+        print("bar")
+        }
+        """)
+
+        _ = processArguments([
+            "",
+            configURL.deletingLastPathComponent().path,
+            "--base-config", configURL.path,
+        ], in: "")
+
+        XCTAssertEqual(try String(contentsOf: nonTestFile, encoding: .utf8), """
+        func foo() {
+         print("bar")
+        }
+
+        """)
+
+        XCTAssertEqual(try String(contentsOf: testFile, encoding: .utf8), """
+        func foo() {
+          print("bar")
+        }
+
+        """)
+
+        XCTAssertEqual(try String(contentsOf: toolsFile, encoding: .utf8), """
+        func foo() {
+           print("bar")
+        }
+
+        """)
+
+        let tempFiles = [configURL, nonTestFile, testFile, toolsFile]
+        for tempFile in tempFiles {
+            try FileManager.default.removeItem(at: tempFile)
+        }
+
+        XCTAssertEqual(errors, [])
+    }
+
+    func testStdinPathFileSpecificPath() throws {
+        var output = [String]()
+        CLI.print = { message, type in
+            switch type {
+            case .raw, .content:
+                output.append(message)
+            case .error, .warning:
+                XCTFail(message)
+            case .info, .success:
+                break
+            }
+        }
+        var readCount = 0
+        CLI.readLine = {
+            readCount += 1
+            switch readCount {
+            case 1:
+                return "func foo()\n"
+            case 2:
+                return "{\n"
+            case 3:
+                return "bar()\n"
+            case 4:
+                return "}"
+            default:
+                return nil
+            }
+        }
+
+        let configURL = try createTmpFile("Test/config.swiftformat", contents: """
+        --indent 1
+
+        [Tests]
+        --filter **/Tests/**
+        --indent 2
+        """)
+
+        let testFile = try createTmpFile("Test/MyModule/Tests/Foo.swift", contents: """
+        func foo()
+        {
+        print("bar")
+        }
+        """)
+
+        _ = processArguments([
+            "",
+            "stdin",
+            "--stdin-path", testFile.path,
+            "--config", configURL.path,
+        ], in: "")
+
+        XCTAssertEqual(output, ["""
+        func foo() {
+          bar()
+        }
+
+        """])
+
+        let tempFiles = [configURL, testFile]
+        for tempFile in tempFiles {
+            try FileManager.default.removeItem(at: tempFile)
+        }
+    }
+
+    func testSwiftVersionFileWithNoConfigFile() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            print(message)
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        try withTmpFiles([
+            ".swift-version": """
+            6.1
+            """,
+            "Test.swift": """
+            func foo(
+                foo: Foo,
+                bar: Bar
+            ) {}
+            """,
+        ]) { url in
+            guard url.pathExtension == "swift" else { return }
+            _ = processArguments(["", url.path, "--rules", "trailingCommas"], in: "")
+
+            XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), """
+            func foo(
+                foo: Foo,
+                bar: Bar,
+            ) {}
+            """)
+        }
+
+        XCTAssertEqual(errors, [])
+    }
+
+    func testSwiftVersionFileWithConfigFile() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            print(message)
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        try withTmpFiles([
+            ".swift-version": """
+            6.1
+            """,
+            ".swiftformat": """
+            --rules trailingCommas
+            --rules indent
+            --indent 2
+            """,
+            "Test.swift": """
+            func foo(
+                foo: Foo,
+                bar: Bar
+            ) {}
+            """,
+        ]) { url in
+            guard url.pathExtension == "swift" else { return }
+            _ = processArguments(["", url.path], in: "")
+
+            XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), """
+            func foo(
+              foo: Foo,
+              bar: Bar,
+            ) {}
+            """)
+        }
+
+        XCTAssertEqual(errors, [])
     }
 }

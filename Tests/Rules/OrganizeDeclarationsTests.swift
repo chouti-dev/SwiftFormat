@@ -199,8 +199,12 @@ class OrganizeDeclarationsTests: XCTestCase {
 
         // The configuration used in Airbnb's Swift Style Guide,
         // as defined here: https://github.com/airbnb/swift#subsection-organization
-        let airbnbVisibilityOrder = "beforeMarks,instanceLifecycle,open,public,package,internal,private,fileprivate"
-        let airbnbTypeOrder = "nestedType,staticProperty,staticPropertyWithBody,classPropertyWithBody,instanceProperty,instancePropertyWithBody,staticMethod,classMethod,instanceMethod"
+        let airbnbVisibilityOrder = """
+        beforeMarks,instanceLifecycle,open,public,package,internal,private,fileprivate
+        """
+        let airbnbTypeOrder = """
+        nestedType,staticProperty,staticPropertyWithBody,classPropertyWithBody,instanceProperty,instancePropertyWithBody,staticMethod,classMethod,instanceMethod
+        """
 
         testFormatting(
             for: input, output,
@@ -3855,5 +3859,466 @@ class OrganizeDeclarationsTests: XCTestCase {
 
         let options = FormatOptions(indent: "  ")
         testFormatting(for: input, rule: .organizeDeclarations, options: options, exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope])
+    }
+
+    func testOrganizesProtocol() {
+        let input = """
+        protocol Foo {
+            func foo()
+            var bar: Bar { get }
+            func baaz()
+            associatedtype Baaz
+            var quux: Quux { get set }
+            associatedtype Quux
+        }
+        """
+
+        let output = """
+        protocol Foo {
+            associatedtype Baaz
+            associatedtype Quux
+
+            var bar: Bar { get }
+            var quux: Quux { get set }
+
+            func foo()
+            func baaz()
+        }
+        """
+
+        let options = FormatOptions(organizeTypes: ["protocol"])
+        testFormatting(for: input, output, rule: .organizeDeclarations, options: options)
+    }
+
+    func testOrganizesProtocolWithInit() {
+        let input = """
+        public protocol Foo {
+            func foo()
+            func bar()
+            init()
+        }
+        """
+
+        let output = """
+        public protocol Foo {
+            init()
+
+            func foo()
+            func bar()
+        }
+        """
+
+        let options = FormatOptions(organizeTypes: ["protocol"])
+        testFormatting(for: input, output, rule: .organizeDeclarations, options: options)
+    }
+
+    func testBelowCustomStructMarkThreshold() {
+        let input = """
+        struct SmallStruct {
+            func foo() {}
+            let a = 1
+            private let b = 2
+        }
+        """
+
+        let output = """
+        struct SmallStruct {
+            let a = 1
+
+            func foo() {}
+
+            private let b = 2
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(markStructThreshold: 20),
+            exclude: [.blankLinesAtStartOfScope]
+        )
+    }
+
+    func testOrganizedStructNowOverMarkThreshold() {
+        let input = """
+        struct SmallStruct {
+            func foo() {}
+            let a = 1
+            private let b = 2
+        }
+        """
+
+        let output = """
+        struct SmallStruct {
+
+            // MARK: Internal
+
+            let a = 1
+
+            func foo() {}
+
+            // MARK: Private
+
+            private let b = 2
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(markStructThreshold: 4),
+            exclude: [.blankLinesAtStartOfScope]
+        )
+    }
+
+    func testBelowCustomStructMarkThresholdDoesntRemoveMarks() {
+        let input = """
+        struct SmallStruct {
+
+            // MARK: Internal
+
+            let a = 1
+
+            func foo() {}
+
+            // MARK: Private
+
+            private let b = 2
+        }
+        """
+
+        testFormatting(
+            for: input,
+            rule: .organizeDeclarations,
+            options: FormatOptions(markStructThreshold: 20),
+            exclude: [.blankLinesAtStartOfScope]
+        )
+    }
+
+    func testAboveCustomStructMarkThreshold() {
+        let input = """
+        public struct LargeStruct {
+            let a = 1
+            let b = 2
+            let c = 3
+            public func foo() {}
+            public func bar() {}
+            public func baz() {}
+        }
+        """
+
+        let output = """
+        public struct LargeStruct {
+
+            // MARK: Public
+
+            public func foo() {}
+            public func bar() {}
+            public func baz() {}
+
+            // MARK: Internal
+
+            let a = 1
+            let b = 2
+            let c = 3
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(markStructThreshold: 5),
+            exclude: [.blankLinesAtStartOfScope]
+        )
+    }
+
+    func testTypeBodyMarksPreserved() {
+        let input = """
+        class Foo {
+
+            // MARK: Unexpected comment
+
+            var bar: String = "bar"
+
+            // MARK: Some other comment
+
+            func baz() {}
+
+            // MARK: Lifecycle
+            init() {}
+        }
+        """
+
+        let output = """
+        class Foo {
+
+            // MARK: Lifecycle
+
+            init() {}
+
+            // MARK: Internal
+
+            // MARK: Unexpected comment
+
+            var bar: String = "bar"
+
+            // MARK: Some other comment
+
+            func baz() {}
+
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(typeBodyMarks: .preserve),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .blankLinesAroundMark]
+        )
+    }
+
+    func testTypeBodyMarksRemoved() {
+        let input = """
+        class Foo {
+
+            // MARK: Unexpected comment
+
+            var bar: String = "bar"
+
+            // MARK: Some other comment
+
+            func baz() {}
+
+            // MARK: Lifecycle
+
+            init() {}
+        }
+        """
+
+        let output = """
+        class Foo {
+
+            // MARK: Lifecycle
+
+            init() {}
+
+            // MARK: Internal
+
+            var bar: String = "bar"
+
+            func baz() {}
+
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(typeBodyMarks: .remove),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testTypeBodyMarksPreserveValidMarks() {
+        let input = """
+        class Foo {
+
+            // MARK: Some unexpected comment
+
+            var bar: String = "bar"
+
+            // MARK: Internal
+
+            func validComment() {}
+
+            init() {}
+        }
+        """
+
+        let output = """
+        class Foo {
+
+            // MARK: Lifecycle
+
+            init() {}
+
+            // MARK: Internal
+
+            var bar: String = "bar"
+
+            func validComment() {}
+
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(typeBodyMarks: .remove),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testTypeBodyMarksWithTypeMode() {
+        let input = """
+        class Foo {
+
+            // MARK: Unexpected section
+
+            var bar: String = "bar"
+
+            // MARK: Not a function category
+            func baz() {}
+
+            init() {}
+
+        }
+        """
+
+        let output = """
+        class Foo {
+
+            // MARK: Properties
+
+            var bar: String = "bar"
+
+            // MARK: Lifecycle
+
+            init() {}
+
+            // MARK: Functions
+
+            func baz() {}
+
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(
+                categoryMarkComment: "MARK: %c",
+                organizationMode: .type,
+                typeBodyMarks: .remove
+            ),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testRemovesAllUnnecessaryMarkAfterStandardMark() {
+        let input = """
+        public class Foo {
+
+            // MARK: Public
+
+            public func bar() {}
+
+            // MARK: Internal
+
+            // MARK: Implementation
+
+            func method() {}
+
+            // MARK: Testing
+
+            func testMethod() {}
+
+        }
+        """
+
+        let output = """
+        public class Foo {
+
+            // MARK: Public
+
+            public func bar() {}
+
+            // MARK: Internal
+
+            func method() {}
+
+            func testMethod() {}
+
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(typeBodyMarks: .remove),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testOrganizesProtocolWithAsync() {
+        // Async variables are not allowed in protocols
+        let input = """
+        protocol Foo {
+            func foo() async
+            var bar: Bar { get }
+
+            func baaz()
+                async
+            var quux: Quux { get }
+        }
+        """
+
+        let output = """
+        protocol Foo {
+            var bar: Bar { get }
+
+            var quux: Quux { get }
+
+            func foo() async
+            func baaz()
+                async
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(organizeTypes: ["protocol"]),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testHandlesMalformedPropertyType() {
+        let input = """
+        extension Foo {
+            /// Invalid type, should still get handled properly
+            private var foo: FooBar++ {
+                guard
+                    let foo = foo.bar,
+                    let bar = foo.bar
+                else {
+                    return nil
+                }
+
+                return bar
+            }
+        }
+
+        extension Foo {
+            /// Invalid type, should still get handled properly
+            func foo() -> FooBar++ {
+                guard
+                    let foo = foo.bar,
+                    let bar = foo.bar
+                else {
+                    return nil
+                }
+
+                return bar
+            }
+        }
+        """
+
+        testFormatting(
+            for: input,
+            rule: .organizeDeclarations,
+            options: FormatOptions(organizeTypes: ["extension"]),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
     }
 }

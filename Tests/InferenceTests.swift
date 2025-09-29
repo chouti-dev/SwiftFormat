@@ -115,19 +115,19 @@ class InferenceTests: XCTestCase {
     func testInferAllowInlineSemicolons() {
         let input = "let foo = 5; let bar = 6"
         let options = inferFormatOptions(from: tokenize(input))
-        XCTAssertTrue(options.allowInlineSemicolons)
+        XCTAssertEqual(options.semicolons, .inlineOnly)
     }
 
     func testInferNoAllowInlineSemicolons() {
         let input = "let foo = 5\nlet bar = 6"
         let options = inferFormatOptions(from: tokenize(input))
-        XCTAssertFalse(options.allowInlineSemicolons)
+        XCTAssertEqual(options.semicolons, .never)
     }
 
     func testNoInferAllowInlineSemicolonsFromTerminatingSemicolon() {
         let input = "let foo = 5;\nlet bar = 6"
         let options = inferFormatOptions(from: tokenize(input))
-        XCTAssertFalse(options.allowInlineSemicolons)
+        XCTAssertEqual(options.semicolons, .never)
     }
 
     // MARK: useVoid
@@ -581,19 +581,19 @@ class InferenceTests: XCTestCase {
     func testInferElseOnNextLine() {
         let input = "if foo {\n}\nelse {}"
         let options = inferFormatOptions(from: tokenize(input))
-        XCTAssertTrue(options.elseOnNextLine)
+        XCTAssertEqual(options.elsePosition, .nextLine)
     }
 
     func testInferElseOnSameLine() {
         let input = "if foo {\n} else {}"
         let options = inferFormatOptions(from: tokenize(input))
-        XCTAssertFalse(options.elseOnNextLine)
+        XCTAssertEqual(options.elsePosition, .sameLine)
     }
 
     func testIgnoreInlineIfElse() {
         let input = "if foo {} else {}\nif foo {\n}\nelse {}"
         let options = inferFormatOptions(from: tokenize(input))
-        XCTAssertTrue(options.elseOnNextLine)
+        XCTAssertEqual(options.elsePosition, .nextLine)
     }
 
     // MARK: indentCase

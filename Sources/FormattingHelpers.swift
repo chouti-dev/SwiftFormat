@@ -426,7 +426,8 @@ extension Formatter {
                         endOfScope += insertSpace(indent + options.indent, at: linebreakIndex + 1)
                     } else if !allowGrouping || (maxWidth > 0 &&
                         lineLength(at: linebreakIndex) > maxWidth &&
-                        lineLength(upTo: linebreakIndex) <= maxWidth)
+                        lineLength(upTo: linebreakIndex) <= maxWidth),
+                        !tokens[linebreakIndex].isLinebreak
                     {
                         insertLinebreak(at: linebreakIndex)
                         endOfScope += 1 + insertSpace(indent + options.indent, at: linebreakIndex + 1)
@@ -594,15 +595,15 @@ extension Formatter {
                 case .beforeFirst:
                     wrapArgumentsBeforeFirst(startOfScope: i,
                                              endOfScope: endOfScope,
-                                             allowGrouping: firstIdentifierIndex > firstLinebreakIndex)
+                                             allowGrouping: options.allowPartialWrapping && firstIdentifierIndex > firstLinebreakIndex)
                 case .preserve where firstIdentifierIndex > firstLinebreakIndex:
                     wrapArgumentsBeforeFirst(startOfScope: i,
                                              endOfScope: endOfScope,
-                                             allowGrouping: true)
+                                             allowGrouping: options.allowPartialWrapping)
                 case .afterFirst, .preserve:
                     wrapArgumentsAfterFirst(startOfScope: i,
                                             endOfScope: endOfScope,
-                                            allowGrouping: true)
+                                            allowGrouping: options.allowPartialWrapping)
                 case .disabled, .default:
                     assertionFailure() // Shouldn't happen
                 }
@@ -1206,6 +1207,8 @@ extension Formatter {
                 }
             case let .keyword(name) where name.hasPrefix("#") && prevToken == .startOfScope("("):
                 return
+            case .keyword where tokens[i].isAttribute && prevToken == .startOfScope("("):
+                return
             case .keyword("try") where keyword == "await":
                 break loop
             case let .keyword(name) where ["is", "as", "try", "await"].contains(name):
@@ -1272,6 +1275,33 @@ extension Formatter {
             // If there are no effects, add after the arguments
             insert([.space(" "), .keyword("throws")], at: functionDecl.argumentsRange.upperBound + 1)
         }
+    }
+
+    /// Removes the given `throws` or `async` effect from the given function declaration if present
+    func removeEffect(_ effect: String, from functionDecl: FunctionDeclaration) {
+        guard let effectsRange = functionDecl.effectsRange,
+              let effectIndex = index(of: .keyword(effect), in: effectsRange) ?? index(of: .identifier(effect), in: effectsRange)
+        else { return }
+
+        var endIndex = effectIndex
+
+        // Check if there's typed throws (throws(...))
+        if effect == "throws",
+           let nextTokenIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: effectIndex),
+           tokens[nextTokenIndex] == .startOfScope("("),
+           let endOfScope = endOfScope(at: nextTokenIndex)
+        {
+            endIndex = endOfScope
+        }
+
+        // Include trailing whitespace if present
+        if endIndex + 1 < tokens.count,
+           tokens[endIndex + 1].isSpace
+        {
+            endIndex += 1
+        }
+
+        removeTokens(in: effectIndex ... endIndex)
     }
 
     /// Whether or not the code block starting at the given `.startOfScope` token
@@ -1762,17 +1792,28 @@ extension Formatter {
         else { return }
 
         let methodName = tokens[methodNameIndex].string
-        guard methodName.hasPrefix("test"), methodName != "test" else { return }
 
-        var newMethodName = String(methodName.dropFirst("test".count))
-        newMethodName = newMethodName.first!.lowercased() + newMethodName.dropFirst()
+        // Handle names like `func testFeature()` or `func test_feature()`
+        if methodName.hasPrefix("test"), methodName != "test" {
+            var newMethodName = String(methodName.dropFirst("test".count))
+            newMethodName = newMethodName.first!.lowercased() + newMethodName.dropFirst()
 
-        // Handle methods like `test_feature()`, which should be updated to `feature()` rather than `_feature()`.
-        while newMethodName.hasPrefix("_") {
-            newMethodName = String(newMethodName.dropFirst())
+            // Handle methods like `test_feature()`, which should be updated to `feature()` rather than `_feature()`.
+            while newMethodName.hasPrefix("_") {
+                newMethodName = String(newMethodName.dropFirst())
+            }
+
+            updateFunctionName(forFunctionAt: funcKeywordIndex, to: newMethodName)
         }
 
-        updateFunctionName(forFunctionAt: funcKeywordIndex, to: newMethodName)
+        // Handle names like ``func `test feature`()``, ``func `Test Feature`()``
+        if methodName.lowercased().hasPrefix("`test "), methodName.lowercased() != "`test `" {
+            var newMethodName = String(methodName.dropFirst("`test ".count))
+            newMethodName = String(newMethodName.first!) + newMethodName.dropFirst()
+            newMethodName = "`" + newMethodName
+
+            updateFunctionName(forFunctionAt: funcKeywordIndex, to: newMethodName)
+        }
     }
 
     /// Updates the name of the given method / function, unless that change could cause a build failure.
@@ -1785,7 +1826,7 @@ extension Formatter {
         // Ensure that the new identifier is valid (e.g. starts with a letter, not a number),
         // and is unique / doesn't already exist somewhere in the file.
         guard !newMethodName.isEmpty,
-              newMethodName.first?.isLetter == true,
+              newMethodName.first?.isLetter == true || newMethodName.first == "`",
               !tokens.contains(.identifier(newMethodName)),
               !swiftKeywords.union(["Any", "Self", "self", "super", "nil", "true", "false"]).contains(newMethodName)
         else { return }
@@ -1968,7 +2009,7 @@ extension Formatter {
                 currentIndex = equalsIndex
             }
 
-            var rhsType: (name: String, range: ClosedRange<Int>)?
+            var rhsType: TypeName?
             if let rhsTypeIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex),
                let type = parseType(at: rhsTypeIndex)
             {
@@ -2004,7 +2045,7 @@ extension Formatter {
             // `Foo.Element == Fooable`, etc. Create a reference to this specific
             // generic parameter (`Foo` in all of these examples) that can store
             // the constraints and conformances that we encounter later.
-            let fullGenericTypeName = qualifyGenericTypeName(lhsType.name)
+            let fullGenericTypeName = qualifyGenericTypeName(lhsType.string)
 
             let baseGenericTypeName: String
             if fullGenericTypeName.contains(".") {
@@ -2026,8 +2067,8 @@ extension Formatter {
 
             if let rhsType, let conformanceType {
                 genericType.conformances.append(.init(
-                    name: rhsType.name,
-                    typeName: qualifyGenericTypeName(lhsType.name),
+                    name: rhsType.string,
+                    typeName: qualifyGenericTypeName(lhsType.string),
                     type: conformanceType,
                     sourceRange: lhsType.range.lowerBound ... currentIndex
                 ))
@@ -2917,7 +2958,7 @@ extension Formatter {
     /// by adding a blank line to the end of this declaration if not already present.
     func addTrailingBlankLineIfNeeded(in range: ClosedRange<Int>) {
         let range = range.autoUpdating(in: self)
-        while tokens[range.range].numberOfTrailingLinebreaks() < 2 {
+        while tokens[range].numberOfTrailingLinebreaks() < 2 {
             insertLinebreak(at: range.upperBound)
         }
     }
@@ -2937,7 +2978,7 @@ extension Formatter {
     /// by adding blank like to the start of this declaration if not already present.
     func addLeadingBlankLineIfNeeded(in range: ClosedRange<Int>) {
         let range = range.autoUpdating(in: self)
-        while tokens[range.range].numberOfLeadingLinebreaks() < 2 {
+        while tokens[range].numberOfLeadingLinebreaks() < 2 {
             insertLinebreak(at: range.lowerBound)
         }
     }
@@ -2946,7 +2987,7 @@ extension Formatter {
     /// by removing any trailing blank lines.
     func removeLeadingBlankLinesIfPresent(in range: ClosedRange<Int>) {
         let range = range.autoUpdating(in: self)
-        while tokens[range.range].numberOfLeadingLinebreaks() > 1 {
+        while tokens[range].numberOfLeadingLinebreaks() > 1 {
             guard let firstNewlineIndex = index(of: .linebreak, in: Range(range.range)) else { break }
             removeTokens(in: range.lowerBound ... firstNewlineIndex)
         }

@@ -32,7 +32,7 @@
 import Foundation
 
 extension Options {
-    init(_ args: [String: String], in directory: String) throws {
+    init(_ args: [String: String], filterOptions: [Glob: [String: String]] = [:], in directory: String) throws {
         fileOptions = try fileOptionsFor(args, in: directory)
         formatOptions = try formatOptionsFor(args)
         configURLs = args["config"].map {
@@ -41,44 +41,84 @@ extension Options {
         let lint = args.keys.contains("lint")
         self.lint = lint
         rules = try rulesFor(args, lint: lint)
+        self.filterOptions = filterOptions
+    }
+
+    mutating func addArguments(_ args: [[String: String]], in directory: String) throws {
+        for args in args {
+            try addArguments(args, in: directory)
+        }
     }
 
     mutating func addArguments(_ args: [String: String], in directory: String) throws {
         let oldArguments = argumentsFor(self)
         let newArguments = try mergeArguments(args, into: oldArguments)
-        var newOptions = try Options(newArguments, in: directory)
+        var newOptions = try Options(newArguments, filterOptions: filterOptions, in: directory)
         if let fileInfo = formatOptions?.fileInfo {
             newOptions.formatOptions?.fileInfo = fileInfo
         }
         newOptions.configURLs = configURLs
         self = newOptions
     }
+
+    /// Adds arguments from any `--filter`ed config that applies to this path
+    mutating func addFilterArguments(path: String) throws {
+        for (glob, options) in filterOptions {
+            if glob.matches(path) {
+                try applyArguments(options, lint: lint, to: &self)
+            }
+        }
+    }
 }
 
-extension Array {
-    func formattedList(default: Element? = nil) -> String where Element: RawRepresentable {
-        map(\.rawValue).formattedList(default: `default`?.rawValue)
+extension Array where Element: Equatable {
+    func formattedList(default defaultValue: Element? = nil) -> String
+        where Element: RawRepresentable, Element.RawValue: Equatable
+    {
+        map(\.rawValue).formattedList(default: defaultValue?.rawValue)
     }
 
     func formattedList(default: Element? = nil) -> String {
-        let options = map {
-            "\"\($0)\"\("\($0)" == "\(String(describing: `default`))" ? " (default)" : "")"
+        if let `default` {
+            assert(contains(where: { $0 == `default` }))
         }
-        switch options.count {
+        let options = map {
+            "\"\($0)\"\($0 == `default` ? " (default)" : "")"
+        }
+        return options.formattedList(lastSeparator: "or")
+    }
+}
+
+extension Array where Element: StringProtocol {
+    func formattedList(lastSeparator: String) -> String {
+        switch count {
         case 0:
             return ""
         case 1:
-            return String(describing: options[0])
+            return String(self[0])
         case 2:
-            return "\(options[0]) or \(options[1])"
+            return "\(self[0]) \(lastSeparator) \(self[1])"
         default:
-            return "\(options.dropLast().joined(separator: ", ")), or \(options.last!)"
+            return "\(dropLast().joined(separator: ", ")) \(lastSeparator) \(last!)"
         }
     }
 }
 
 extension String {
-    /// Find best match for the string in a list of options
+    /// Find single best match for the string in a list of options
+    /// If more than one match is equally good, return nil
+    func bestMatch(in options: [String]) -> String? {
+        let matches = bestMatches(in: options)
+        guard let best = matches.first else {
+            return nil
+        }
+        if matches.count > 1, editDistance(from: matches[1]) == editDistance(from: best) {
+            return nil
+        }
+        return best
+    }
+
+    /// Find best matches for the string in a list of options
     func bestMatches(in options: [String]) -> [String] {
         let lowercaseQuery = lowercased()
         // Sort matches by Levenshtein edit distance
@@ -300,10 +340,11 @@ func parseRules(_ rules: String) throws -> [String] {
             }
             throw FormatError.options("'\(proposedName)' is not a formatting rule")
         }
+        let message = "Unknown rule '\(proposedName)'"
         guard let match = proposedName.bestMatches(in: Array(allRules)).first else {
-            throw FormatError.options("Unknown rule '\(proposedName)'")
+            throw FormatError.options(message)
         }
-        throw FormatError.options("Unknown rule '\(proposedName)'. Did you mean '\(match)'?")
+        throw FormatError.options("\(message). Did you mean '\(match)'?")
     }
 }
 
@@ -396,31 +437,56 @@ func mergeArguments(_ args: [String: String], into config: [String: String]) thr
     return output
 }
 
-/// Parse a configuration file into a dictionary of arguments
-public func parseConfigFile(_ data: Data) throws -> [String: String] {
+/// Parse a configuration file into a list of argument dictionaries.
+///
+/// Config files can have headers that separate them into separate sections.
+/// Each section is treated as if it were its own file. For example:
+/// ```
+/// --indent 4
+///
+/// [Tests]
+/// --filter **/Tests/**
+/// --indent 2
+/// ```
+public func parseConfigFile(_ data: Data) throws -> ([[String: String]]) {
     guard let input = String(data: data, encoding: .utf8) else {
         throw FormatError.reading("Unable to read data for configuration file")
     }
     let lines = try cumulate(successiveLines: input.components(separatedBy: .newlines))
-    let arguments = try lines.flatMap { line -> [String] in
-        // TODO: parseArguments isn't a perfect fit here - should we use a different approach?
-        let line = line.replacingOccurrences(of: "\\n", with: "\n")
-        let parts = parseArguments(line, ignoreComments: false).dropFirst().map {
-            $0.replacingOccurrences(of: "\n", with: "\\n")
-        }
-        guard let key = parts.first else {
-            return []
-        }
-        if !key.hasPrefix("-") {
-            throw FormatError.options("Unknown option '\(key)' in configuration file")
-        }
-        return [key, parts.dropFirst().joined(separator: " ")]
+
+    let configSegments = lines.split(whereSeparator: { line in
+        line.starts(with: "[") && line.contains("]")
+    })
+
+    guard !configSegments.isEmpty else {
+        return []
     }
-    do {
-        return try preprocessArguments(arguments, optionsArguments)
-    } catch let FormatError.options(message) {
-        throw FormatError.options("\(message) in configuration file")
+
+    var configOptions = [[String: String]]()
+
+    for configSegmentLines in configSegments {
+        let arguments = try configSegmentLines.flatMap { line -> [String] in
+            // TODO: parseArguments isn't a perfect fit here - should we use a different approach?
+            let line = line.replacingOccurrences(of: "\\n", with: "\n")
+            let parts = parseArguments(line, ignoreComments: false).dropFirst().map {
+                $0.replacingOccurrences(of: "\n", with: "\\n")
+            }
+            guard let key = parts.first else {
+                return []
+            }
+            if !key.hasPrefix("-") {
+                throw FormatError.options("Unknown option '\(key)' in configuration file")
+            }
+            return [key, parts.dropFirst().joined(separator: " ")]
+        }
+        do {
+            try configOptions.append(preprocessArguments(arguments, optionsArguments))
+        } catch let FormatError.options(message) {
+            throw FormatError.options("\(message) in configuration file")
+        }
     }
+
+    return configOptions
 }
 
 private func cumulate(successiveLines: [String]) throws -> [String] {
@@ -522,12 +588,7 @@ func argumentsFor(_ options: Options, excludingDefaults: Bool = false) -> [Strin
             }
             arguments.remove("min-version")
         }
-        do {
-            if !excludingDefaults || fileOptions.markdownFormattingMode != .default {
-                args["markdown-files"] = fileOptions.markdownFormattingMode.rawValue
-            }
-            arguments.remove("markdown-files")
-        }
+        arguments.remove("filter")
         assert(arguments.isEmpty)
     }
     if let formatOptions = options.formatOptions {
@@ -601,15 +662,21 @@ private func processOption(_ key: String,
 /// Parse rule names from arguments
 public func rulesFor(_ args: [String: String], lint: Bool, initial: Set<String>? = nil) throws -> Set<String> {
     var rules = initial ?? allRules
-    rules = try args["rules"].map {
-        try Set(parseRules($0))
-    } ?? rules.subtracting(FormatRules.disabledByDefault.map(\.name))
+
+    if let specifiedRules = try args["rules"].map({ try Set(parseRules($0)) }) {
+        rules = specifiedRules
+    } else if initial == nil {
+        rules = rules.subtracting(FormatRules.disabledByDefault.map(\.name))
+    }
+
     try args["disable"].map {
         try rules.subtract(parseRules($0))
     }
+
     try args["enable"].map {
         try rules.formUnion(parseRules($0))
     }
+
     try args["lint-only"].map { rulesString in
         if lint {
             try rules.formUnion(parseRules(rulesString))
@@ -617,6 +684,7 @@ public func rulesFor(_ args: [String: String], lint: Bool, initial: Set<String>?
             try rules.subtract(parseRules(rulesString))
         }
     }
+
     return rules
 }
 
@@ -655,21 +723,11 @@ func fileOptionsFor(_ args: [String: String], in directory: String) throws -> Fi
         }
         options.minVersion = minVersion
     }
-    try processOption("markdown-files", in: args, from: &arguments) {
-        containsFileOption = true
-        guard let mode = MarkdownFormattingMode(rawValue: $0.lowercased()) else {
-            throw FormatError.options("""
-            Unsupported --markdown-files value '\($0)'. Valid options are \(MarkdownFormattingMode.help).
-            """)
-        }
-        switch mode {
-        case .lenient, .strict:
-            options.markdownFormattingMode = mode
-            options.supportedFileExtensions.append("md")
-        case .ignore:
-            break
-        }
-    }
+
+    try processOption("filter", in: args, from: &arguments, handler: { _ in
+        // no-op, handled in `Options.init` and `addArguments`
+    })
+
     assert(arguments.isEmpty, "\(arguments.joined(separator: ","))")
     return containsFileOption ? options : nil
 }
@@ -688,7 +746,14 @@ public func applyFormatOptions(from args: [String: String], to formatOptions: in
     for option in Descriptors.all {
         try processOption(option.argumentName, in: args, from: &arguments) {
             containsFormatOption = true
-            try option.toOptions($0, &formatOptions)
+            do {
+                try option.toOptions($0, &formatOptions)
+            } catch {
+                guard let names = option.validArguments else {
+                    throw error
+                }
+                throw FormatError.invalidOption($0, for: option.argumentName, with: names)
+            }
         }
     }
     assert(arguments.isEmpty, "\(arguments.joined(separator: ","))")
@@ -741,7 +806,7 @@ let fileArguments = [
     "exclude",
     "unexclude",
     "min-version",
-    "markdown-files",
+    "filter",
 ]
 
 let rulesArguments = [

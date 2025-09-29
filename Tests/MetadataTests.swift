@@ -174,6 +174,12 @@ class MetadataTests: XCTestCase {
         var optionsByProperty = [String: OptionDescriptor]()
         for descriptor in Descriptors.formatting.reversed() {
             optionsByProperty[descriptor.propertyName] = descriptor
+
+            XCTAssertFalse(descriptor.help.hasSuffix("."),
+                           "\(descriptor.argumentName) option help ends with a spurious period")
+
+            XCTAssertFalse(descriptor.help.hasSuffix(" "),
+                           "\(descriptor.argumentName) option help has a trailing space")
         }
         for rulesFile in allRuleFiles {
             let rulesSource = try String(contentsOf: rulesFile, encoding: .utf8)
@@ -232,7 +238,7 @@ class MetadataTests: XCTestCase {
                             Descriptors.indent, Descriptors.tabWidth, Descriptors.smartTabs, Descriptors.maxWidth,
                             Descriptors.assetLiteralWidth, Descriptors.wrapReturnType, Descriptors.wrapEffects,
                             Descriptors.wrapConditions, Descriptors.wrapTypealiases, Descriptors.wrapTernaryOperators,
-                            Descriptors.wrapStringInterpolation,
+                            Descriptors.wrapStringInterpolation, Descriptors.allowPartialWrapping,
                         ]
                     case .identifier("wrapStatementBody"):
                         referencedOptions += [Descriptors.indent, Descriptors.linebreak]
