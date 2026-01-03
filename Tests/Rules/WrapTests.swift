@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class WrapTests: XCTestCase {
+final class WrapTests: XCTestCase {
     func testWrapIfStatement() {
         let input = """
         if let foo = foo, let bar = bar, let baz = baz {}
@@ -502,7 +502,7 @@ class WrapTests: XCTestCase {
                        exclude: [.indent, .wrapArguments])
     }
 
-    func testWrapColorLiteral() throws {
+    func testWrapColorLiteral() {
         let input = """
         button.setTitleColor(#colorLiteral(red: 0.2392156863, green: 0.6470588235, blue: 0.3647058824, alpha: 1), for: .normal)
         """
@@ -792,5 +792,46 @@ class WrapTests: XCTestCase {
         let options = FormatOptions(truncateBlankLines: false, maxWidth: 120)
         let changes = try lint(input, rules: [.wrap, .indent], options: options)
         XCTAssertEqual(changes, [.init(line: 13, rule: .indent, filePath: nil, isMove: false)])
+    }
+
+    func testKeepTrailingCommentWithLine() {
+        // https://github.com/nicklockwood/SwiftFormat/issues/2261
+        let input = """
+        [
+            item1, // Comment 1
+            item2, // Comment 2
+            item3 // Comment 3
+        ]
+        """
+
+        let options = FormatOptions(maxWidth: 20)
+        testFormatting(for: input, rule: .wrap, options: options,
+                       exclude: [.trailingCommas, .wrapSingleLineComments])
+    }
+
+    func testKeepTrailingCommentWithLine2() {
+        let input = """
+        [
+            item1, // Comment 1
+            item2, // Comment 2
+            item3 // Comment 3
+        ]
+        """
+
+        let output = """
+        [
+            item1, // Comment
+            // 1
+            item2, // Comment
+            // 2
+            item3 // Comment
+            // 3
+        ]
+        """
+
+        testFormatting(for: input, [output],
+                       rules: [.wrap, .wrapSingleLineComments],
+                       options: FormatOptions(maxWidth: 20),
+                       exclude: [.trailingCommas])
     }
 }

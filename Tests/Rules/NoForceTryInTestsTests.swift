@@ -4,7 +4,7 @@
 import XCTest
 
 final class NoForceTryInTestsTests: XCTestCase {
-    func testTestCaseIsUpdated_for_Testing() throws {
+    func testTestCaseIsUpdated_for_Testing() {
         let input = """
         import Testing
 
@@ -22,7 +22,7 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
-    func test_nonTestCaseFunction_IsNotUpdated_for_Testing() throws {
+    func test_nonTestCaseFunction_IsNotUpdated_for_Testing() {
         let input = """
         import Testing
 
@@ -39,7 +39,7 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noForceTryInTests)
     }
 
-    func testTestCaseIsUpdated_for_XCTest() throws {
+    func testTestCaseIsUpdated_for_XCTest() {
         let input = """
         import XCTest
 
@@ -61,7 +61,20 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
-    func test_nonTestCaseFunction_IsNotUpdated_for_XCTest() throws {
+    func testTestHelperIsNotUpdated_for_XCTest() {
+        let input = """
+        import XCTest
+
+        class TestCase: XCTestCase {
+            func testHelper(arg: Bool) {
+                try! somethingThatThrows(with: arg)
+            }
+        }
+        """
+        testFormatting(for: input, rule: .noForceTryInTests)
+    }
+
+    func test_nonTestCaseFunction_IsNotUpdated_for_XCTest() {
         let input = """
         import XCTest
 
@@ -78,7 +91,7 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noForceTryInTests)
     }
 
-    func testTestCaseIsUpdated_for_async_test() throws {
+    func testTestCaseIsUpdated_for_async_test() {
         let input = """
         import Testing
 
@@ -96,7 +109,7 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
-    func testTestCaseIsUpdated_for_already_throws() throws {
+    func testTestCaseIsUpdated_for_already_throws() {
         let input = """
         import Testing
 
@@ -114,7 +127,7 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
-    func testTestCaseIsUpdated_for_multiple_try_exclamationMarks() throws {
+    func testTestCaseIsUpdated_for_multiple_try_exclamationMarks() {
         let input = """
         import Testing
 
@@ -134,7 +147,7 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
-    func testTestCaseIsNotUpdated_for_try_exclamationMark_in_closoure() throws {
+    func testTestCaseIsNotUpdated_for_try_exclamationMark_in_closoure() {
         let input = """
         import Testing
 
@@ -147,7 +160,7 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noForceTryInTests)
     }
 
-    func testTestCaseIsUpdated_for_try_exclamationMark_in_if_statement() throws {
+    func testTestCaseIsUpdated_for_try_exclamationMark_in_if_statement() {
         let input = """
         import Testing
 
@@ -169,7 +182,7 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceTryInTests)
     }
 
-    func testCaseIsNotUpdated_for_try_exclamationMark_in_closure_inside_if_statement() throws {
+    func testCaseIsNotUpdated_for_try_exclamationMark_in_closure_inside_if_statement() {
         let input = """
         import Testing
 
@@ -184,7 +197,7 @@ final class NoForceTryInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noForceTryInTests)
     }
 
-    func testCaseIsNotUpdated_for_try_exclamationMark_in_closure_inside_nested_function() throws {
+    func testCaseIsNotUpdated_for_try_exclamationMark_in_closure_inside_nested_function() {
         let input = """
         import Testing
 

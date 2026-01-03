@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class ModifierOrderTests: XCTestCase {
+final class ModifierOrderTests: XCTestCase {
     func testVarModifiersCorrected() {
         let input = """
         unowned private static var foo
@@ -141,6 +141,17 @@ class ModifierOrderTests: XCTestCase {
             public init() {}
         }
         """
+        testFormatting(for: input, rule: .modifierOrder)
+    }
+
+    func testAsyncFunctionBeforeNonisolatedVar() {
+        let input = """
+        protocol Test: Actor {
+            func test() async
+            nonisolated var test2: String
+        }
+        """
+
         testFormatting(for: input, rule: .modifierOrder)
     }
 }

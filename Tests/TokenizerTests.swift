@@ -32,7 +32,7 @@
 import SwiftFormat
 import XCTest
 
-class TokenizerTests: XCTestCase {
+final class TokenizerTests: XCTestCase {
     // MARK: Invalid input
 
     func testInvalidToken() {
@@ -545,6 +545,39 @@ class TokenizerTests: XCTestCase {
             .linebreak("\n", 1),
             .stringBody("\\\"\"\""),
             .linebreak("\n", 2),
+            .endOfScope("\"\"\""),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testMultilineStringWithTrailingSpaceAfterQuotes() {
+        let input = "\"\"\"   \n    hello \\\n\"\"\" "
+        let output: [Token] = [
+            .startOfScope("\"\"\""),
+            .space("   "),
+            .linebreak("\n", 1),
+            .stringBody("    hello \\"),
+            .linebreak("\n", 2),
+            .endOfScope("\"\"\""),
+            .space(" "),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testMultilineStringWithBlankLines() {
+        let input = """
+        \"\"\"
+        Test
+
+        \"\"\"
+        """
+        let output: [Token] = [
+            .startOfScope("\"\"\""),
+            .linebreak("\n", 1),
+            .stringBody("Test"),
+            .linebreak("\n", 2),
+            .stringBody(""),
+            .linebreak("\n", 3),
             .endOfScope("\"\"\""),
         ]
         XCTAssertEqual(tokenize(input), output)

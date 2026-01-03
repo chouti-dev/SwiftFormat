@@ -687,7 +687,7 @@ extension AnyExpression {
     static func stringify(_ value: Any) -> String {
         switch value {
         case let number as NSNumber:
-            /// https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html
+            // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html
             switch UnicodeScalar(UInt8(number.objCType.pointee)) {
             case "c",
                  "B":

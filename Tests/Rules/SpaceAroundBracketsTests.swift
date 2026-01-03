@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class SpaceAroundBracketsTests: XCTestCase {
+final class SpaceAroundBracketsTests: XCTestCase {
     func testSubscriptNoAddSpacing() {
         let input = """
         foo[bar] = baz
@@ -30,6 +30,30 @@ class SpaceAroundBracketsTests: XCTestCase {
     func testArrayLiteralSpacing() {
         let input = """
         foo = [bar, baz]
+        """
+        testFormatting(for: input, rule: .spaceAroundBrackets)
+    }
+
+    func testSpaceNotRemovedAfterOfArray() {
+        let input = """
+        let foo: [4 of [String]]
+        """
+        testFormatting(for: input, rule: .spaceAroundBrackets)
+    }
+
+    func testSpaceAddedAfterOfArray() {
+        let input = """
+        let foo: [4 of[String]]
+        """
+        let output = """
+        let foo: [4 of [String]]
+        """
+        testFormatting(for: input, output, rule: .spaceAroundBrackets)
+    }
+
+    func testOfIdentifierBracketSpacing() {
+        let input = """
+        if foo.of[String.self] {}
         """
         testFormatting(for: input, rule: .spaceAroundBrackets)
     }
@@ -61,9 +85,9 @@ class SpaceAroundBracketsTests: XCTestCase {
         testFormatting(for: input, output, rule: .spaceAroundBrackets)
     }
 
-    func testKeywordAsIdentifierBracketSpacing() {
+    func testIsIdentifierBracketSpacing() {
         let input = """
-        if foo.is[String] {}
+        if foo.is[String.self] {}
         """
         testFormatting(for: input, rule: .spaceAroundBrackets)
     }

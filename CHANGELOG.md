@@ -1,5 +1,62 @@
 # Change Log
 
+## [0.58.7](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.58.7) (2025-11-29)
+
+- Fixed `redundantSelf` not being applied inside `if #available(...) { ... }` clauses
+- Fixed `fileHeader` rule incorrectly setting creation year to current when file path contains spaces
+- Fixed mis-insertion for `nil-init` rule related to optional closure return values
+- Fixed `unusedPrivateDeclarations` false positive when call site was outside enabled range
+- Fixed `sortImports` rule incorrectly moving `// swift-tools-version:` comment directive
+- Fixed `hoistTry` rule sometimes producing mangled code when hoisting across line boundaries
+- Fixed crash in `--ruleinfo` command when rule options exceed the old max length requirement
+- Fixed crash in `unusedArguments` due to scope range bug
+
+## [0.58.6](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.58.6) (2025-11-11)
+
+- Fixed `docComments` not being applied correctly after conditional `switch...case`
+- Trailing commas are no longer inserted inside `#selector(...)` expressions
+- Source files listed with `--filelist` are now formatted concurrently
+- Trailing comments are now kept with the same line when wrapping
+- Fixed spurious `return` removal inside `repeat...while` loops
+- Fixed bug with `trailingClosures` rule and property wrappers
+- Fixed performance regression introduced in 0.58.5
+- Reduced timeout threshold to 1ms per token
+
+## [0.58.5](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.58.5) (2025-10-17)
+
+- Fixed regression with indenting of macros (introduced in 0.58.4)
+- Fixed spurious removal of `return` keyword inside `for ... where` loops
+- Fixed parsing error with `for await case ...` loops
+- Added `XCTUnwrap` to the default exclusion list for `hoistTry`
+
+## [0.58.4](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.58.4) (2025-10-16)
+
+- Whitespace is no longer added or removed from blank lines in multiline string literals
+- Fixed `trailingComma` rule incorrectly inserting commas inside typed `throws`
+- Fixed issue where `opaqueGenericParameters` rule could cause build errors with existential types
+- Fixed false positive with `unusedArguments` when argument is only referenced inside a macro
+- The `noGuardInTests` rule now preserves custom failure messages
+- The `noGuardInTests` rule no longer adds `throws` to test methods when not needed
+- Removed redundant "default" values from options help descriptions
+
+## [0.58.3](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.58.3) (2025-10-04)
+
+- Fixed parsing of `[n of X]` syntax for `InlineArray` in Swift 6.2
+- Fixed parsing error when an opening multiline string delimiter is followed by a space
+- Fixed issue where `redundantInit` rule could leave orphaned parentheses
+- Fixed bug where `redundantInit` was incorrectly applied to `(Foo.self as Bar.Type)` expressions
+- Fixed bug with parsing empty property accessors that broke `redundantSelf` rule
+- Fixed aliasing issue with `acronyms` rule where one acronym overlaps another
+- Fixed unexpected wrapping of closing parenthesis in `wrapArguments` rule
+- Added `--unknown-rules` option to support environments with older SwiftFormat versions
+
+## [0.58.2](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.58.2) (2025-09-29)
+
+- Fixed issue where `modifierOrder` rule confused `async` effect for `async` modifier
+- Fixed issue where testing related rules incorrectly treated functions with arguments as test cases
+- Updated `redundantInit` rule to apply to `init` calls with single trailing closure
+- Updated `README.md` to reflect actual precedence behavior between `.swift-version` files and `--swift-version` arguments.
+
 ## [0.58.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.58.1) (2025-09-24)
 
 - Fixed issue where `async` effect could be confused for `async` modifier, breaking `docCommentsBeforeModifiers` rule in protocol body with async functions

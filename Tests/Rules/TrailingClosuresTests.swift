@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class TrailingClosuresTests: XCTestCase {
+final class TrailingClosuresTests: XCTestCase {
     func testAnonymousClosureArgumentMadeTrailing() {
         let input = """
         foo(foo: 5, { /* some code */ })
@@ -448,7 +448,7 @@ class TrailingClosuresTests: XCTestCase {
         testFormatting(for: input, rule: .trailingClosures)
     }
 
-    func testMultipleNestedClosures() throws {
+    func testMultipleNestedClosures() {
         let repeatCount = 10
         let input = """
         override func foo() {
@@ -563,5 +563,17 @@ class TrailingClosuresTests: XCTestCase {
         """
 
         testFormatting(for: input, [output], rules: [.trailingClosures, .indent])
+    }
+
+    // property wrapper
+
+    func testPropertyWrapperDoesntFormat() {
+        let input = """
+        class A {
+            @BlockEquatable({ $0.isEqualTo($1) })
+            var field: [B] = []
+        }
+        """
+        testFormatting(for: input, rule: .trailingClosures)
     }
 }

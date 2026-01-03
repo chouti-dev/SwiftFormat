@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class IndentTests: XCTestCase {
+final class IndentTests: XCTestCase {
     func testReduceIndentAtStartOfFile() {
         let input = """
             foo()
@@ -3666,11 +3666,11 @@ class IndentTests: XCTestCase {
         let output = #"""
         let generatedClass = """
             import UIKit
-
+        \#("    ")
             class ViewController: UIViewController { }
             """
         """#
-        let options = FormatOptions(indentStrings: true)
+        let options = FormatOptions(truncateBlankLines: false, indentStrings: true)
         testFormatting(for: input, output, rule: .indent, options: options)
     }
 
@@ -3678,11 +3678,11 @@ class IndentTests: XCTestCase {
         let input = #"""
         let generatedClass = """
             import UIKit
-
+        \#("    ")
             class ViewController: UIViewController { }
             """
         """#
-        let options = FormatOptions(indentStrings: true)
+        let options = FormatOptions(truncateBlankLines: false, indentStrings: true)
         testFormatting(for: input, rule: .indent, options: options)
     }
 
@@ -3733,8 +3733,7 @@ class IndentTests: XCTestCase {
         }
         """#
         let options = FormatOptions(truncateBlankLines: false)
-        testFormatting(for: input, output, rule: .indent,
-                       options: options)
+        testFormatting(for: input, output, rule: .indent, options: options)
     }
 
     func testIndentUnderIndentedMultilineStringDoesntAddIndent() {
@@ -3754,15 +3753,14 @@ class IndentTests: XCTestCase {
             func main() {
                 print("""
                 That've been not indented at all.
-
+            \#("    ")
                 After SwiftFormat it causes a compiler error in the line above.
                 """)
             }
         }
         """#
         let options = FormatOptions(truncateBlankLines: false)
-        testFormatting(for: input, output, rule: .indent,
-                       options: options)
+        testFormatting(for: input, output, rule: .indent, options: options)
     }
 
     // indent multiline raw strings
@@ -5708,5 +5706,43 @@ class IndentTests: XCTestCase {
         }
         """
         testFormatting(for: input, rule: .indent)
+    }
+
+    func testIndentConditionalCompiledMacroInvocations() {
+        let input = """
+        #if true
+            #warning("Warning")
+        #else
+            #warning("Warning")
+        #endif
+        """
+        testFormatting(for: input, rule: .indent)
+    }
+
+    func testIndentMacroInvocationsInCollection() {
+        let input = """
+        let urls = [
+            googleURL,
+            #URL("github.com"),
+            #URL("apple.com"),
+        ]
+        """
+        testFormatting(for: input, rule: .indent)
+    }
+
+    func testReturnMacroInvocation() {
+        let input = """
+        func foo() {
+            return
+            #URL("github.com")
+        }
+        """
+        let output = """
+        func foo() {
+            return
+                #URL("github.com")
+        }
+        """
+        testFormatting(for: input, output, rule: .indent)
     }
 }

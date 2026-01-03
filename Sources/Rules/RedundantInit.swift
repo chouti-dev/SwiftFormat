@@ -17,10 +17,10 @@ public extension FormatRule {
         formatter.forEach(.identifier("init")) { initIndex, _ in
             guard let dotIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: initIndex, if: {
                 $0.isOperator(".")
-            }), let openParenIndex = formatter.index(of: .nonSpaceOrLinebreak, after: initIndex, if: {
-                $0 == .startOfScope("(")
-            }), let closeParenIndex = formatter.index(of: .endOfScope(")"), after: openParenIndex),
-            formatter.last(.nonSpaceOrCommentOrLinebreak, before: closeParenIndex) != .delimiter(":"),
+            }), let openParenOrOpenBraceIndex = formatter.index(of: .nonSpaceOrLinebreak, after: initIndex, if: {
+                $0 == .startOfScope("(") || $0 == .startOfScope("{")
+            }), let closeParenOrCloseBraceIndex = formatter.endOfScope(at: openParenOrOpenBraceIndex),
+            formatter.last(.nonSpaceOrCommentOrLinebreak, before: closeParenOrCloseBraceIndex) != .delimiter(":"),
             let prevIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: dotIndex),
             let prevToken = formatter.token(at: prevIndex),
             formatter.isValidEndOfType(at: prevIndex),
@@ -61,8 +61,16 @@ public extension FormatRule {
                     return
                 }
             }
-            formatter.removeTokens(in: initIndex + 1 ..< openParenIndex)
-            formatter.removeTokens(in: dotIndex ... initIndex)
+
+            if formatter.tokens[openParenOrOpenBraceIndex] == .startOfScope("(") {
+                formatter.removeTokens(in: initIndex + 1 ..< openParenOrOpenBraceIndex)
+            }
+
+            let endOfTypeIndex = (startOfTypeIndex ..< dotIndex).last(where: {
+                formatter.tokens[$0].isNonSpaceOrCommentOrLinebreak
+            }) ?? startOfTypeIndex
+
+            formatter.removeTokens(in: (endOfTypeIndex + 1) ... initIndex)
         }
     } examples: {
         """

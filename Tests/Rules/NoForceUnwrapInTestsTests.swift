@@ -620,6 +620,19 @@ final class NoForceUnwrapInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceUnwrapInTests, exclude: [.hoistTry])
     }
 
+    func testTestHelperIsNotUpdated() {
+        let input = """
+        import XCTest
+
+        class TestCase: XCTestCase {
+            func test_helper(arg: Bool) {
+                let result = myOptional!.with.nested!.property! && arg
+            }
+        }
+        """
+        testFormatting(for: input, rule: .noForceUnwrapInTests, exclude: [.hoistTry])
+    }
+
     func testDisableRule() {
         let input = """
         import XCTest
@@ -661,7 +674,7 @@ final class NoForceUnwrapInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceUnwrapInTests)
     }
 
-    func testXCTAssertEqual_KeepsForceUnwrapsAsOptionalChaining() throws {
+    func testXCTAssertEqual_KeepsForceUnwrapsAsOptionalChaining() {
         let input = """
         import XCTest
 
@@ -683,7 +696,7 @@ final class NoForceUnwrapInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceUnwrapInTests)
     }
 
-    func testXCTAssertNil_KeepsForceUnwrapsAsOptionalChaining() throws {
+    func testXCTAssertNil_KeepsForceUnwrapsAsOptionalChaining() {
         let input = """
         import XCTest
 
@@ -705,7 +718,7 @@ final class NoForceUnwrapInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceUnwrapInTests)
     }
 
-    func testEqualityComparison_KeepsForceUnwrapsAsOptionalChaining() throws {
+    func testEqualityComparison_KeepsForceUnwrapsAsOptionalChaining() {
         let input = """
         import Testing
 
@@ -723,7 +736,7 @@ final class NoForceUnwrapInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceUnwrapInTests)
     }
 
-    func testEqualityComparisonWithNil_KeepsForceUnwrapsAsOptionalChaining() throws {
+    func testEqualityComparisonWithNil_KeepsForceUnwrapsAsOptionalChaining() {
         let input = """
         import Testing
 
@@ -741,7 +754,7 @@ final class NoForceUnwrapInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceUnwrapInTests)
     }
 
-    func testXCTAssertEqualWithAccuracy_RequiresXCTUnwrap() throws {
+    func testXCTAssertEqualWithAccuracy_RequiresXCTUnwrap() {
         let input = """
         import XCTest
 
@@ -763,7 +776,7 @@ final class NoForceUnwrapInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noForceUnwrapInTests)
     }
 
-    func testForceUnwrapWithOperatorFollowing_RequiresXCTUnwrap() throws {
+    func testForceUnwrapWithOperatorFollowing_RequiresXCTUnwrap() {
         let input = """
         import Testing
 

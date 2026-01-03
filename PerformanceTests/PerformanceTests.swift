@@ -36,10 +36,10 @@ private let rulesDirectory = URL(fileURLWithPath: #file)
     .deletingLastPathComponent().deletingLastPathComponent()
     .appendingPathComponent("Sources/Rules")
 
-class PerformanceTests: XCTestCase {
+final class PerformanceTests: XCTestCase {
     static let files: [String] = {
         var files = [String]()
-        _ = enumerateFiles(withInputURL: rulesDirectory) { url, _, _ in
+        _ = enumerateFiles(withInputURLs: [rulesDirectory]) { url, _, _ in
             {
                 if let source = try? String(contentsOf: url) {
                     files.append(source)
@@ -91,7 +91,7 @@ class PerformanceTests: XCTestCase {
             octalGrouping: .group(1, 1),
             hexGrouping: .group(1, 1),
             hoistPatternLet: false,
-            elseOnNextLine: true,
+            elsePosition: .nextLine,
             explicitSelf: .insert,
             experimentalRules: true,
             typeBlankLines: .insert

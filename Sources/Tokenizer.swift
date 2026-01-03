@@ -34,11 +34,11 @@ import Foundation
 // https://developer.apple.com/library/ios/documentation/Swift/Conceptual/Swift_Programming_Language/LexicalStructure.html
 
 /// Used to speed up matching
-// Note: Any, Self, self, super, nil, true and false have been omitted deliberately, as they
+/// Note: Any, Self, self, super, nil, true and false have been omitted deliberately, as they
 /// behave like identifiers. So too have context-specific keywords such as the following:
 /// any, associativity, async, convenience, didSet, dynamic, final, get, indirect, infix, lazy,
 /// left, mutating, none, nonmutating, open, optional, override, postfix, precedence,
-/// prefix, Protocol, required, right, set, some, any, Type, unowned, weak, willSet
+/// prefix, Protocol, required, right, set, some, any, of, Type, unowned, weak, willSet
 let swiftKeywords = Set([
     "let", "return", "func", "var", "if", "public", "as", "else", "in", "import",
     "class", "try", "guard", "case", "for", "init", "extension", "private", "static",
@@ -53,6 +53,21 @@ public extension String {
     /// Is this string a reserved keyword in Swift?
     var isSwiftKeyword: Bool {
         swiftKeywords.contains(self)
+    }
+
+    /// Is a keyword when used in a type position?
+    var isKeywordInTypeContext: Bool {
+        ["borrowing", "consuming", "isolated", "sending", "some", "any", "of"].contains(self)
+    }
+
+    /// Is this a macro name or conditional compilation directive?
+    var isMacroOrCompilerDirective: Bool {
+        hasPrefix("#")
+    }
+
+    /// Is this a macro name?
+    var isMacro: Bool {
+        isMacroOrCompilerDirective && !["#if", "#elseif", "#else", "#endif"].contains(self)
     }
 
     /// Is this string a valid operator?
@@ -399,6 +414,13 @@ public extension Token {
     var isNonSpaceOrCommentOrLinebreak: Bool { !isSpaceOrCommentOrLinebreak }
     var isCommentOrLinebreak: Bool { isComment || isLinebreak }
 
+    var isMacro: Bool {
+        if case let .keyword(string) = self {
+            return string.isMacro
+        }
+        return false
+    }
+
     var isSwitchCaseOrDefault: Bool {
         if case let .endOfScope(string) = self {
             return ["case", "default"].contains(string)
@@ -533,8 +555,8 @@ extension Token {
              .endOfScope("}"), .endOfScope(">"),
              .endOfScope where isStringDelimiter:
             return true
-        case let .keyword(name) where name.hasPrefix("#"):
-            return true
+        case let .keyword(name):
+            return name.isMacroOrCompilerDirective
         default:
             return false
         }
@@ -548,8 +570,8 @@ extension Token {
              .startOfScope("("), .startOfScope("["), .startOfScope("{"),
              .startOfScope where isStringDelimiter:
             return true
-        case let .keyword(name) where name.hasPrefix("#"):
-            return true
+        case let .keyword(name):
+            return name.isMacroOrCompilerDirective
         default:
             return false
         }
@@ -822,7 +844,7 @@ extension UnicodeScalarView {
         }
         let start = self
         if readString("\"\"") {
-            if first?.isLinebreak ?? true {
+            if first?.isSpaceOrLinebreak ?? true {
                 return .startOfScope("\"\"\"")
             }
             self = start
@@ -1338,10 +1360,10 @@ public func tokenize(_ source: String) -> [Token] {
                 tokens.append(.startOfScope("("))
                 return
             case "\r", "\n":
-                if string != "" {
+                if string != "" || tokens.last(where: { !$0.isSpace })?.isLinebreak ?? false {
                     tokens.append(.stringBody(string))
-                    string = ""
                 }
+                string = ""
                 processLinebreak(c)
                 if let space = characters.parseSpace() {
                     tokens.append(space)
@@ -1995,6 +2017,9 @@ public func tokenize(_ source: String) -> [Token] {
                 processCommentBody()
             default:
                 if let delimiterType = token.stringDelimiterType {
+                    if delimiterType.isMultiline, let token = characters.parseSpace() {
+                        tokens.append(token)
+                    }
                     processStringBody(delimiterType)
                 }
             }

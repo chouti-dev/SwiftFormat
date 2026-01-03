@@ -11,7 +11,7 @@ import XCTest
 final class NoGuardInTestsTests: XCTestCase {
     // MARK: - XCTest tests
 
-    func testReplaceGuardXCTFailWithXCTUnwrap() throws {
+    func testReplaceGuardXCTFailWithXCTUnwrap() {
         let input = """
         import XCTest
 
@@ -35,10 +35,10 @@ final class NoGuardInTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testReplaceGuardXCTFailWithMessageWithXCTUnwrap() throws {
+    func testReplaceGuardXCTFailWithMessageWithXCTUnwrap() {
         let input = """
         import XCTest
 
@@ -56,14 +56,14 @@ final class NoGuardInTestsTests: XCTestCase {
 
         class TestCase: XCTestCase {
             func test_something() throws {
-                let value = try XCTUnwrap(optionalValue)
+                let value = try XCTUnwrap(optionalValue, "Expected value to be non-nil")
             }
         }
         """
         testFormatting(for: input, output, rule: .noGuardInTests)
     }
 
-    func testDoesNotReplaceNonTestFunction() throws {
+    func testDoesNotReplaceNonTestFunction() {
         let input = """
         import XCTest
 
@@ -79,7 +79,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests)
     }
 
-    func testDoesNotReplaceGuardWithDifferentElseBlock() throws {
+    func testDoesNotReplaceGuardWithDifferentElseBlock() {
         let input = """
         import XCTest
 
@@ -95,7 +95,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests)
     }
 
-    func testReplacesGuardWithDifferentExpression() throws {
+    func testReplacesGuardWithDifferentExpression() {
         let input = """
         import XCTest
 
@@ -120,7 +120,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests)
     }
 
-    func testDoesNotReplaceInClosure() throws {
+    func testDoesNotReplaceInClosure() {
         let input = """
         import XCTest
 
@@ -138,7 +138,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests)
     }
 
-    func testDoesNotReplaceInNestedFunc() throws {
+    func testDoesNotReplaceInNestedFunc() {
         let input = """
         import XCTest
 
@@ -156,7 +156,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests)
     }
 
-    func testPreservesExistingThrows() throws {
+    func testPreservesExistingThrows() {
         let input = """
         import XCTest
 
@@ -181,7 +181,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests)
     }
 
-    func testHandlesAsyncFunction() throws {
+    func testHandlesAsyncFunction() {
         let input = """
         import XCTest
 
@@ -208,7 +208,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests)
     }
 
-    func testReplaceGuardReturnWithXCTUnwrap() throws {
+    func testReplaceGuardReturnWithXCTUnwrap() {
         let input = """
         import XCTest
 
@@ -231,10 +231,10 @@ final class NoGuardInTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testMultipleGuardStatements() throws {
+    func testMultipleGuardStatements() {
         let input = """
         import XCTest
 
@@ -261,200 +261,82 @@ final class NoGuardInTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    // MARK: - Swift Testing tests
-
-    func testReplaceGuardReturnWithRequire() throws {
+    func testPreserveFailMessage() {
         let input = """
-        import Testing
+        import XCTest
 
-        struct SomeTests {
-            @Test
-            func something() {
-                guard let value = optionalValue else {
-                    return
-                }
-                print(value)
-            }
-        }
-        """
-        let output = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() throws {
-                let value = try #require(optionalValue)
-                print(value)
-            }
-        }
-        """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
-    }
-
-    func testDoesNotReplaceNonTestFunctionSwiftTesting() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            func helper() {
-                guard let value = optionalValue else {
-                    return
-                }
-            }
-        }
-        """
-        testFormatting(for: input, rule: .noGuardInTests)
-    }
-
-    func testDoesNotReplaceGuardWithDifferentElseBlockSwiftTesting() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() {
-                guard let value = optionalValue else {
-                    print("no value")
-                    return
-                }
-            }
-        }
-        """
-        testFormatting(for: input, rule: .noGuardInTests)
-    }
-
-    func testDoesNotReplaceInClosureSwiftTesting() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() {
-                doSomething {
-                    guard let value = optionalValue else {
-                        return
-                    }
-                }
-            }
-        }
-        """
-        testFormatting(for: input, rule: .noGuardInTests)
-    }
-
-    func testSwiftTestingAddsThrows() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() {
-                guard let value = optionalValue else {
-                    return
-                }
-            }
-        }
-        """
-        let output = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() throws {
-                let value = try #require(optionalValue)
-            }
-        }
-        """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.elseOnSameLine])
-    }
-
-    func testSwiftTestingPreservesExistingThrows() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() throws {
-                guard let value = optionalValue else {
-                    return
-                }
-            }
-        }
-        """
-        let output = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() throws {
-                let value = try #require(optionalValue)
-            }
-        }
-        """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.elseOnSameLine])
-    }
-
-    func testSwiftTestingAsyncFunction() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() async {
-                let optionalValue = await function()
-                guard let value = optionalValue else {
-                    return
-                }
-            }
-        }
-        """
-        let output = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() async throws {
-                let optionalValue = await function()
-                let value = try #require(optionalValue)
-            }
-        }
-        """
-        testFormatting(for: input, output, rule: .noGuardInTests)
-    }
-
-    func testSwiftTestingMultipleGuardStatements() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() {
+        class TestCase: XCTestCase {
+            func test_something() {
                 guard let value1 = optionalValue1 else {
+                    XCTFail("Failed")
                     return
                 }
-                guard let value2 = optionalValue2 else {
+                guard optionalValue2 != nil else {
+                    XCTFail("Value was nil")
                     return
                 }
             }
         }
         """
         let output = """
-        import Testing
+        import XCTest
 
-        struct SomeTests {
-            @Test
-            func something() throws {
-                let value1 = try #require(optionalValue1)
-                let value2 = try #require(optionalValue2)
+        class TestCase: XCTestCase {
+            func test_something() throws {
+                let value1 = try XCTUnwrap(optionalValue1, "Failed")
+                XCTAssert(optionalValue2 != nil, "Value was nil")
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testReplaceGuardWithMultipleConditionsXCTest() throws {
+    func testPreserveFailMessageWithInterpolations() {
+        let input = """
+        import XCTest
+
+        class TestCase: XCTestCase {
+            func test_something() {
+                guard optionalValue2 == nil else {
+                    XCTFail("Value was \\(String(describing: optionalValue2))")
+                    return
+                }
+            }
+        }
+        """
+        let output = """
+        import XCTest
+
+        class TestCase: XCTestCase {
+            func test_something() {
+                XCTAssert(optionalValue2 == nil, "Value was \\(String(describing: optionalValue2))")
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
+    }
+
+    func testNoMangleNontrivialGuardBody() {
+        let input = """
+        import XCTest
+
+        class TestCase: XCTestCase {
+            func test_something() {
+                guard optionalValue2 == nil else {
+                    let value = optionalValue2 ?? ""
+                    XCTFail("Value was \\(value)")
+                    return
+                }
+            }
+        }
+        """
+        testFormatting(for: input, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
+    }
+
+    func testReplaceGuardWithMultipleConditionsXCTest() {
         let input = """
         import XCTest
 
@@ -481,7 +363,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests)
     }
 
-    func testDoesNotReplaceAllConditionsInMultipleGuard() throws {
+    func testDoesNotReplaceAllConditionsInMultipleGuard() {
         let input = """
         import XCTest
 
@@ -508,7 +390,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests)
     }
 
-    func testReplaceMultipleGuardConditionsWithMixedPatterns() throws {
+    func testReplaceMultipleGuardConditionsWithMixedPatterns() {
         let input = """
         import XCTest
 
@@ -537,63 +419,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests)
     }
 
-    func testReplaceGuardWithMultipleConditionsSwiftTesting() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() {
-                guard let value = optionalValue,
-                      someCondition else {
-                    return
-                }
-            }
-        }
-        """
-        let output = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() throws {
-                let value = try #require(optionalValue)
-                #expect(someCondition)
-            }
-        }
-        """
-        testFormatting(for: input, output, rule: .noGuardInTests)
-    }
-
-    func testReplaceMultipleOptionalBindingsSwiftTesting() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() {
-                guard let value = optionalValue,
-                      let other = otherValue else {
-                    return
-                }
-            }
-        }
-        """
-        let output = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() throws {
-                let value = try #require(optionalValue)
-                let other = try #require(otherValue)
-            }
-        }
-        """
-        testFormatting(for: input, output, rule: .noGuardInTests)
-    }
-
-    func testSimpleMultipleConditions() throws {
+    func testSimpleMultipleConditions() {
         let input = """
         import XCTest
 
@@ -619,7 +445,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests)
     }
 
-    func testSimpleMultipleConditions2() throws {
+    func testSimpleMultipleConditions2() {
         let input = """
         import XCTest
 
@@ -645,63 +471,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.wrapConditionalBodies])
     }
 
-    func testReplaceGuardIssueRecordWithRequire() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() {
-                guard let value = optionalValue else {
-                    Issue.record()
-                    return
-                }
-                print(value)
-            }
-        }
-        """
-        let output = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() throws {
-                let value = try #require(optionalValue)
-                print(value)
-            }
-        }
-        """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
-    }
-
-    func testReplaceGuardIssueRecordWithMessageWithRequire() throws {
-        let input = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() {
-                guard let value = optionalValue else {
-                    Issue.record("Expected value to be non-nil")
-                    return
-                }
-            }
-        }
-        """
-        let output = """
-        import Testing
-
-        struct SomeTests {
-            @Test
-            func something() throws {
-                let value = try #require(optionalValue)
-            }
-        }
-        """
-        testFormatting(for: input, output, rule: .noGuardInTests)
-    }
-
-    func testHandlesFiveConditions() throws {
+    func testHandlesFiveConditions() {
         let input = """
         import XCTest
 
@@ -736,7 +506,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.wrapMultilineStatementBraces, .elseOnSameLine, .blankLinesAfterGuardStatements, .wrapArguments])
     }
 
-    func testHandlesTenConditions() throws {
+    func testHandlesTenConditions() {
         let input = """
         import XCTest
 
@@ -781,7 +551,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .acronyms])
     }
 
-    func testHandlesMixedComplexConditions() throws {
+    func testHandlesMixedComplexConditions() {
         let input = """
         import XCTest
 
@@ -826,9 +596,337 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.wrapMultilineStatementBraces, .elseOnSameLine, .blankLinesAfterGuardStatements, .wrapArguments])
     }
 
+    // MARK: - Swift Testing tests
+
+    func testReplaceGuardReturnWithRequire() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() {
+                guard let value = optionalValue else {
+                    return
+                }
+                print(value)
+            }
+        }
+        """
+        let output = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() throws {
+                let value = try #require(optionalValue)
+                print(value)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
+    }
+
+    func testDoesNotReplaceNonTestFunctionSwiftTesting() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            func helper() {
+                guard let value = optionalValue else {
+                    return
+                }
+            }
+        }
+        """
+        testFormatting(for: input, rule: .noGuardInTests)
+    }
+
+    func testDoesNotReplaceGuardWithDifferentElseBlockSwiftTesting() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() {
+                guard let value = optionalValue else {
+                    print("no value")
+                    return
+                }
+            }
+        }
+        """
+        testFormatting(for: input, rule: .noGuardInTests)
+    }
+
+    func testDoesNotReplaceInClosureSwiftTesting() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() {
+                doSomething {
+                    guard let value = optionalValue else {
+                        return
+                    }
+                }
+            }
+        }
+        """
+        testFormatting(for: input, rule: .noGuardInTests)
+    }
+
+    func testSwiftTestingAddsThrows() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() {
+                guard let value = optionalValue else {
+                    return
+                }
+            }
+        }
+        """
+        let output = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() throws {
+                let value = try #require(optionalValue)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.elseOnSameLine])
+    }
+
+    func testSwiftTestingPreservesExistingThrows() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() throws {
+                guard let value = optionalValue else {
+                    return
+                }
+            }
+        }
+        """
+        let output = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() throws {
+                let value = try #require(optionalValue)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.elseOnSameLine])
+    }
+
+    func testSwiftTestingAsyncFunction() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() async {
+                let optionalValue = await function()
+                guard let value = optionalValue else {
+                    return
+                }
+            }
+        }
+        """
+        let output = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() async throws {
+                let optionalValue = await function()
+                let value = try #require(optionalValue)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests)
+    }
+
+    func testSwiftTestingMultipleGuardStatements() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() {
+                guard let value1 = optionalValue1 else {
+                    return
+                }
+                guard let value2 = optionalValue2 else {
+                    return
+                }
+            }
+        }
+        """
+        let output = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() throws {
+                let value1 = try #require(optionalValue1)
+                let value2 = try #require(optionalValue2)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
+    }
+
+    func testReplaceGuardWithMultipleConditionsSwiftTesting() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() {
+                guard let value = optionalValue,
+                      someCondition else {
+                    return
+                }
+            }
+        }
+        """
+        let output = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() throws {
+                let value = try #require(optionalValue)
+                #expect(someCondition)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests)
+    }
+
+    func testReplaceMultipleOptionalBindingsSwiftTesting() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() {
+                guard let value = optionalValue,
+                      let other = otherValue else {
+                    return
+                }
+            }
+        }
+        """
+        let output = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() throws {
+                let value = try #require(optionalValue)
+                let other = try #require(otherValue)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests)
+    }
+
+    func testReplaceGuardIssueRecordWithRequire() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() {
+                guard let value = optionalValue else {
+                    Issue.record()
+                    return
+                }
+                print(value)
+            }
+        }
+        """
+        let output = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() throws {
+                let value = try #require(optionalValue)
+                print(value)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
+    }
+
+    func testReplaceGuardIssueRecordWithMessageWithRequire() {
+        let input = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() {
+                guard let value = optionalValue else {
+                    Issue.record("Expected value to be non-nil")
+                    return
+                }
+            }
+        }
+        """
+        let output = """
+        import Testing
+
+        struct SomeTests {
+            @Test
+            func something() throws {
+                let value = try #require(optionalValue, "Expected value to be non-nil")
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests)
+    }
+
+    func testNonUnwrapConditionsDontInsertThrows() {
+        let input = """
+        import XCTest
+
+        class TestCase: XCTestCase {
+            func test_something() {
+                guard condition, optionalValue != nil else {
+                    XCTFail()
+                    return
+                }
+            }
+        }
+        """
+        let output = """
+        import XCTest
+
+        class TestCase: XCTestCase {
+            func test_something() {
+                XCTAssert(condition)
+                XCTAssert(optionalValue != nil)
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .noGuardInTests)
+    }
+
     // MARK: - Variable shadowing tests
 
-    func testDoesNotReplaceWhenVariableShadowing() throws {
+    func testDoesNotReplaceWhenVariableShadowing() {
         let input = """
         import XCTest
 
@@ -845,7 +943,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests)
     }
 
-    func testDoesNotReplaceWhenVariableShadowingWithReturn() throws {
+    func testDoesNotReplaceWhenVariableShadowingWithReturn() {
         let input = """
         import XCTest
 
@@ -861,12 +959,14 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests)
     }
 
-    func testHandlesGuardLetShorthand() throws {
+    func testHandlesGuardLetShorthand() {
         let input = """
         import XCTest
 
         class TestCase: XCTestCase {
-            func test_something(optionalValue: String?) {
+            var optionalValue: String?
+
+            func test_something() {
                 guard let optionalValue else {
                     XCTFail()
                     return
@@ -879,16 +979,18 @@ final class NoGuardInTestsTests: XCTestCase {
         import XCTest
 
         class TestCase: XCTestCase {
-            func test_something(optionalValue: String?) throws {
+            var optionalValue: String?
+
+            func test_something() throws {
                 let optionalValue = try XCTUnwrap(optionalValue)
                 print(optionalValue)
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testHandlesGuardLetShorthandSwiftTesting() throws {
+    func testHandlesGuardLetShorthandSwiftTesting() {
         let input = """
         import Testing
 
@@ -913,10 +1015,10 @@ final class NoGuardInTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testHandlesExplicitTypeAnnotation() throws {
+    func testHandlesExplicitTypeAnnotation() {
         let input = """
         import XCTest
 
@@ -942,10 +1044,10 @@ final class NoGuardInTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testHandlesExplicitTypeAnnotationWithShorthand() throws {
+    func testHandlesExplicitTypeAnnotationWithShorthand() {
         let input = """
         import XCTest
 
@@ -970,10 +1072,10 @@ final class NoGuardInTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testHandlesComplexTypeAnnotation() throws {
+    func testHandlesComplexTypeAnnotation() {
         let input = """
         import XCTest
 
@@ -996,10 +1098,10 @@ final class NoGuardInTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testHandlesTypeAnnotationSwiftTesting() throws {
+    func testHandlesTypeAnnotationSwiftTesting() {
         let input = """
         import Testing
 
@@ -1024,10 +1126,10 @@ final class NoGuardInTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testPreservesDependentConditions() throws {
+    func testPreservesDependentConditions() {
         let input = """
         import XCTest
 
@@ -1045,7 +1147,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testConvertsBooleanConditionsToXCTAssert() throws {
+    func testConvertsBooleanConditionsToXCTAssert() {
         let input = """
         import XCTest
 
@@ -1074,7 +1176,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
     }
 
-    func testConvertsBooleanConditionsToExpect() throws {
+    func testConvertsBooleanConditionsToExpect() {
         let input = """
         import Testing
 
@@ -1101,10 +1203,10 @@ final class NoGuardInTestsTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .unusedArguments])
+        testFormatting(for: input, output, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testConvertsMultipleBooleanConditions() throws {
+    func testConvertsMultipleBooleanConditions() {
         let input = """
         import XCTest
 
@@ -1135,7 +1237,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, output, rule: .noGuardInTests)
     }
 
-    func testPreservesGuardWithShadowedVariable() throws {
+    func testPreservesGuardWithShadowedVariable() {
         let input = """
         import XCTest
 
@@ -1154,7 +1256,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .elseOnSameLine, .wrapMultilineStatementBraces])
     }
 
-    func testPreservesGuardWithAnyShadowing() throws {
+    func testPreservesGuardWithAnyShadowing() {
         let input = """
         import XCTest
 
@@ -1175,7 +1277,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements, .elseOnSameLine, .wrapMultilineStatementBraces])
     }
 
-    func testPreservesGuardWithMixedCasePattern() throws {
+    func testPreservesGuardWithMixedCasePattern() {
         let input = """
         import XCTest
 
@@ -1195,7 +1297,7 @@ final class NoGuardInTestsTests: XCTestCase {
 
     // MARK: - Await tests
 
-    func testPreservesGuardWithAwaitInCondition() throws {
+    func testPreservesGuardWithAwaitInCondition() {
         let input = """
         import XCTest
 
@@ -1212,7 +1314,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testPreservesGuardWithAwaitInConditionSwiftTesting() throws {
+    func testPreservesGuardWithAwaitInConditionSwiftTesting() {
         let input = """
         import Testing
 
@@ -1229,7 +1331,7 @@ final class NoGuardInTestsTests: XCTestCase {
         testFormatting(for: input, rule: .noGuardInTests, exclude: [.blankLinesAfterGuardStatements])
     }
 
-    func testPreservesGuardWithAwaitInMultipleConditions() throws {
+    func testPreservesGuardWithAwaitInMultipleConditions() {
         let input = """
         import XCTest
 
@@ -1249,7 +1351,7 @@ final class NoGuardInTestsTests: XCTestCase {
 
     // MARK: - No import tests
 
-    func testDoesNothingWithoutImport() throws {
+    func testDoesNothingWithoutImport() {
         let input = """
         func test_something() {
             guard let value = optionalValue else {

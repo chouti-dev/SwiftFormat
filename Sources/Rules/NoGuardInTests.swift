@@ -22,17 +22,10 @@ public extension FormatRule {
         }
 
         formatter.forEach(.keyword("func")) { funcKeywordIndex, _ in
-            guard let functionDecl = formatter.parseFunctionDeclaration(keywordIndex: funcKeywordIndex)
+            guard let functionDecl = formatter.parseFunctionDeclaration(keywordIndex: funcKeywordIndex),
+                  formatter.isTestFunction(at: funcKeywordIndex, in: functionDecl, for: testFramework),
+                  let bodyRange = functionDecl.bodyRange
             else { return }
-
-            switch testFramework {
-            case .xcTest:
-                guard functionDecl.name?.starts(with: "test") == true else { return }
-            case .swiftTesting:
-                guard formatter.modifiersForDeclaration(at: funcKeywordIndex, contains: "@Test") else { return }
-            }
-
-            guard let bodyRange = functionDecl.bodyRange else { return }
 
             // Track if we made any changes that require adding throws
             var addedTryStatement = false
@@ -81,6 +74,17 @@ public extension FormatRule {
                 }()
 
                 guard isValidElseBlock else { continue }
+
+                // Preserve the assertion message (if any)
+                let assertionMessage: [Token] = {
+                    guard let startIndex = formatter.index(of: .startOfScope("("), after: elseBraceIndex),
+                          let endIndex = formatter.endOfScope(at: startIndex),
+                          formatter.index(after: startIndex, where: { $0.isStringDelimiter }) != nil
+                    else {
+                        return []
+                    }
+                    return [.delimiter(","), .space(" ")] + formatter.tokens[startIndex + 1 ..< endIndex]
+                }()
 
                 // Check for variable shadowing
                 let scopeStart = bodyRange.lowerBound
@@ -181,7 +185,9 @@ public extension FormatRule {
                             .startOfScope("("),
                         ])
                         replacementStatements.append(contentsOf: expressionTokens)
+                        replacementStatements.append(contentsOf: assertionMessage)
                         replacementStatements.append(.endOfScope(")"))
+                        addedTryStatement = true
 
                     case let .booleanExpression(range):
                         // Transform boolean condition to assertion
@@ -189,6 +195,7 @@ public extension FormatRule {
                         replacementStatements.append(.identifier(assertFunctionName))
                         replacementStatements.append(.startOfScope("("))
                         replacementStatements.append(contentsOf: conditionTokens)
+                        replacementStatements.append(contentsOf: assertionMessage)
                         replacementStatements.append(.endOfScope(")"))
 
                     case .patternMatching:
@@ -198,7 +205,6 @@ public extension FormatRule {
                 }
 
                 formatter.replaceTokens(in: guardIndex ... endOfElseScope, with: replacementStatements)
-                addedTryStatement = true
             }
 
             // If we added try XCTUnwrap or try #require, ensure the function has throws

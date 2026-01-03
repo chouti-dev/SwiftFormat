@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class RedundantInitTests: XCTestCase {
+final class RedundantInitTests: XCTestCase {
     func testRemoveRedundantInit() {
         let input = """
         [1].flatMap { String.init($0) }
@@ -198,7 +198,23 @@ class RedundantInitTests: XCTestCase {
         let input = """
         type(of: oldViewController).init()
         """
+        testFormatting(for: input, rule: .redundantInit)
+    }
 
+    func testPreserveAsTypeInit() {
+        let input = """
+        let foo = (MyType.self as NSObject.Type).init()
+        let bar = (MyType.self as? NSObject.Type).init()
+        """
+        testFormatting(for: input, rule: .redundantInit)
+    }
+
+    func testDontMangleSelfInitExpressions() {
+        let input = """
+        // TODO: maybe we can auto-simplify in this case?
+        let foo = MyType.self.init()
+        let bar = (MyType.self).init()
+        """
         testFormatting(for: input, rule: .redundantInit)
     }
 
@@ -245,5 +261,38 @@ class RedundantInitTests: XCTestCase {
         let bar: Bar = (foo.isBar && bar.isBaaz) ? .init() : nil
         """
         testFormatting(for: input, rule: .redundantInit)
+    }
+
+    func testRemoveRedundantInitBeforeTrailingClosure() {
+        let input = """
+        Handler.init { print("foo") }
+        """
+        let output = """
+        Handler { print("foo") }
+        """
+        testFormatting(for: input, output, rule: .redundantInit)
+    }
+
+    func testInitOnOwnLine() {
+        let input = """
+        let foo = String
+            .init()
+        """
+        let output = """
+        let foo = String()
+        """
+        testFormatting(for: input, output, rule: .redundantInit, exclude: [.propertyTypes])
+    }
+
+    func testInitOnOwnLine2() {
+        let input = """
+        let foo = String /*
+             comment
+            */ .init()
+        """
+        let output = """
+        let foo = String()
+        """
+        testFormatting(for: input, output, rule: .redundantInit, exclude: [.propertyTypes])
     }
 }

@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class HoistTryTests: XCTestCase {
+final class HoistTryTests: XCTestCase {
     func testHoistTry() {
         let input = """
         greet(try name(), try surname())
@@ -127,6 +127,13 @@ class HoistTryTests: XCTestCase {
     func testNoHoistTryInsideXCTAssert() {
         let input = """
         XCTAssertFalse(try foo())
+        """
+        testFormatting(for: input, rule: .hoistTry)
+    }
+
+    func testNoHoistTryInsideXCTUnwrap() {
+        let input = """
+        let foo = try XCTUnwrap(try expression() as? Bar, message, file: file, line: line)
         """
         testFormatting(for: input, rule: .hoistTry)
     }
@@ -553,6 +560,18 @@ class HoistTryTests: XCTestCase {
         let output = """
         @Test(arguments: try [Identifier(101), nil])
         func testFunction() {}
+        """
+        testFormatting(for: input, output, rule: .hoistTry)
+    }
+
+    func testCorrectTryPlacementForWrappedAssert() {
+        let input = """
+        XCTAssertEqual(Consumer<String>
+            .character(in: try foo()))
+        """
+        let output = """
+        XCTAssertEqual(try Consumer<String>
+            .character(in: foo()))
         """
         testFormatting(for: input, output, rule: .hoistTry)
     }

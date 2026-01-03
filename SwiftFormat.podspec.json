@@ -1,6 +1,6 @@
 {
   "name": "SwiftFormat",
-  "version": "0.58.1",
+  "version": "0.58.7",
   "license": {
     "type": "MIT",
     "file": "LICENSE.md"
@@ -10,7 +10,7 @@
   "authors": "Nick Lockwood",
   "source": {
     "git": "https://github.com/nicklockwood/SwiftFormat.git",
-    "tag": "0.58.1"
+    "tag": "0.58.7"
   },
   "default_subspecs": "Core",
   "subspecs": [
@@ -33,8 +33,9 @@
     "tvos": "11.0",
     "osx": "10.14"
   },
+  "_comment": "Omit Swift 6 versions to prevent Cocoapods from using -swift-version 6",
   "swift_versions": [
-    "5.7", "5.8", "5.9", "5.10", "6.0", "6.1", "6.2"
+    "5.7", "5.8", "5.9", "5.10"
   ],
   "requires_arc": true
 }

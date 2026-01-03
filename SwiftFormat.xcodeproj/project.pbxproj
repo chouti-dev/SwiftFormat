@@ -29,7 +29,6 @@
 		015AF2CA1DC6A58C008F0A8C /* PerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015AF2C91DC6A58C008F0A8C /* PerformanceTests.swift */; };
 		015CE8B12B448CCE00924504 /* SingularizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015CE8B02B448CCE00924504 /* SingularizeTests.swift */; };
 		015D3A562995A0340065B2D9 /* AboutViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015D3A552995A0340065B2D9 /* AboutViewController.swift */; };
-		015F83FB2BF1448D0060A07E /* ReporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015F83FA2BF1448D0060A07E /* ReporterTests.swift */; };
 		018541CF1DBA0F17000F82E3 /* XCSourceTextBuffer+SwiftFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 018541CE1DBA0F17000F82E3 /* XCSourceTextBuffer+SwiftFormat.swift */; };
 		018E82751D62E730008CA0F8 /* TokenizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 018E82741D62E730008CA0F8 /* TokenizerTests.swift */; };
 		01A0EAA81D5DB4CF00A0A8E3 /* SwiftFormat.h in Headers */ = {isa = PBXBuildFile; fileRef = 01A0EAA71D5DB4CF00A0A8E3 /* SwiftFormat.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -223,7 +222,6 @@
 		015AF2C91DC6A58C008F0A8C /* PerformanceTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PerformanceTests.swift; sourceTree = "<group>"; };
 		015CE8B02B448CCE00924504 /* SingularizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SingularizeTests.swift; sourceTree = "<group>"; };
 		015D3A552995A0340065B2D9 /* AboutViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutViewController.swift; sourceTree = "<group>"; };
-		015F83FA2BF1448D0060A07E /* ReporterTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ReporterTests.swift; sourceTree = "<group>"; };
 		018541CE1DBA0F17000F82E3 /* XCSourceTextBuffer+SwiftFormat.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "XCSourceTextBuffer+SwiftFormat.swift"; sourceTree = "<group>"; };
 		018E82741D62E730008CA0F8 /* TokenizerTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TokenizerTests.swift; sourceTree = "<group>"; };
 		01A0EAA41D5DB4CF00A0A8E3 /* SwiftFormat.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SwiftFormat.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -407,13 +405,11 @@
 		01A0EAA61D5DB4CF00A0A8E3 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				2EE400792E595B7000CF8D5A /* TypeName.swift */,
 				2E3A24EE2DDD621600407419 /* Rules */,
 				2E2BAB8B2C57F6B600590239 /* RuleRegistry.generated.swift */,
 				01F17E811E25870700DCD359 /* CommandLine.swift */,
 				E4E4D3C82033F17C000D7CB1 /* EnumAssociable.swift */,
 				01B3987C1D763493009ADE61 /* Formatter.swift */,
-				01A0EAA91D5DB4CF00A0A8E3 /* Info.plist */,
 				01F3DF8B1DB9FD3F00454944 /* Options.swift */,
 				E4FABAD4202FEF060065716E /* OptionDescriptor.swift */,
 				01045A982119979400D2BE3D /* Arguments.swift */,
@@ -424,11 +420,13 @@
 				2EDC9DD92CCE9A7C0085DBE2 /* Declaration.swift */,
 				2EF8BF1A2D1E0D4F00D6F12F /* DeclarationType.swift */,
 				2E7D30A32A7940C500C32174 /* Singularize.swift */,
-				01A0EAA71D5DB4CF00A0A8E3 /* SwiftFormat.h */,
 				01A0EAC41D5DB54A00A0A8E3 /* SwiftFormat.swift */,
+				2EE400792E595B7000CF8D5A /* TypeName.swift */,
 				01A0EABF1D5DB4F700A0A8E3 /* Tokenizer.swift */,
 				01BBD85821DAA2A000457380 /* Globs.swift */,
 				D52F6A632A82E04600FE1448 /* GitFileInfo.swift */,
+				01A0EAA71D5DB4CF00A0A8E3 /* SwiftFormat.h */,
+				01A0EAA91D5DB4CF00A0A8E3 /* Info.plist */,
 				012939DB2C56A3AA00BD0A24 /* Reporters */,
 			);
 			path = Sources;
@@ -450,7 +448,6 @@
 				E43EF47B202FF47C00E523BD /* OptionDescriptorTests.swift */,
 				01426E4D23AA29B100E7D871 /* ParsingHelpersTests.swift */,
 				2EF737532C5E897800128F91 /* ProjectFilePaths.swift */,
-				015F83FA2BF1448D0060A07E /* ReporterTests.swift */,
 				015CE8B02B448CCE00924504 /* SingularizeTests.swift */,
 				0142F06E1D72FE10007D66CC /* SwiftFormatTests.swift */,
 				018E82741D62E730008CA0F8 /* TokenizerTests.swift */,
@@ -932,7 +929,6 @@
 				01BEC5772236E1A700D0DD83 /* MetadataTests.swift in Sources */,
 				01F3DF901DBA003E00454944 /* InferenceTests.swift in Sources */,
 				015CE8B12B448CCE00924504 /* SingularizeTests.swift in Sources */,
-				015F83FB2BF1448D0060A07E /* ReporterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1279,7 +1275,7 @@
 					"@loader_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.58.1;
+				MARKETING_VERSION = 0.58.7;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu99 gnu++11";
 				PRODUCT_BUNDLE_IDENTIFIER = com.charcoaldesign.SwiftFormat;
@@ -1312,7 +1308,7 @@
 					"@loader_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.58.1;
+				MARKETING_VERSION = 0.58.7;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu99 gnu++11";
 				PRODUCT_BUNDLE_IDENTIFIER = com.charcoaldesign.SwiftFormat;
@@ -1416,7 +1412,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.4;
-				MARKETING_VERSION = 0.58.1;
+				MARKETING_VERSION = 0.58.7;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.charcoaldesign.SwiftFormat.RegressionTests;
@@ -1446,7 +1442,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.4;
-				MARKETING_VERSION = 0.58.1;
+				MARKETING_VERSION = 0.58.7;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.charcoaldesign.SwiftFormat.RegressionTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1477,7 +1473,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.58.1;
+				MARKETING_VERSION = 0.58.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.charcoaldesign.SwiftFormat-for-Xcode";
 				PRODUCT_NAME = "SwiftFormat for Xcode";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1508,7 +1504,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.58.1;
+				MARKETING_VERSION = 0.58.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.charcoaldesign.SwiftFormat-for-Xcode";
 				PRODUCT_NAME = "SwiftFormat for Xcode";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1537,7 +1533,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.58.1;
+				MARKETING_VERSION = 0.58.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.charcoaldesign.SwiftFormat-for-Xcode.SourceEditorExtension";
 				PRODUCT_NAME = SwiftFormat;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1567,7 +1563,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 0.58.1;
+				MARKETING_VERSION = 0.58.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.charcoaldesign.SwiftFormat-for-Xcode.SourceEditorExtension";
 				PRODUCT_NAME = SwiftFormat;
 				PROVISIONING_PROFILE_SPECIFIER = "";

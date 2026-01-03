@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class SortImportsTests: XCTestCase {
+final class SortImportsTests: XCTestCase {
     func testSortImportsSimpleCase() {
         let input = """
         import Foo
@@ -385,6 +385,20 @@ class SortImportsTests: XCTestCase {
         import AModuleHelper
         import AModuleUI
         import SomeOtherModule
+        """
+        testFormatting(for: input, output, rule: .sortImports)
+    }
+
+    func testNoMoveSwiftToolsVersionLine() {
+        let input = """
+        // swift-tools-version: 6.2
+        import PackageDescription
+        import CompilerPluginSupport
+        """
+        let output = """
+        // swift-tools-version: 6.2
+        import CompilerPluginSupport
+        import PackageDescription
         """
         testFormatting(for: input, output, rule: .sortImports)
     }

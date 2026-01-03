@@ -17,15 +17,8 @@ public extension FormatRule {
         var testCases = [AutoUpdatingIndex]()
         formatter.forEach(.keyword("func")) { funcKeywordIndex, _ in
             guard let functionDecl = formatter.parseFunctionDeclaration(keywordIndex: funcKeywordIndex),
-                  functionDecl.returnType == nil
+                  formatter.isTestFunction(at: funcKeywordIndex, in: functionDecl, for: testFramework)
             else { return }
-
-            switch testFramework {
-            case .xcTest:
-                guard functionDecl.name?.starts(with: "test") == true else { return }
-            case .swiftTesting:
-                guard formatter.modifiersForDeclaration(at: funcKeywordIndex, contains: "@Test") else { return }
-            }
 
             testCases.append(funcKeywordIndex.autoUpdating(in: formatter))
         }
@@ -144,7 +137,7 @@ public extension FormatRule {
                     }
                 }
 
-                /// Whether or not the expression needs to be wrapped in `XCTUnwrap` / `#require`
+                // Whether or not the expression needs to be wrapped in `XCTUnwrap` / `#require`
                 var needsUnwrapMethod = true
 
                 // If this expression is the LHS of an assignment operator, changing `foo!.bar = baaz` to `foo?.bar = baaz` is a safe change as-is
@@ -359,8 +352,8 @@ extension Formatter {
         return expressionRange
     }
 
-    // If the given token is an `as` token, finds the direct outer paren scope that could potentially contain a method chain on the result of the cast.
-    // For example, `(foo as! Bar).quux` returns the `.quux` component.
+    /// If the given token is an `as` token, finds the direct outer paren scope that could potentially contain a method chain on the result of the cast.
+    /// For example, `(foo as! Bar).quux` returns the `.quux` component.
     func parseTokenAfterForceCastParenScope(asIndex: Int) -> Int? {
         guard tokens[asIndex] == .keyword("as"),
               let tokenAfterAs = index(of: .nonSpaceOrCommentOrLinebreak, after: asIndex),

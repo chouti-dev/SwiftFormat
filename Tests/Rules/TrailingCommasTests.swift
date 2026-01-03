@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class TrailingCommasTests: XCTestCase {
+final class TrailingCommasTests: XCTestCase {
     func testCommaAddedToSingleItem() {
         let input = """
         [
@@ -3620,6 +3620,36 @@ class TrailingCommasTests: XCTestCase {
                 },
             ))
         }
+        """
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.2")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommaNotAddedToTypedThrows() {
+        let input = """
+        func confirmCommunication(transactionID: String) async throws(
+            Either<PhoneNumberChangeConfirmCommunicationError, SkyusersV2GenericError>
+        ) -> TimeInterval
+        """
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.2")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommaNotAddedToSelector() {
+        let input = """
+        foo(action: #selector(
+            reallyLongFunctionName(withLongParameters:)
+        ))
+        """
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.2")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testArrayTypeNotMistakenForLiteral() {
+        let input = """
+        let myParsedList = (myRawList as? [
+            MyItemType
+        ])?.compactMap(parse)
         """
         let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.2")
         testFormatting(for: input, rule: .trailingCommas, options: options)

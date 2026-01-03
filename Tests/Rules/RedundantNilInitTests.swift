@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class RedundantNilInitTests: XCTestCase {
+final class RedundantNilInitTests: XCTestCase {
     func testRemoveRedundantNilInit() {
         let input = """
         var foo: Int? = nil
@@ -379,6 +379,51 @@ class RedundantNilInitTests: XCTestCase {
         """
         let output = """
         @objc var foo: Int? = nil
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, output, rule: .redundantNilInit,
+                       options: options)
+    }
+
+    func testNoInsertNilInitForClosureReturningOptional() {
+        let input = """
+        private var receiverSelector: @MainActor (IntrospectionPlatformViewController) -> Target?
+        private var ancestorSelector: @MainActor (IntrospectionPlatformViewController) -> Target?
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: .redundantNilInit, options: options)
+    }
+
+    func testNoInsertNilInitForClosureReturningOptionalWithAsyncThrows() {
+        let input = """
+        var fetcher: () async throws -> Response?
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: .redundantNilInit, options: options)
+    }
+
+    func testNoInsertNilInitForClosureReturningOptionalWithGenericArgument() {
+        let input = """
+        var reducer: (Result<String, Error>) -> State?
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: .redundantNilInit, options: options)
+    }
+
+    func testNoInsertNilInitForClosureReturningOptionalWithNestedClosureParameter() {
+        let input = """
+        var completion: (@MainActor () async -> Void) -> Result<Void, Error>?
+        """
+        let options = FormatOptions(nilInit: .insert)
+        testFormatting(for: input, rule: .redundantNilInit, options: options)
+    }
+
+    func testInsertNilInitForOptionalClosureProperty() {
+        let input = """
+        var handler: (() -> Void)?
+        """
+        let output = """
+        var handler: (() -> Void)? = nil
         """
         let options = FormatOptions(nilInit: .insert)
         testFormatting(for: input, output, rule: .redundantNilInit,

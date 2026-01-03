@@ -31,7 +31,7 @@
 
 import Foundation
 
-class OptionDescriptor {
+final class OptionDescriptor {
     enum ArgumentType: EnumAssociable {
         case binary(true: String, false: String)
         case `enum`([String])
@@ -252,7 +252,7 @@ extension OptionDescriptor {
     }
 
     // TODO: we should add some sort of range validation to this
-    /// Define an integer option
+    // Define an integer option
     convenience init(
         argumentName: String,
         displayName: String,
@@ -1254,8 +1254,8 @@ struct _Descriptors {
     )
     let preserveAcronyms = OptionDescriptor(
         argumentName: "preserve-acronyms",
-        displayName: "Preserve Acronymes",
-        help: "List of symbols to be ignored by the acyronyms rule",
+        displayName: "Preserve Acronyms",
+        help: "List of symbols to be ignored by the acronyms rule",
         keyPath: \.preserveAcronyms
     )
     let indentStrings = OptionDescriptor(

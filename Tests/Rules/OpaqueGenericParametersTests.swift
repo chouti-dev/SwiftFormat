@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class OpaqueGenericParametersTests: XCTestCase {
+final class OpaqueGenericParametersTests: XCTestCase {
     func testGenericNotModifiedBelowSwift5_7() {
         let input = """
         func foo<T>(_ value: T) {
@@ -755,5 +755,17 @@ class OpaqueGenericParametersTests: XCTestCase {
 
         let options = FormatOptions(swiftVersion: "5.7")
         testFormatting(for: input, output, rule: .opaqueGenericParameters, options: options)
+    }
+
+    func testPreservesGenericInProtocolPrimaryAssociatedType() {
+        // Can't be converted to `any Collection<some StringProtocol>`:
+        // error: 'some' types cannot be used in constraints on existential types
+        let input = """
+        func foo<T: StringProtocol>(_ collection: any Collection<T>) {
+            print(collection)
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, rule: .opaqueGenericParameters, options: options)
     }
 }

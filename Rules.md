@@ -148,7 +148,7 @@ Capitalize acronyms when the first character is capitalized.
 Option | Description
 --- | ---
 `--acronyms` | Acronyms to auto-capitalize. Defaults to "ID,URL,UUID"
-`--preserve-acronyms` | List of symbols to be ignored by the acyronyms rule
+`--preserve-acronyms` | List of symbols to be ignored by the acronyms rule
 
 <details>
 <summary>Examples</summary>
@@ -3869,14 +3869,14 @@ Align wrapped function arguments or collection elements.
 
 Option | Description
 --- | ---
-`--wrap-arguments` | Function argument wrapping: "before-first", "after-first", "preserve" (default), "disabled" or "default"
-`--wrap-parameters` | Function call parameter wrapping: "before-first", "after-first", "preserve", "disabled" or "default" (default)
-`--wrap-collections` | Collection literal element wrapping: "before-first", "after-first", "preserve" (default), "disabled" or "default"
-`--closing-paren` | Closing paren placement: "balanced" (default), "same-line" or "default"
-`--call-site-paren` | Closing paren placement at function call sites: "balanced", "same-line" or "default" (default)
+`--wrap-arguments` | Function argument wrapping: "before-first", "after-first", "preserve" (default) or "disabled"
+`--wrap-parameters` | Function call parameter wrapping: "before-first", "after-first", "preserve" or "disabled"
+`--wrap-collections` | Collection literal element wrapping: "before-first", "after-first", "preserve" (default) or "disabled"
+`--closing-paren` | Closing paren placement: "balanced" (default) or "same-line"
+`--call-site-paren` | Closing paren placement at function call sites: "balanced" or "same-line"
 `--wrap-return-type` | Function return type wrapping: "preserve" (default), "if-multiline" or "never"
-`--wrap-conditions` | Conditional expression wrapping: "before-first", "after-first", "preserve" (default), "disabled" or "default"
-`--wrap-type-aliases` | Typealias wrapping: "before-first", "after-first", "preserve" (default), "disabled" or "default"
+`--wrap-conditions` | Conditional expression wrapping: "before-first", "after-first", "preserve" (default) or "disabled"
+`--wrap-type-aliases` | Typealias wrapping: "before-first", "after-first", "preserve" (default) or "disabled"
 `--wrap-effects` | Function effects (throws, async) wrapping: "preserve" (default), "if-multiline" or "never"
 `--wrap-string-interpolation` | String interpolation wrapping: "default" (wrap if needed) or "preserve"
 `--allow-partial-wrapping` | Allow partial argument wrapping: "true" (default) or "false"

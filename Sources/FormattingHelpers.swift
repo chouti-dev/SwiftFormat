@@ -395,19 +395,6 @@ extension Formatter {
                 closingParenOnSameLine = false
             }
 
-            if closingParenOnSameLine {
-                removeLinebreakBeforeEndOfScope(at: &endOfScope)
-            } else {
-                // Insert linebreak before closing paren
-                if let lastIndex = self.index(of: .nonSpace, before: endOfScope) {
-                    endOfScope += insertSpace(indent, at: lastIndex + 1)
-                    if !tokens[lastIndex].isLinebreak {
-                        insertLinebreak(at: lastIndex + 1)
-                        endOfScope += 1
-                    }
-                }
-            }
-
             // Insert linebreak after each comma
             var index = index(of: .nonSpaceOrCommentOrLinebreak, before: endOfScope)!
             if tokens[index] != .delimiter(",") {
@@ -458,6 +445,19 @@ extension Formatter {
                         indent += options.indent
                     }
                     endOfScope += insertSpace(indent, at: nextIndex + 1)
+                }
+            }
+
+            if closingParenOnSameLine {
+                removeLinebreakBeforeEndOfScope(at: &endOfScope)
+            } else if insertLinebreakAfterOpeningParen {
+                // Insert linebreak before closing paren
+                if let lastIndex = self.index(of: .nonSpace, before: endOfScope) {
+                    endOfScope += insertSpace(indent, at: lastIndex + 1)
+                    if !tokens[lastIndex].isLinebreak {
+                        insertLinebreak(at: lastIndex + 1)
+                        endOfScope += 1
+                    }
                 }
             }
 
@@ -913,7 +913,8 @@ extension Formatter {
 
         func addBreakPoint(at i: Int, relativePriority: Int) {
             guard stringLiteralDepth == 0, currentPriority + relativePriority >= lastBreakPointPriority,
-                  !isInClosureArguments(at: i + 1)
+                  !isInClosureArguments(at: i + 1),
+                  next(.nonSpace, after: i + 1) != .startOfScope("//")
             else {
                 return
             }
@@ -1205,7 +1206,7 @@ extension Formatter {
                 if [.startOfScope("("), .startOfScope("[")].contains(prevToken), isEffectCapturingAt(i) {
                     return
                 }
-            case let .keyword(name) where name.hasPrefix("#") && prevToken == .startOfScope("("):
+            case let .keyword(name) where name.isMacro && prevToken == .startOfScope("("):
                 return
             case .keyword where tokens[i].isAttribute && prevToken == .startOfScope("("):
                 return
@@ -1233,7 +1234,7 @@ extension Formatter {
                  .endOfScope(">"), .endOfScope("]"), .endOfScope(")"),
                  .endOfScope where tokens[i].isStringDelimiter:
                 switch prevToken {
-                case .operator(_, .infix), .operator(_, .postfix), .stringBody,
+                case .operator(_, .infix), .operator(_, .postfix), .stringBody, .linebreak,
                      .startOfScope("<"), .startOfScope("["), .startOfScope("("),
                      _ where currentScope(at: i + 1)?.isMultilineStringDelimiter == true:
                     break
@@ -1245,9 +1246,15 @@ extension Formatter {
                     continue
                 }
             case .linebreak:
-                if prevToken.isOperator(ofType: .infix) {
-                    insertIndex = index(of: .nonSpaceOrLinebreak, before: i) ?? i
+                if prevToken.isOperator(ofType: .infix) || prevToken.isStringBody {
+                    break
+                } else if let i = index(of: .nonSpaceOrLinebreak, before: i, if: {
+                    $0.isOperator(ofType: .infix)
+                }) {
+                    insertIndex = i
                     continue
+                } else {
+                    break loop
                 }
             default:
                 break loop
@@ -1836,8 +1843,8 @@ extension Formatter {
 }
 
 extension Formatter {
-    // A generic type parameter for a method
-    class GenericType {
+    /// A generic type parameter for a method
+    final class GenericType {
         /// The name of the generic parameter. For example with `<T: Fooable>` the generic parameter `name` is `T`.
         let name: String
         /// The source range within angle brackets where the generic parameter is defined
@@ -2414,7 +2421,7 @@ extension Formatter {
                     continue
                 case .keyword("while") where lastKeyword == "repeat":
                     lastKeyword = ""
-                case let .keyword(name):
+                case let .keyword(name) where !name.isMacro:
                     lastKeyword = name
                     lastKeywordIndex = index
                 case .startOfScope("/*"), .startOfScope("//"):
@@ -2674,7 +2681,7 @@ extension Formatter {
                     }), next(.nonSpaceOrCommentOrLinebreak, after: parenIndex) == .identifier("of") else {
                         fallthrough
                     }
-                case .identifier:
+                case .keyword where token.isMacro, .identifier:
                     guard isEnabled && !isTypeRoot else {
                         break
                     }
@@ -2837,9 +2844,12 @@ extension Formatter {
                             membersByType: &membersByType, classMembersByType: &classMembersByType,
                             usingDynamicLookup: usingDynamicLookup, classOrStatic: classOrStatic,
                             isTypeRoot: false, isInit: false)
+                index -= 1
             }
             if foundAccessors {
-                guard let endIndex = self.index(of: .endOfScope("}"), after: index) else { return }
+                guard let endIndex = self.index(of: .endOfScope("}"), after: index) else {
+                    return fatalError("Expected }", at: index)
+                }
                 index = endIndex + 1
             } else {
                 index += 1
@@ -2995,8 +3005,8 @@ extension Formatter {
 }
 
 extension RandomAccessCollection where Element == Token, Index == Int {
-    // The number of trailing newlines in this array of tokens,
-    // taking into account any spaces that may be between the linebreaks.
+    /// The number of trailing newlines in this array of tokens,
+    /// taking into account any spaces that may be between the linebreaks.
     func numberOfLeadingLinebreaks() -> Int {
         guard !isEmpty else { return 0 }
 
@@ -3016,8 +3026,8 @@ extension RandomAccessCollection where Element == Token, Index == Int {
         return numberOfLeadingLinebreaks
     }
 
-    // The number of trailing newlines in this array of tokens,
-    // taking into account any spaces that may be between the linebreaks.
+    /// The number of trailing newlines in this array of tokens,
+    /// taking into account any spaces that may be between the linebreaks.
     func numberOfTrailingLinebreaks() -> Int {
         guard !isEmpty else { return 0 }
 

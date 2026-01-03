@@ -37,7 +37,7 @@ import Foundation
 /// The primary advantage it provides over operating on the token array
 /// directly is that it allows mutation during enumeration, and
 /// transparently handles changes that affect the current token index.
-public class Formatter: NSObject {
+public final class Formatter: NSObject {
     private var enumerationIndex = -1
     private var autoUpdatingReferences = [WeakAutoUpdatingReference]()
 
@@ -195,7 +195,7 @@ public class Formatter: NSObject {
         }
     }
 
-    // Update `isEnabled` based on directives around the specified index
+    /// Update `isEnabled` based on directives around the specified index
     func updateEnablement(at index: Int) {
         if directives.isEmpty { return }
 
@@ -740,24 +740,31 @@ public extension Formatter {
         var scopeStack: [Token] = []
         for i in range.reversed() {
             let token = tokens[i]
-            if case .startOfScope = token {
-                if let scope = scopeStack.last, scope.isEndOfScope(token) {
-                    scopeStack.removeLast()
-                } else if token.string == "//", linebreakEncountered {
-                    linebreakEncountered = false
-                } else if matches(token) {
-                    return i
-                } else if token.string == "//", self.token(at: range.upperBound)?.isLinebreak == true {
-                    continue
-                } else {
-                    return nil
-                }
-            } else if scopeStack.isEmpty, matches(token) {
+            switch token {
+            case .startOfScope(":") where [.endOfScope("#endif"), .endOfScope("}")].contains(scopeStack.last):
+                break
+            case .startOfScope where scopeStack.last?.isEndOfScope(token) == true:
+                scopeStack.removeLast()
+            case .startOfScope("//") where linebreakEncountered:
+                linebreakEncountered = false
+            case .startOfScope where matches(token):
                 return i
-            } else if case .linebreak = token {
+            case .startOfScope("//") where self.token(at: range.upperBound)?.isLinebreak == true:
+                break
+            case .startOfScope:
+                return nil
+            case _ where scopeStack.isEmpty && matches(token):
+                return i
+            case .linebreak:
                 linebreakEncountered = true
-            } else if case .endOfScope = token {
+            case .endOfScope("case"), .endOfScope("default"):
+                if ![.endOfScope("#endif"), .endOfScope("}")].contains(scopeStack.last) {
+                    fallthrough
+                }
+            case .endOfScope:
                 scopeStack.append(token)
+            default:
+                break
             }
         }
         return nil
@@ -1050,10 +1057,10 @@ extension ClosedRange: AnyClosedRange where Bound == Int {
     public var range: ClosedRange<Int> { self }
 }
 
-// An auto-updating subrange of indicies in a `Formatter`
+/// An auto-updating subrange of indicies in a `Formatter`
 final class AutoUpdatingRange: AutoUpdatingReference, AnyClosedRange, Equatable, CustomStringConvertible {
     var range: ClosedRange<Int>
-    let formatter: Formatter
+    private weak var formatter: Formatter?
 
     var description: String {
         range.description
@@ -1066,7 +1073,7 @@ final class AutoUpdatingRange: AutoUpdatingReference, AnyClosedRange, Equatable,
     }
 
     deinit {
-        formatter.unregisterAutoUpdatingReference(self)
+        formatter?.unregisterAutoUpdatingReference(self)
     }
 
     static func == (lhs: AutoUpdatingRange, rhs: AutoUpdatingRange) -> Bool {

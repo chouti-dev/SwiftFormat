@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class RedundantReturnTests: XCTestCase {
+final class RedundantReturnTests: XCTestCase {
     func testRemoveRedundantReturnInClosure() {
         let input = """
         foo(with: { return 5 })
@@ -1401,7 +1401,7 @@ class RedundantReturnTests: XCTestCase {
         let options = FormatOptions(swiftVersion: "5.9")
         testFormatting(for: input,
                        rules: [.redundantReturn, .conditionalAssignment],
-                       options: options)
+                       options: options, exclude: [.redundantSelf])
     }
 
     func testReturnNotRemovedFromCatchWhere() {
@@ -1422,5 +1422,69 @@ class RedundantReturnTests: XCTestCase {
         testFormatting(for: input,
                        rules: [.redundantReturn, .conditionalAssignment],
                        options: options)
+    }
+
+    func testForLoopReturnAfterSwitch() {
+        let input = """
+        func foo() -> Bool {
+            switch bar {
+            case .baz:
+                break
+            }
+
+            for i in quux where quux[i].foo {
+                return i > 0
+            }
+
+            return false
+        }
+        """
+        testFormatting(for: input, rule: .redundantReturn)
+    }
+
+    func testIssue1974() {
+        let input = """
+        func selectedRow() -> Int? {
+            var selectedItem: NSManagedObjectID?
+
+            guard let selection = selectedFilterSourceBlock?() as? UserDataSourceSelection else {
+                return nil
+            }
+
+            switch selection {
+            case .user(let managedObjectID):
+                selectedItem = managedObjectID
+            case .noValue:
+                return nil
+            }
+
+            if includeEveryone && selectedItem == nil {
+                return 0
+            }
+
+            for (i, item) in _items.enumerated() where item.objectID == selectedItem {
+                return i >= _limit ? _limit : i + (includeEveryone ? 1 : 0)
+            }
+
+            return nil
+        }
+        """
+        testFormatting(for: input, rule: .redundantReturn, exclude: [.hoistPatternLet, .andOperator])
+    }
+
+    func testIssue2263() {
+        let input = """
+        func firstNonNilValue<O>() async -> O where V == O? {
+            var it = values.makeAsyncIterator()
+            repeat {
+                if let value = await it.next(), let value {
+                    return value
+                }
+            }
+            while true
+        }
+        """
+        let options = FormatOptions(swiftVersion: "5.9")
+        testFormatting(for: input, rule: .redundantReturn, options: options, exclude: [.elseOnSameLine])
     }
 }

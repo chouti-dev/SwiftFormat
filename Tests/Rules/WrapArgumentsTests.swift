@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class WrapArgumentsTests: XCTestCase {
+final class WrapArgumentsTests: XCTestCase {
     func testIndentFirstElementWhenApplyingWrap() {
         let input = """
         let foo = Set([
@@ -3063,5 +3063,17 @@ class WrapArgumentsTests: XCTestCase {
         """
 
         testFormatting(for: input, output, rule: .wrapArguments, options: FormatOptions(wrapArguments: .beforeFirst, allowPartialWrapping: false))
+    }
+
+    func testWrapArgumentsBeforeFirstDoesntWrapClosingParenIfFirstArgumentNotWrapped() {
+        let input = """
+        return .tuple(string
+            .split { $0.isNewline }
+            .map { .string("\\($0)") })
+        """
+
+        testFormatting(for: input, rule: .wrapArguments, options: FormatOptions(
+            wrapArguments: .beforeFirst, maxWidth: 1000
+        ))
     }
 }

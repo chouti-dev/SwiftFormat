@@ -10,17 +10,17 @@
 
 /// A Swift type parsed by the `formatter.parseType(at:)` parsing helper
 struct TypeName {
-    var range: AutoUpdatingRange
-    let formatter: Formatter
+    let range: ClosedRange<Int>
+    private let formatter: Formatter
 
     init(range: ClosedRange<Int>, formatter: Formatter) {
-        self.range = AutoUpdatingRange(range: range, formatter: formatter)
+        self.range = range
         self.formatter = formatter
     }
 
     /// The string representation of this type, excluding linebreaks or comments
     var string: String {
-        formatter.tokens[range].stringExcludingLinebreaksAndComments
+        tokens.stringExcludingLinebreaksAndComments
     }
 
     var tokens: ArraySlice<Token> {
@@ -63,8 +63,7 @@ extension TypeName {
             }
         }
 
-        let hasCommaInParens = formatter.index(of: .delimiter(","), in: (openParen + 1) ..< closingParen) != nil
-        return hasCommaInParens
+        return formatter.index(of: .delimiter(","), in: (openParen + 1) ..< closingParen) != nil
     }
 
     /// Whether or not this type is an array.
@@ -89,8 +88,7 @@ extension TypeName {
         else { return false }
 
         // [] would be an array, not a dictionary
-        let hasColonInBraces = formatter.index(of: .delimiter(":"), in: (openBrace + 1) ..< closingBrace) != nil
-        return hasColonInBraces
+        return formatter.index(of: .delimiter(":"), in: (openBrace + 1) ..< closingBrace) != nil
     }
 
     /// Whether or not this type is a generic type with the given name.
@@ -113,12 +111,24 @@ extension TypeName {
 
     /// Whether or not this type is a closure
     var isClosure: Bool {
-        formatter.isStartOfClosureType(at: range.lowerBound)
+        guard formatter.isStartOfClosureType(at: range.lowerBound) else {
+            return false
+        }
+
+        if let unwrapIndex = trailingUnwrapOperatorIndex,
+           formatter.tokens[range.lowerBound] == .startOfScope("("),
+           formatter.tokens[range.upperBound] == .endOfScope(")"),
+           formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: range.upperBound) == unwrapIndex
+        {
+            return false
+        }
+
+        return true
     }
 
     /// If this type is wrapped in redundant parens, returns the inner type.
     func withoutParens() -> TypeName {
-        /// If this type is a tuple, then the parens aren't redundant
+        // If this type is a tuple, then the parens aren't redundant
         if isTuple { return self }
 
         guard formatter.tokens[range.lowerBound] == .startOfScope("("),
@@ -130,5 +140,20 @@ extension TypeName {
 
         let newType = TypeName(range: tokenAfterFirst ... tokenBeforeLast, formatter: formatter)
         return newType.withoutParens()
+    }
+
+    /// Whether this type has a top-level optional suffix (`?` or `!`) applied to it.
+    var isOptionalType: Bool {
+        return trailingUnwrapOperatorIndex != nil && !isClosure
+    }
+
+    private var trailingUnwrapOperatorIndex: Int? {
+        if let index = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: range.upperBound + 1),
+           formatter.tokens[index].isUnwrapOperator
+        {
+            return index
+        } else {
+            return nil
+        }
     }
 }

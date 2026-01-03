@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class UnusedArgumentsTests: XCTestCase {
+final class UnusedArgumentsTests: XCTestCase {
     // closures
 
     func testUnusedTypedClosureArguments() {
@@ -1511,5 +1511,51 @@ class UnusedArgumentsTests: XCTestCase {
         """
 
         testFormatting(for: input, output, rule: .unusedArguments, exclude: [.trailingCommas])
+    }
+
+    func testArgumentUsedInMacroTreatedAsUsed() {
+        let input = """
+        @Test
+        func something(value: String?) throws {
+            let value = try #require(value)
+            print(value)
+        }
+        """
+
+        testFormatting(for: input, rule: .unusedArguments)
+    }
+
+    func testIfdefCrash() {
+        let input = """
+        func test(unused: Int) {
+            foo {
+                if true {
+                    #if FOO
+                        switch 1 {
+                        default: ()
+                        }
+                    #endif
+                } else if true {
+                    ()
+                }
+            }
+        }
+        """
+        let output = """
+        func test(unused _: Int) {
+            foo {
+                if true {
+                    #if FOO
+                        switch 1 {
+                        default: ()
+                        }
+                    #endif
+                } else if true {
+                    ()
+                }
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .unusedArguments)
     }
 }

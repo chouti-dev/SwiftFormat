@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class TrailingSpaceTests: XCTestCase {
+final class TrailingSpaceTests: XCTestCase {
     // truncateBlankLines = true
 
     func testTrailingSpace() {
@@ -94,6 +94,41 @@ class TrailingSpaceTests: XCTestCase {
         testFormatting(for: input, output, rule: .trailingSpace, exclude: [.redundantSelf])
     }
 
+    func testMultilineStringWithTrailingSpaces() {
+        let input = """
+        let foo = \"\"\"\u{20}\u{20}
+        there is a space here\u{20}
+        \"\"\"\u{20}
+        """
+        let output = """
+        let foo = \"\"\"
+        there is a space here\u{20}
+        \"\"\"
+        """
+        testFormatting(for: input, output, rule: .trailingSpace)
+    }
+
+    func testMultilineStringWithLeadingSpaceAfterInterpolation() {
+        let input = """
+        let foo = \"\"\"
+        \\(foo)    bar
+        \"\"\"
+        """
+        testFormatting(for: input, rule: .trailingSpace)
+    }
+
+    func testMultilineStringWhiteSpaceNotRemovedFromBlankLines() {
+        let input = """
+        func test() {
+            let foo = \"\"\"
+            Test
+            \u{20}
+            \"\"\"
+        }
+        """
+        testFormatting(for: input, rule: .trailingSpace)
+    }
+
     // truncateBlankLines = false
 
     func testNoTruncateBlankLine() {
@@ -105,6 +140,19 @@ class TrailingSpaceTests: XCTestCase {
         }
         """
         let options = FormatOptions(truncateBlankLines: false)
+        testFormatting(for: input, rule: .trailingSpace, options: options)
+    }
+
+    func testMultilineStringWhiteSpaceNotAddedToBlankLines() {
+        let input = """
+        func test() {
+        \tlet foo = \"\"\"
+        \tTest
+        \t
+        \t\"\"\"
+        }
+        """
+        let options = FormatOptions(indent: "\t", truncateBlankLines: false)
         testFormatting(for: input, rule: .trailingSpace, options: options)
     }
 }

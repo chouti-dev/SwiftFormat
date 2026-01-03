@@ -9,7 +9,7 @@
 import XCTest
 @testable import SwiftFormat
 
-class RedundantSelfTests: XCTestCase {
+final class RedundantSelfTests: XCTestCase {
     // explicitSelf = .remove
 
     func testSimpleRemoveRedundantSelf() {
@@ -4004,6 +4004,113 @@ class RedundantSelfTests: XCTestCase {
         }
         """
 
+        testFormatting(for: input, output, rule: .redundantSelf)
+    }
+
+    func testRedundantSelfIssue2177() {
+        let input = """
+        final class A {
+            let v1: Int
+            var v2: Int { didSet {}}
+
+            init(v1: Int, v2: Int) {
+                self.v1 = v1
+                self.v2 = v2
+            }
+        }
+        """
+        testFormatting(for: input, rule: .redundantSelf)
+    }
+
+    func testRedundantSelfIssue2177_2() {
+        let input = """
+        final class A {
+            let v1: Int
+            var v2: Int { didSet { }}
+
+            init(v1: Int, v2: Int) {
+                self.v1 = v1
+                self.v2 = v2
+            }
+        }
+        """
+        testFormatting(for: input, rule: .redundantSelf, exclude: [.emptyBraces])
+    }
+
+    func testRedundantSelfIssue2177_3() {
+        let input = """
+        final class A {
+            let v1: Int
+            var v2: Int { didSet {} }
+
+            init(v1: Int, v2: Int) {
+                self.v1 = v1
+                self.v2 = v2
+            }
+        }
+        """
+        testFormatting(for: input, rule: .redundantSelf, exclude: [.spaceInsideBraces])
+    }
+
+    func testForAwaitParsingError() {
+        let input = """
+        for await case (let index, let result)? in group {
+            responses[index] = result
+        }
+        """
+        testFormatting(for: input, rule: .redundantSelf, options: FormatOptions(
+            hoistPatternLet: false,
+            explicitSelf: .initOnly
+        ))
+    }
+
+    func testConditionallyCompiledSelfRemoved() {
+        let input = """
+        extension View {
+            @ViewBuilder
+            func compatibleSearchable(
+                text: Binding<String>,
+                isPresented: Binding<Bool>,
+                prompt: Text?
+            ) -> some View {
+                if #available(iOS 17, *) {
+                    self.searchable(
+                        text: text,
+                        isPresented: isPresented,
+                        prompt: prompt
+                    )
+                } else {
+                    self.searchable(
+                        text: text,
+                        prompt: prompt
+                    )
+                }
+            }
+        }
+        """
+        let output = """
+        extension View {
+            @ViewBuilder
+            func compatibleSearchable(
+                text: Binding<String>,
+                isPresented: Binding<Bool>,
+                prompt: Text?
+            ) -> some View {
+                if #available(iOS 17, *) {
+                    searchable(
+                        text: text,
+                        isPresented: isPresented,
+                        prompt: prompt
+                    )
+                } else {
+                    searchable(
+                        text: text,
+                        prompt: prompt
+                    )
+                }
+            }
+        }
+        """
         testFormatting(for: input, output, rule: .redundantSelf)
     }
 }
