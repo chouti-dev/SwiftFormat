@@ -35,6 +35,7 @@ import Foundation
 public enum IndentMode: String, CaseIterable {
     case indent
     case noIndent = "no-indent"
+    case preserve
     case outdent
 
     public init?(rawValue: String) {
@@ -43,6 +44,8 @@ public enum IndentMode: String, CaseIterable {
             self = .indent
         case "no-indent", "noindent":
             self = .noIndent
+        case "preserve":
+            self = .preserve
         case "outdent":
             self = .outdent
         default:
@@ -453,7 +456,8 @@ public enum SelfMode: String, CaseIterable {
 
 /// Optionals mode
 public enum OptionalsMode: String, CaseIterable {
-    case exceptProperties = "except-properties"
+    case preserveStructInits = "preserve-struct-inits"
+    case exceptPropertiesDeprecated = "except-properties"
     case always
 }
 
@@ -705,6 +709,47 @@ public enum URLMacro: Equatable, RawRepresentable, CustomStringConvertible {
     }
 }
 
+/// Mode for preferring synthesized memberwise init for internal structs
+public enum PreferSynthesizedInitMode: Equatable, CustomStringConvertible {
+    /// Never prefer synthesized init (default)
+    case never
+    /// Always prefer synthesized init for internal structs
+    case always
+    /// Prefer synthesized init only for structs conforming to specific protocols
+    case conformances([String])
+
+    public init?(rawValue: String) {
+        switch rawValue.lowercased() {
+        case "never", "false":
+            self = .never
+        case "always", "true":
+            self = .always
+        default:
+            // Parse as comma-separated list of conformances
+            let conformances = rawValue.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+            guard !conformances.isEmpty, conformances.allSatisfy({ !$0.isEmpty }) else {
+                return nil
+            }
+            self = .conformances(conformances)
+        }
+    }
+
+    public var rawValue: String {
+        switch self {
+        case .never:
+            return "never"
+        case .always:
+            return "always"
+        case let .conformances(list):
+            return list.joined(separator: ",")
+        }
+    }
+
+    public var description: String {
+        rawValue
+    }
+}
+
 /// Configuration options for formatting. These aren't actually used by the
 /// Formatter class itself, but it makes them available to the format rules.
 public struct FormatOptions: CustomStringConvertible {
@@ -832,6 +877,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var redundantThrows: RedundantEffectMode
     public var redundantAsync: RedundantEffectMode
     public var allowPartialWrapping: Bool
+    public var preferSynthesizedInitForInternalStructs: PreferSynthesizedInitMode
 
     /// Deprecated
     public var indentComments: Bool
@@ -906,7 +952,7 @@ public struct FormatOptions: CustomStringConvertible {
                 noSpaceOperators: Set<String> = [],
                 noWrapOperators: Set<String> = [],
                 modifierOrder: [String] = [],
-                shortOptionals: OptionalsMode = .exceptProperties,
+                shortOptionals: OptionalsMode = .preserveStructInits,
                 funcAttributes: AttributeMode = .preserve,
                 typeAttributes: AttributeMode = .preserve,
                 varAttributes: AttributeMode = .preserve,
@@ -976,6 +1022,7 @@ public struct FormatOptions: CustomStringConvertible {
                 redundantThrows: RedundantEffectMode = .testsOnly,
                 redundantAsync: RedundantEffectMode = .testsOnly,
                 allowPartialWrapping: Bool = true,
+                preferSynthesizedInitForInternalStructs: PreferSynthesizedInitMode = .never,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
@@ -1109,6 +1156,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.redundantThrows = redundantThrows
         self.redundantAsync = redundantAsync
         self.allowPartialWrapping = allowPartialWrapping
+        self.preferSynthesizedInitForInternalStructs = preferSynthesizedInitForInternalStructs
         self.indentComments = indentComments
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers

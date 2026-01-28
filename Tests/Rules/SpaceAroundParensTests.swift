@@ -342,7 +342,7 @@ final class SpaceAroundParensTests: XCTestCase {
         let output = """
         func foo() { foo }
         """
-        testFormatting(for: input, output, rule: .spaceAroundParens)
+        testFormatting(for: input, output, rule: .spaceAroundParens, exclude: [.wrapFunctionBodies])
     }
 
     func testNoSpaceBetweenClosingBraceAndParens() {
@@ -474,6 +474,24 @@ final class SpaceAroundParensTests: XCTestCase {
         """
         testFormatting(for: input, rule: .spaceAroundParens,
                        options: FormatOptions(swiftVersion: "5.4.9"))
+    }
+
+    func testAddSpaceBetweenParenAndUnsafe() {
+        let input = """
+        unsafe(["sudo"] + args).map { unsafe strdup($0) }
+        """
+        let output = """
+        unsafe (["sudo"] + args).map { unsafe strdup($0) }
+        """
+        testFormatting(for: input, output, rule: .spaceAroundParens)
+    }
+
+    func testNoAddSpaceBetweenParenAndAwaitForSwiftLessThan6_2() {
+        let input = """
+        unsafe(["sudo"] + args).map { unsafe strdup($0) }
+        """
+        testFormatting(for: input, rule: .spaceAroundParens,
+                       options: FormatOptions(swiftVersion: "6.1"))
     }
 
     func testRemoveSpaceBetweenParenAndConsume() {

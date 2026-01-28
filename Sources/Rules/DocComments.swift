@@ -11,7 +11,6 @@ import Foundation
 public extension FormatRule {
     static let docComments = FormatRule(
         help: "Use doc comments for API declarations, otherwise use regular comments.",
-        disabledByDefault: true,
         orderAfter: [.fileHeader],
         options: ["doc-comments"]
     ) { formatter in
@@ -52,7 +51,9 @@ public extension FormatRule {
                 }
             }
 
-            let useDocComment = formatter.shouldBeDocComment(at: commentIndices, endOfComment: endOfComment)
+            guard let useDocComment = formatter.shouldBeDocComment(at: commentIndices, endOfComment: endOfComment) else {
+                return
+            }
 
             // Determine whether or not this is the start of a list of sequential declarations, like:
             //
@@ -149,15 +150,16 @@ extension Formatter {
     func shouldBeDocComment(
         at indices: [Int],
         endOfComment: Int
-    ) -> Bool {
+    ) -> Bool? {
         guard let startIndex = indices.min(),
               let nextDeclarationIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfComment)
         else { return false }
 
-        // Check if this is a special type of comment that isn't documentation
+        // Check if this is a directive like MARK or swiftformat:disable etc.
+        // In that case just preserve the comment as-is.
         for index in indices {
             if case let .commentBody(body)? = next(.nonSpace, after: index), body.isCommentDirective {
-                return false
+                return nil
             }
         }
 

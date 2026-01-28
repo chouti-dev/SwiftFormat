@@ -93,7 +93,7 @@ final class PreferFinalClassesTests: XCTestCase {
             class var bar: String { "bar" }
         }
         """
-        testFormatting(for: input, rule: .preferFinalClasses)
+        testFormatting(for: input, rule: .preferFinalClasses, exclude: [.wrapFunctionBodies, .wrapPropertyBodies])
     }
 
     func testNestedClass() {
@@ -385,5 +385,27 @@ final class PreferFinalClassesTests: XCTestCase {
         """
 
         testFormatting(for: input, rule: .preferFinalClasses, exclude: [.docComments, .spaceInsideComments])
+    }
+
+    func testNestedClassInheritance() {
+        let input = """
+        final class OuterClass {
+            var property: String = ""
+
+            private class BaseRoute {}
+            private class RouteWithInheritance: BaseRoute {}
+        }
+        """
+
+        let output = """
+        final class OuterClass {
+            var property: String = ""
+
+            private class BaseRoute {}
+            private final class RouteWithInheritance: BaseRoute {}
+        }
+        """
+
+        testFormatting(for: input, output, rule: .preferFinalClasses)
     }
 }

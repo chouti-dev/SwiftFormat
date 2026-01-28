@@ -6,7 +6,6 @@ import Foundation
 public extension FormatRule {
     static let noForceUnwrapInTests = FormatRule(
         help: "Use XCTUnwrap or #require in test cases, rather than force unwrapping.",
-        disabledByDefault: true,
         orderAfter: [.urlMacro, .noForceTryInTests, .throwingTests]
     ) { formatter in
         guard let testFramework = formatter.detectTestingFramework() else {
@@ -17,7 +16,7 @@ public extension FormatRule {
         var testCases = [AutoUpdatingIndex]()
         formatter.forEach(.keyword("func")) { funcKeywordIndex, _ in
             guard let functionDecl = formatter.parseFunctionDeclaration(keywordIndex: funcKeywordIndex),
-                  formatter.isTestFunction(at: funcKeywordIndex, in: functionDecl, for: testFramework)
+                  formatter.isTestCase(at: funcKeywordIndex, in: functionDecl, for: testFramework)
             else { return }
 
             testCases.append(funcKeywordIndex.autoUpdating(in: formatter))

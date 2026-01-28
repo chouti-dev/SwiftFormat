@@ -286,7 +286,7 @@ let package = Package(
     name: "BuildTools",
     platforms: [.macOS(.v10_11)],
     dependencies: [
-        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.58.7"),
+        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.59.0"),
     ],
     targets: [.target(name: "BuildTools", path: "")]
 )
@@ -320,7 +320,7 @@ You can also use `swift run -c release --package-path BuildTools swiftformat "$S
 1. Add the `swiftformat` binary to your project directory via [CocoaPods](https://cocoapods.org/), by adding the following line to your Podfile then running `pod install`:
 
     ```ruby
-    pod 'SwiftFormat/CLI', '~> 0.58.7'
+    pod 'SwiftFormat/CLI', '~> 0.59.0'
     ```
 
 **NOTE:** This will only install the pre-built command-line app, not the source code for the SwiftFormat framework.
@@ -388,7 +388,7 @@ You can use `SwiftFormat` as a SwiftPM command plugin.
 ```swift
 dependencies: [
     // ...
-    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.58.7"),
+    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.59.0"),
 ]
 ```
 
@@ -778,7 +778,7 @@ You can create multiple configuration sections within a single `.swiftformat` fi
 --indent 2
 ```
 
-If you would prefer not to edit the configuration file by hand, you can use the [SwiftFormat for Xcode](#xcode-source-editor-extension) app to edit the configuration and export a configuration file. You can also use the swiftformat command-line-tool's `--inferoptions` command to generate a config file from your existing project, like this:
+If you would prefer not to edit the configuration file by hand, you can use the [SwiftFormat for Xcode](#xcode-source-editor-extension) app to edit the configuration and export a configuration file. You can also use the swiftformat command-line-tool's `--infer-options` command to generate a config file from your existing project, like this:
 
 ```bash
 $ cd /path/to/project

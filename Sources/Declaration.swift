@@ -133,6 +133,11 @@ extension Declaration {
         return allModifiers
     }
 
+    /// Whether or not this declaration has the given modifier
+    func hasModifier(_ modifier: String) -> Bool {
+        formatter.modifiersForDeclaration(at: keywordIndex, contains: modifier)
+    }
+
     /// Whether or not this declaration represents a stored instance property
     var isStoredInstanceProperty: Bool {
         // A static property is not an instance property
@@ -337,6 +342,17 @@ extension TypeDeclaration {
     var conformances: [(conformance: TypeName, index: Int)] {
         formatter.parseConformancesOfType(atKeywordIndex: keywordIndex)
     }
+
+    /// The generic parameters of this type, e.g. between angle brackets `Foo<Bar, Baaz>`.
+    var genericParameters: (types: [Formatter.GenericType], range: ClosedRange<Int>)? {
+        guard let identifierIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: keywordIndex),
+              tokens[identifierIndex].isIdentifier,
+              let openAngleBracketIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: identifierIndex),
+              tokens[openAngleBracketIndex] == .startOfScope("<")
+        else { return nil }
+
+        return formatter.parseGenericTypes(from: openAngleBracketIndex)
+    }
 }
 
 /// A conditional compilation condition with a body.
@@ -376,6 +392,25 @@ extension Collection<Declaration> {
             operation(declaration)
             (declaration.body ?? []).forEachRecursiveDeclaration(operation)
         }
+    }
+
+    /// Searches for and returns the inner-most declaration that contains the given index
+    func declaration(containing index: Int) -> Declaration? {
+        var containingDeclaration: Declaration?
+
+        forEachRecursiveDeclaration { declaration in
+            guard declaration.range.contains(index) else { return }
+
+            if let containingDeclaration,
+               !containingDeclaration.range.contains(declaration.range)
+            {
+                return
+            }
+
+            containingDeclaration = declaration
+        }
+
+        return containingDeclaration
     }
 }
 

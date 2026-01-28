@@ -1180,6 +1180,9 @@ final class ParsingHelpersTests: XCTestCase {
             private(set)
             var instanceVar = "test" // trailing comment
 
+            @_silgen_name("__MARKER_functionWithNoBody")
+            func functionWithNoBody(_ x: String) -> Int?
+
             @objc
             private var computed: String {
                 get {
@@ -1304,6 +1307,9 @@ final class ParsingHelpersTests: XCTestCase {
                 private(set)
                 var instanceVar = "test" // trailing comment
 
+                @_silgen_name("__MARKER_functionWithNoBody")
+                func functionWithNoBody(_ x: String) -> Int?
+
                 @objc
                 private var computed: String {
                     get {
@@ -1363,6 +1369,16 @@ final class ParsingHelpersTests: XCTestCase {
 
         XCTAssertEqual(
             declarations[7].body?[2].tokens.string,
+            """
+                @_silgen_name(\"__MARKER_functionWithNoBody\")
+                func functionWithNoBody(_ x: String) -> Int?
+
+
+            """
+        )
+
+        XCTAssertEqual(
+            declarations[7].body?[3].tokens.string,
             """
                 @objc
                 private var computed: String {
@@ -3169,5 +3185,85 @@ final class ParsingHelpersTests: XCTestCase {
         /// Foo bar
         /// baaz quux
         """)
+    }
+
+    func testParseFunctionArgumentWithAttribute() throws {
+        let input = "init(@ViewBuilder content: () -> Content) {}"
+        let tokens = tokenize(input)
+        let formatter = Formatter(tokens)
+
+        let funcDecl = try XCTUnwrap(formatter.parseFunctionDeclaration(keywordIndex: 0))
+        XCTAssertEqual(funcDecl.arguments.count, 1)
+
+        let arg = funcDecl.arguments[0]
+        XCTAssertEqual(arg.internalLabel, "content")
+        XCTAssertEqual(arg.type.string, "() -> Content")
+        XCTAssertEqual(arg.attributes, ["@ViewBuilder"])
+    }
+
+    func testParseFunctionArgumentWithGenericAttribute() throws {
+        let input = "init(@DictionaryBuilder<String, Int> content: () -> [String: Int]) {}"
+        let tokens = tokenize(input)
+        let formatter = Formatter(tokens)
+
+        let funcDecl = try XCTUnwrap(formatter.parseFunctionDeclaration(keywordIndex: 0))
+        XCTAssertEqual(funcDecl.arguments.count, 1)
+
+        let arg = funcDecl.arguments[0]
+        XCTAssertEqual(arg.internalLabel, "content")
+        XCTAssertEqual(arg.type.string, "() -> [String: Int]")
+        XCTAssertEqual(arg.attributes, ["@DictionaryBuilder<String, Int>"])
+    }
+
+    func testParseDeclarationsWithViewBuilderProperty() {
+        let input = """
+        struct Foo {
+            @Environment(\\.bar) private var bar
+
+            @ViewBuilder let content: Content
+            let title: String
+        }
+        """
+        let tokens = tokenize(input)
+        let formatter = Formatter(tokens)
+
+        let declarations = formatter.parseDeclarations()
+        guard let typeDecl = declarations.first?.asTypeDeclaration else {
+            XCTFail("Failed to parse type declaration")
+            return
+        }
+
+        // Should have 3 property declarations
+        let properties = typeDecl.body.filter { $0.keyword == "var" || $0.keyword == "let" }
+        XCTAssertEqual(properties.count, 3)
+
+        // Check that @ViewBuilder property is parsed correctly
+        let viewBuilderProp = properties.first { prop in
+            formatter.tokens[prop.keywordIndex + 2].string == "content"
+        }
+        XCTAssertNotNil(viewBuilderProp, "@ViewBuilder property should be found")
+        XCTAssertEqual(viewBuilderProp?.keyword, "let")
+    }
+
+    func testParseDeclarationsWithViewBuilderPropertyNoBlankLine() {
+        // @ViewBuilder property immediately after another property (no blank line)
+        let input = """
+        struct Foo {
+            @Environment(\\.sizeClass) private var sizeClass
+            @ViewBuilder let actionBar: ActionBar
+            let title: String
+        }
+        """
+        let tokens = tokenize(input)
+        let formatter = Formatter(tokens)
+
+        let declarations = formatter.parseDeclarations()
+        guard let typeDecl = declarations.first?.asTypeDeclaration else {
+            XCTFail("Failed to parse type declaration")
+            return
+        }
+
+        let properties = typeDecl.body.filter { $0.keyword == "var" || $0.keyword == "let" }
+        XCTAssertEqual(properties.count, 3, "Should find 3 properties: sizeClass, actionBar, title")
     }
 }

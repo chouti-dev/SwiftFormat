@@ -549,7 +549,7 @@ final class DocCommentsTests: XCTestCase {
             func returnNumber() { 3 }
         #endif
         """
-        testFormatting(for: input, output, rule: .docComments)
+        testFormatting(for: input, output, rule: .docComments, exclude: [.wrapFunctionBodies])
     }
 
     func testDocCommentInsideIfdefElse() {
@@ -563,7 +563,7 @@ final class DocCommentsTests: XCTestCase {
             func returnNumber() { 3 }
         #endif
         """
-        testFormatting(for: input, rule: .docComments)
+        testFormatting(for: input, rule: .docComments, exclude: [.wrapFunctionBodies])
     }
 
     func testDocCommentForMacro() {
@@ -638,6 +638,45 @@ final class DocCommentsTests: XCTestCase {
 
         /// Baz
         func baz() {}
+        """
+
+        testFormatting(for: input, rule: .docComments)
+    }
+
+    func testPreserveDocCommentContinuousWithMarkComment() {
+        let input = """
+        // MARK: - PlaceholderFlowOrigin
+        /// Placeholder text describing a sample flow origin.
+        public enum PlaceholderFlowOrigin {
+            case standard(ScreenAuthenticationType)
+            case premium(sampleType: ScreenAuthenticationType?)
+        }
+        """
+
+        testFormatting(for: input, rule: .docComments, exclude: [.blankLinesAroundMark])
+    }
+
+    func testPreserveDocCommentAfterSwiftFormatDirective() {
+        let input = """
+        // swiftformat:enable docComments
+        /// Placeholder text describing a sample flow origin.
+        public enum PlaceholderFlowOrigin {
+            case standard(ScreenAuthenticationType)
+            case premium(sampleType: ScreenAuthenticationType?)
+        }
+        """
+
+        testFormatting(for: input, rule: .docComments)
+    }
+
+    func testPreserveDocCommentBeforeSwiftFormatDirective() {
+        let input = """
+        /// Placeholder text describing a sample flow origin.
+        // swiftformat:enable:next docComments
+        public enum PlaceholderFlowOrigin {
+            case standard(ScreenAuthenticationType)
+            case premium(sampleType: ScreenAuthenticationType?)
+        }
         """
 
         testFormatting(for: input, rule: .docComments)

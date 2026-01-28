@@ -9,17 +9,21 @@
 * [blankLinesAtEndOfScope](#blankLinesAtEndOfScope)
 * [blankLinesAtStartOfScope](#blankLinesAtStartOfScope)
 * [blankLinesBetweenChainedFunctions](#blankLinesBetweenChainedFunctions)
+* [blankLinesBetweenImports](#blankLinesBetweenImports)
 * [blankLinesBetweenScopes](#blankLinesBetweenScopes)
 * [braces](#braces)
 * [conditionalAssignment](#conditionalAssignment)
 * [consecutiveBlankLines](#consecutiveBlankLines)
 * [consecutiveSpaces](#consecutiveSpaces)
 * [consistentSwitchCaseSpacing](#consistentSwitchCaseSpacing)
+* [docComments](#docComments)
 * [docCommentsBeforeModifiers](#docCommentsBeforeModifiers)
 * [duplicateImports](#duplicateImports)
 * [elseOnSameLine](#elseOnSameLine)
 * [emptyBraces](#emptyBraces)
+* [emptyExtensions](#emptyExtensions)
 * [enumNamespaces](#enumNamespaces)
+* [environmentEntry](#environmentEntry)
 * [extensionAccessControl](#extensionAccessControl)
 * [fileHeader](#fileHeader)
 * [fileMacro](#fileMacro)
@@ -35,14 +39,18 @@
 * [linebreaks](#linebreaks)
 * [modifierOrder](#modifierOrder)
 * [modifiersOnSameLine](#modifiersOnSameLine)
+* [noForceTryInTests](#noForceTryInTests)
+* [noForceUnwrapInTests](#noForceUnwrapInTests)
 * [numberFormatting](#numberFormatting)
 * [opaqueGenericParameters](#opaqueGenericParameters)
 * [preferCountWhere](#preferCountWhere)
 * [preferForLoop](#preferForLoop)
 * [preferKeyPath](#preferKeyPath)
+* [redundantAsync](#redundantAsync)
 * [redundantBackticks](#redundantBackticks)
 * [redundantBreak](#redundantBreak)
 * [redundantClosure](#redundantClosure)
+* [redundantEquatable](#redundantEquatable)
 * [redundantExtensionACL](#redundantExtensionACL)
 * [redundantFileprivate](#redundantFileprivate)
 * [redundantGet](#redundantGet)
@@ -50,20 +58,25 @@
 * [redundantInternal](#redundantInternal)
 * [redundantLet](#redundantLet)
 * [redundantLetError](#redundantLetError)
+* [redundantMemberwiseInit](#redundantMemberwiseInit)
 * [redundantNilInit](#redundantNilInit)
 * [redundantObjc](#redundantObjc)
 * [redundantOptionalBinding](#redundantOptionalBinding)
 * [redundantParens](#redundantParens)
 * [redundantPattern](#redundantPattern)
+* [redundantProperty](#redundantProperty)
 * [redundantPublic](#redundantPublic)
 * [redundantRawValues](#redundantRawValues)
 * [redundantReturn](#redundantReturn)
 * [redundantSelf](#redundantSelf)
 * [redundantStaticSelf](#redundantStaticSelf)
+* [redundantThrows](#redundantThrows)
 * [redundantType](#redundantType)
 * [redundantTypedThrows](#redundantTypedThrows)
+* [redundantViewBuilder](#redundantViewBuilder)
 * [redundantVoidReturnType](#redundantVoidReturnType)
 * [semicolons](#semicolons)
+* [simplifyGenericConstraints](#simplifyGenericConstraints)
 * [sortDeclarations](#sortDeclarations)
 * [sortImports](#sortImports)
 * [sortTypealiases](#sortTypealiases)
@@ -91,8 +104,10 @@
 * [wrap](#wrap)
 * [wrapArguments](#wrapArguments)
 * [wrapAttributes](#wrapAttributes)
+* [wrapFunctionBodies](#wrapFunctionBodies)
 * [wrapLoopBodies](#wrapLoopBodies)
 * [wrapMultilineStatementBraces](#wrapMultilineStatementBraces)
+* [wrapPropertyBodies](#wrapPropertyBodies)
 * [wrapSingleLineComments](#wrapSingleLineComments)
 * [yodaConditions](#yodaConditions)
 
@@ -101,31 +116,22 @@
 * [acronyms](#acronyms)
 * [blankLineAfterSwitchCase](#blankLineAfterSwitchCase)
 * [blankLinesAfterGuardStatements](#blankLinesAfterGuardStatements)
-* [blankLinesBetweenImports](#blankLinesBetweenImports)
 * [blockComments](#blockComments)
-* [docComments](#docComments)
-* [emptyExtensions](#emptyExtensions)
-* [environmentEntry](#environmentEntry)
 * [isEmpty](#isEmpty)
 * [markTypes](#markTypes)
 * [noExplicitOwnership](#noExplicitOwnership)
-* [noForceTryInTests](#noForceTryInTests)
-* [noForceUnwrapInTests](#noForceUnwrapInTests)
 * [noGuardInTests](#noGuardInTests)
 * [organizeDeclarations](#organizeDeclarations)
 * [preferFinalClasses](#preferFinalClasses)
 * [preferSwiftTesting](#preferSwiftTesting)
 * [privateStateVariables](#privateStateVariables)
 * [propertyTypes](#propertyTypes)
-* [redundantAsync](#redundantAsync)
-* [redundantEquatable](#redundantEquatable)
-* [redundantMemberwiseInit](#redundantMemberwiseInit)
-* [redundantProperty](#redundantProperty)
-* [redundantThrows](#redundantThrows)
 * [singlePropertyPerLine](#singlePropertyPerLine)
 * [sortSwitchCases](#sortSwitchCases)
+* [testSuiteAccessControl](#testSuiteAccessControl)
 * [unusedPrivateDeclarations](#unusedPrivateDeclarations)
 * [urlMacro](#urlMacro)
+* [validateTestCases](#validateTestCases)
 * [wrapConditionalBodies](#wrapConditionalBodies)
 * [wrapEnumCases](#wrapEnumCases)
 * [wrapMultilineConditionalAssignment](#wrapMultilineConditionalAssignment)
@@ -1005,7 +1011,7 @@ Option | Description
 
 ## emptyExtensions
 
-Remove empty, non-conforming, extensions.
+Remove empty, non-protocol-conforming extensions.
 
 <details>
 <summary>Examples</summary>
@@ -1389,7 +1395,7 @@ Option | Description
 `--tab-width` | The width of a tab character. Defaults to "unspecified"
 `--smart-tabs` | Align code independently of tab-width: "enabled" (default) or "disabled"
 `--indent-case` | Indent cases inside a switch statement: "true" or "false" (default)
-`--ifdef` | #if statement indenting: "indent" (default), "no-indent" or "outdent"
+`--ifdef` | #if statement indenting: "indent" (default), "no-indent", "preserve" or "outdent"
 `--xcode-indentation` | Match Xcode indenting: "enabled" or "disabled" (default)
 `--indent-strings` | Indent multiline strings: "true" or "false" (default)
 
@@ -2560,11 +2566,15 @@ Remove redundant `let error` from `catch` clause.
 
 Remove explicit internal memberwise initializers that are redundant.
 
+Option | Description
+--- | ---
+`--prefer-synthesized-init-for-internal-structs` | For internal structs, remove private access control from properties to enable the synthesized initializer: "never" (default), "always", or comma-separated list of conformances (e.g. "View,ViewModifier")
+
 <details>
 <summary>Examples</summary>
 
 ```diff
-  struct Person {
+  struct User {
       var name: String
       var age: Int
 
@@ -2572,6 +2582,39 @@ Remove explicit internal memberwise initializers that are redundant.
 -         self.name = name
 -         self.age = age
 -     }
+  }
+```
+
+```diff
+  struct MyView<Content: View>: View {
++     @ViewBuilder let content: Content
+-     let content: Content
+-
+-     init(@ViewBuilder content: () -> Content) {
+-         self.content = content()
+-     }
+
+      var body: some View {
+          content
+      }
+  }
+```
+
+`--prefer-synthesized-init-for-internal-structs View,ViewModifier`:
+
+```diff
+  struct ProfileView: View {
+-     init(user: User, settings: Settings) {
+-         self.user = user
+-         self.settings = settings
+-     }
+-
+-     private let user: User
+-     private let settings: Settings
++     let user: User
++     let settings: Settings
+
+      var body: some View { ... }
   }
 ```
 
@@ -3007,6 +3050,41 @@ Converts `throws(any Error)` to `throws`, and converts `throws(Never)` to non-th
 </details>
 <br/>
 
+## redundantViewBuilder
+
+Remove redundant @ViewBuilder attribute when it's not needed.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  struct MyView: View {
+-   @ViewBuilder
+    var body: some View {
+      Text("foo")
+      Text("bar")
+    }
+
+-   @ViewBuilder
+    var helper: some View {
+      VStack {
+        Text("baaz")
+        Text("quux")
+      }
+    }
+
+    // Not redundant - multiple top-level views
+    @ViewBuilder
+    var helper2: some View {
+      Text("foo")
+      Text("bar")
+    }
+  }
+```
+
+</details>
+<br/>
+
 ## redundantVoidReturnType
 
 Remove explicit `Void` return type.
@@ -3057,6 +3135,33 @@ Option | Description
   // semicolon is not removed if it would affect the behavior of the code
   return;
   goto(fail)
+```
+
+</details>
+<br/>
+
+## simplifyGenericConstraints
+
+Use inline generic constraints (`<T: Foo>`) instead of where clauses
+(`<T> where T: Foo`) for simple protocol conformance constraints.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- struct Foo<T, U> where T: Hashable, U: Codable {}
++ struct Foo<T: Hashable, U: Codable> {}
+
+- class Bar<Element> where Element: Equatable {
++ class Bar<Element: Equatable> {
+      // ...
+  }
+
+- enum Result<Value, Error> where Value: Decodable, Error: Swift.Error {}
++ enum Result<Value: Decodable, Error: Swift.Error> {}
+
+- func process<T>(_ value: T) where T: Codable {}
++ func process<T: Codable>(_ value: T) {}
 ```
 
 </details>
@@ -3536,6 +3641,48 @@ In Swift Testing, don't prefix @Test methods with 'test'.
 </details>
 <br/>
 
+## testSuiteAccessControl
+
+Test methods should be internal, and other properties / functions in a test suite should be private.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  import XCTest
+
+  final class MyTests: XCTestCase {
+-     public func testExample() {
++     func testExample() {
+          XCTAssertTrue(true)
+      }
+
+-     func helperMethod() {
++     private func helperMethod() {
+          // helper code
+      }
+  }
+```
+
+```diff
+  import Testing
+
+  struct MyFeatureTests {
+-     @Test public func featureWorks() {
++     @Test func featureWorks() {
+          #expect(true)
+      }
+
+-     func helperMethod() {
++     private func helperMethod() {
+          // helper code
+      }
+  }
+```
+
+</details>
+<br/>
+
 ## throwingTests
 
 Write tests that use `throws` instead of using `try!`.
@@ -3695,10 +3842,15 @@ Prefer shorthand syntax for Arrays, Dictionaries and Optionals.
 
 Option | Description
 --- | ---
-`--short-optionals` | Prefer ? shorthand for optionals: "except-properties" (default) or "always"
+`--short-optionals` | Prefer ? shorthand for optionals: "preserve-struct-inits" (default) or "always"
 
 <details>
 <summary>Examples</summary>
+
+```diff
+- var foo: Optional<String>
++ var foo: String?
+```
 
 ```diff
 - var foo: Array<String>
@@ -3710,10 +3862,15 @@ Option | Description
 + var foo: [String: Int]
 ```
 
-```diff
-- var foo: Optional<(Int) -> Void>
-+ var foo: ((Int) -> Void)?
+By default, preserves `Optional` types that affect a struct's synthesized memberwise initializer:
+
+```swift
+struct Foo {
+    var bar: Optional<String>
+}
 ```
+
+With `var bar: Optional<String>`, `Foo`'s initializer is `init(bar: String?)`. If updated to `var bar String?`, `Foo`'s initializer would become `init(bar: String? = nil)`, which may be unexpected.
 
 </details>
 <br/>
@@ -3807,6 +3964,43 @@ With `--url-macro "#URL,URLFoundation"`:
 - return URL(string: "https://api.example.com/users")!
 + import URLFoundation
 + return #URL("https://api.example.com/users")
+```
+
+</details>
+<br/>
+
+## validateTestCases
+
+Ensure test case methods have the correct `test` prefix or `@Test` attribute.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  import XCTest
+
+  final class MyTests: XCTestCase {
+-     func myFeatureWorksCorrectly() {
++     func testMyFeatureWorksCorrectly() {
+          XCTAssertTrue(myFeature.worksCorrectly)
+      }
+  }
+```
+
+```diff
+  import Testing
+
+  struct MyFeatureTests {
+-     func testMyFeatureWorksCorrectly() {
++     @Test func myFeatureWorksCorrectly() {
+          #expect(myFeature.worksCorrectly)
+      }
+
+-     func myFeatureHasNoBugs() {
++     @Test func myFeatureHasNoBugs() {
+          #expect(myFeature.hasNoBugs)
+      }
+  }
 ```
 
 </details>
@@ -4047,6 +4241,33 @@ Option | Description
 </details>
 <br/>
 
+## wrapFunctionBodies
+
+Wrap single-line function, init, and subscript bodies onto multiple lines.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- func foo() { print("bar") }
++ func foo() {
++     print("bar")
++ }
+
+- init() { self.value = 0 }
++ init() {
++     self.value = 0
++ }
+
+- subscript(index: Int) -> Int { array[index] }
++ subscript(index: Int) -> Int {
++     array[index]
++ }
+```
+
+</details>
+<br/>
+
 ## wrapLoopBodies
 
 Wrap the bodies of inline loop statements onto a new line.
@@ -4175,6 +4396,28 @@ Wrap the opening brace of multiline statements.
 + {
     // ...
   }
+```
+
+</details>
+<br/>
+
+## wrapPropertyBodies
+
+Wrap single-line property bodies onto multiple lines.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- var bar: String { "bar" }
++ var bar: String {
++     "bar"
++ }
+
+- var foo: Int { didSet { bar() } }
++ var foo: Int {
++     didSet { bar() }
++ }
 ```
 
 </details>

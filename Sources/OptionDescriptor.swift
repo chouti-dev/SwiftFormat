@@ -551,13 +551,19 @@ extension _Descriptors {
     }
 
     /// An Array of all descriptors
-    var all: [OptionDescriptor] { _allDescriptors }
+    var all: [OptionDescriptor] {
+        _allDescriptors
+    }
 
     /// All deprecated descriptors
-    var deprecated: [OptionDescriptor] { _allDescriptors.filter(\.isDeprecated) }
+    var deprecated: [OptionDescriptor] {
+        _allDescriptors.filter(\.isDeprecated)
+    }
 
     /// All renamed descriptors
-    var renamed: [OptionDescriptor] { _allDescriptors.filter(\.isRenamed) }
+    var renamed: [OptionDescriptor] {
+        _allDescriptors.filter(\.isRenamed)
+    }
 
     /// A Dictionary of descriptors by name
     var byName: [String: OptionDescriptor] {
@@ -983,7 +989,7 @@ struct _Descriptors {
     let shortOptionals = OptionDescriptor(
         argumentName: "short-optionals",
         displayName: "Short Optional Syntax",
-        help: "Prefer ? shorthand for optionals:",
+        help: "Prefer ? shorthand for optionals: \"preserve-struct-inits\" (default) or \"always\"",
         keyPath: \.shortOptionals
     )
     let markTypes = OptionDescriptor(
@@ -1381,7 +1387,7 @@ struct _Descriptors {
         keyPath: \.defaultTestSuiteAttributes,
         validateArray: { array in
             for attribute in array {
-                guard attribute.starts(with: "@"), !tokenize(attribute).contains(where: \.isError) else {
+                guard attribute.isAttribute, !tokenize(attribute).contains(where: \.isError) else {
                     throw FormatError.options("Invalid attribute: \"\(attribute)\"")
                 }
             }
@@ -1442,6 +1448,15 @@ struct _Descriptors {
         displayName: "Allow Partial Wrapping",
         help: "Allow partial argument wrapping:",
         keyPath: \.allowPartialWrapping
+    )
+    let preferSynthesizedInitForInternalStructs = OptionDescriptor(
+        argumentName: "prefer-synthesized-init-for-internal-structs",
+        displayName: "Prefer Synthesized Init For Internal Structs",
+        help: "For internal structs, remove private access control from properties to enable the synthesized initializer: \"never\" (default), \"always\", or comma-separated list of conformances (e.g. \"View,ViewModifier\")",
+        keyPath: \.preferSynthesizedInitForInternalStructs,
+        type: .text,
+        fromArgument: { PreferSynthesizedInitMode(rawValue: $0) },
+        toArgument: { $0.rawValue }
     )
 
     // MARK: - Internal
