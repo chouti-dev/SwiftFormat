@@ -677,7 +677,9 @@ final class RedundantMemberwiseInitTests: XCTestCase {
         testFormatting(for: input, rule: .redundantMemberwiseInit, exclude: [.redundantSelf, .trailingSpace, .indent])
     }
 
-    func testRemoveInitWithAttributes() {
+    func testPreserveInitWithAttributes() {
+        // Inits with attributes like @inlinable can't be removed because
+        // synthesized memberwise inits don't support these attributes
         let input = """
         struct Person {
             var name: String
@@ -690,59 +692,7 @@ final class RedundantMemberwiseInitTests: XCTestCase {
             }
         }
         """
-        let output = """
-        struct Person {
-            var name: String
-            var age: Int
-        }
-        """
-        testFormatting(for: input, output, rule: .redundantMemberwiseInit)
-    }
-
-    func testRemoveInitWithMultipleAttributes() {
-        let input = """
-        struct Person {
-            var name: String
-            var age: Int
-
-            @inlinable
-            @available(iOS 13.0, *)
-            init(name: String, age: Int) {
-                self.name = name
-                self.age = age
-            }
-        }
-        """
-        let output = """
-        struct Person {
-            var name: String
-            var age: Int
-        }
-        """
-        testFormatting(for: input, output, rule: .redundantMemberwiseInit)
-    }
-
-    func testRemoveInitWithAttributesAndComments() {
-        let input = """
-        struct Person {
-            var name: String
-            var age: Int
-
-            // Initializes a person with name and age
-            @inlinable
-            internal init(name: String, age: Int) {
-                self.name = name
-                self.age = age
-            }
-        }
-        """
-        let output = """
-        struct Person {
-            var name: String
-            var age: Int
-        }
-        """
-        testFormatting(for: input, output, rule: .redundantMemberwiseInit, exclude: [.docComments])
+        testFormatting(for: input, rule: .redundantMemberwiseInit)
     }
 
     func testDontRemoveInitWithPrivateStoredProperty() {
@@ -1566,19 +1516,22 @@ final class RedundantMemberwiseInitTests: XCTestCase {
     func testRemovePrivateACLWithMixedAccessLevels() {
         let input = """
         struct MixedView {
-            init(publicValue: Int, privateValue: String) {
+            init(publicValue: Int, privateValue: String, onTap: @escaping () -> Void) {
                 self.publicValue = publicValue
                 self.privateValue = privateValue
+                self.onTap = onTap
             }
 
             let publicValue: Int
             private let privateValue: String
+            private let onTap: () -> Void
         }
         """
         let output = """
         struct MixedView {
             let publicValue: Int
             let privateValue: String
+            let onTap: () -> Void
         }
         """
         let options = FormatOptions(preferSynthesizedInitForInternalStructs: .always)
@@ -2073,8 +2026,9 @@ final class RedundantMemberwiseInitTests: XCTestCase {
         testFormatting(for: input, rule: .redundantMemberwiseInit)
     }
 
-    func testDontRemoveInitWithViewBuilderButNoClosureInvocation() {
-        // If the init doesn't call the closure, don't remove it
+    func testRemoveInitWithViewBuilderEscapingClosureParameter() {
+        // When the init stores a closure directly (no invocation), we can still remove it
+        // The @ViewBuilder attribute is transferred to the property
         let input = """
         struct MyView<Content: View>: View {
             let content: () -> Content
@@ -2088,7 +2042,16 @@ final class RedundantMemberwiseInitTests: XCTestCase {
             }
         }
         """
-        testFormatting(for: input, rule: .redundantMemberwiseInit)
+        let output = """
+        struct MyView<Content: View>: View {
+            @ViewBuilder let content: () -> Content
+
+            var body: some View {
+                content()
+            }
+        }
+        """
+        testFormatting(for: input, output, rule: .redundantMemberwiseInit)
     }
 
     func testDontRemoveInitWithNonEmptyClosureParameter() {
@@ -2284,5 +2247,25 @@ final class RedundantMemberwiseInitTests: XCTestCase {
         """
         let options = FormatOptions(swiftVersion: "6.2")
         testFormatting(for: input, rule: .redundantMemberwiseInit, options: options)
+    }
+
+    func testRemoveInitWithEscapingClosureParameter() {
+        // Stored closure properties are implicitly escaping, so @escaping () -> Void parameter
+        // is equivalent to () -> Void property.
+        let input = """
+        struct Button {
+            let onTap: () -> Void
+
+            init(onTap: @escaping () -> Void) {
+                self.onTap = onTap
+            }
+        }
+        """
+        let output = """
+        struct Button {
+            let onTap: () -> Void
+        }
+        """
+        testFormatting(for: input, output, rule: .redundantMemberwiseInit)
     }
 }
