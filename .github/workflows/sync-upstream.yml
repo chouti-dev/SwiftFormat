@@ -2,12 +2,12 @@
 #
 # Testing (safe — default):
 #   Actions → "Sync upstream (ChouTi)" → Run workflow
-#   - dry_run: true (default)
-#   - optional upstream_tag to pin a version (e.g. 0.59.0)
+#   - Run mode: Test (dry run) (default)
+#   - Upstream version: optional (e.g. 0.61.1)
 #
 # Production:
-#   1. Run once with dry_run: true and confirm the job succeeds.
-#   2. Run with dry_run: false to push master, tag, and publish release.
+#   1. Run once with Test (dry run) and confirm the job succeeds.
+#   2. Run with Publish release to push master, tag, and publish.
 #   3. Optional: set repository variable CHOUTI_AUTO_SYNC=true to enable daily cron.
 #
 # Requires: contents: write (push branch/tags, create releases).
@@ -17,15 +17,17 @@ name: Sync upstream (ChouTi)
 on:
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: "If true, merge/test/build only — no push, tag, or GitHub release"
-        type: boolean
-        default: true
-      upstream_tag:
-        description: "Upstream tag to merge (empty = latest semver tag on upstream)"
+      run_mode:
+        description: What this run should do
+        type: choice
+        options:
+          - Test (dry run)
+          - Publish release
+        default: Test (dry run)
+      upstream_version:
+        description: Pin an upstream version (e.g. 0.61.1). Leave blank for latest.
         type: string
         required: false
-        default: ""
   schedule:
     # Runs only when repository variable CHOUTI_AUTO_SYNC is "true" (see job `if`).
     - cron: "0 14 * * *" # every day at 14:00 UTC (6:00 PST, 7:00 PDT)
@@ -52,20 +54,23 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve dry run mode
+      - name: Resolve run mode
         id: mode
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+            case "${{ inputs.run_mode }}" in
+              "Test (dry run)") echo "dry_run=true" >> "$GITHUB_OUTPUT" ;;
+              "Publish release") echo "dry_run=false" >> "$GITHUB_OUTPUT" ;;
+              *) echo "dry_run=true" >> "$GITHUB_OUTPUT" ;;
+            esac
           else
-            # Scheduled runs are never dry-run once auto-sync is enabled.
             echo "dry_run=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Sync upstream
         env:
           DRY_RUN: ${{ steps.mode.outputs.dry_run }}
-          UPSTREAM_TAG: ${{ github.event.inputs.upstream_tag }}
+          UPSTREAM_TAG: ${{ github.event.inputs.upstream_version }}
         run: |
           chmod +x Scripts/chouti-sync-upstream.sh
           args=()
@@ -98,7 +103,8 @@ jobs:
             echo ""
             echo "| Setting | Value |"
             echo "| --- | --- |"
-            echo "| dry_run | \`${{ steps.mode.outputs.dry_run }}\` |"
-            echo "| upstream_tag input | \`${{ github.event.inputs.upstream_tag || '(latest)' }}\` |"
+            echo "| Run mode | \`${{ inputs.run_mode || 'Publish release (scheduled)' }}\` |"
+            echo "| Upstream version | \`${{ github.event.inputs.upstream_version || 'latest' }}\` |"
+            echo "| Dry run | \`${{ steps.mode.outputs.dry_run }}\` |"
             echo "| trigger | \`${{ github.event_name }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"

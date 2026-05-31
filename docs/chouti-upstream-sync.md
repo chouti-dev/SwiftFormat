@@ -11,8 +11,8 @@ Automates what `chouti_pull.sh` does manually: merge the latest upstream [nicklo
 
 1. Push this branch to `chouti-dev/SwiftFormat`.
 2. Open **Actions → Sync upstream (ChouTi) → Run workflow**.
-3. Leave **dry_run: true** (default).
-4. Optionally set **upstream_tag** to an older tag you have not merged yet (e.g. `0.59.0`) so the run actually exercises merge + build. If you pick a tag that is already merged and `-chouti` exists, the job exits early (success, no work).
+3. **Run mode:** `Test (dry run)` (default).
+4. Optionally set **Upstream version** (e.g. `0.59.0`) to pin a tag. Leave blank for latest. If `-chouti` already exists for that version, the job exits early.
 5. Confirm the job:
    - merges the tag
    - passes `xcodebuild` tests
@@ -20,7 +20,7 @@ Automates what `chouti_pull.sh` does manually: merge the latest upstream [nicklo
    - uploads artifacts
    - does **not** push or create a release
 6. Download artifact **chouti-swiftformat-products** and verify the binaries.
-7. Run again with **dry_run: false** only when you are ready to publish (or use a fresh upstream tag).
+7. Run again with **Run mode:** `Publish release` when ready.
 
 ## Enable automatic daily sync
 
