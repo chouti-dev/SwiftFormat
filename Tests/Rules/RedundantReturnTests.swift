@@ -281,14 +281,14 @@ final class RedundantReturnTests: XCTestCase {
 
     func testNoRemoveReturnInForIn() {
         let input = """
-        for foo in bar { return 5 }
+        for _ in bar { return 5 }
         """
         testFormatting(for: input, rule: .redundantReturn, exclude: [.wrapLoopBodies])
     }
 
     func testNoRemoveReturnInForWhere() {
         let input = """
-        for foo in bar where baz { return 5 }
+        for _ in bar where baz { return 5 }
         """
         testFormatting(for: input, rule: .redundantReturn, exclude: [.wrapLoopBodies])
     }
@@ -434,7 +434,7 @@ final class RedundantReturnTests: XCTestCase {
             return bar
         }()
         """
-        testFormatting(for: input, rule: .redundantReturn, exclude: [.redundantProperty])
+        testFormatting(for: input, rule: .redundantReturn, exclude: [.redundantVariable])
     }
 
     func testNoRemoveReturnInForWhereLoop() {
@@ -557,7 +557,7 @@ final class RedundantReturnTests: XCTestCase {
         }
         """
         testFormatting(for: input, rule: .redundantReturn,
-                       options: FormatOptions(swiftVersion: "5.1"), exclude: [.redundantProperty])
+                       options: FormatOptions(swiftVersion: "5.1"), exclude: [.redundantVariable])
     }
 
     func testNoRemoveRequiredReturnInIfClosure() {

@@ -2,9 +2,19 @@ name: build
 
 on:
   push:
+    branches:
+      - main
+      - develop
   pull_request:
 jobs:
+  check-for-changes:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.changed_files > 0
+    steps:
+      - run: echo "PR has changes, proceeding with build jobs"
+
   macos:
+    needs: check-for-changes
     strategy:
       fail-fast: false
       matrix:
@@ -34,13 +44,14 @@ jobs:
           cd ../../../../
           xcrun llvm-cov export -format="lcov" -instr-profile $pathCoverage Build/Build/Products/Debug/SwiftFormat.framework/SwiftFormat > info.lcov
       - name: Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           # the token is optional for a public repo, but including it anyway
           token: a47579fa-9a2a-4c48-b557-aa725c6b5f92
           env_vars: MD_APPLE_SDK_ROOT,RUNNER_OS,RUNNER_ARCH
 
   linux:
+    needs: check-for-changes
     strategy:
       fail-fast: false
       matrix:
@@ -68,6 +79,7 @@ jobs:
           swift test --enable-test-discovery
 
   windows:
+    needs: check-for-changes
     strategy:
       fail-fast: false
       matrix:
@@ -87,6 +99,7 @@ jobs:
       - run: swift test
 
   command-line-tool:
+    needs: check-for-changes
     strategy:
       fail-fast: false
       matrix:
@@ -106,6 +119,7 @@ jobs:
         run: xcodebuild -project SwiftFormat.xcodeproj -scheme "SwiftFormat (Command Line Tool)" -sdk macosx clean build
 
   swiftformat-for-xcode:
+    needs: check-for-changes
     strategy:
       fail-fast: false
       matrix:
@@ -125,6 +139,7 @@ jobs:
         run: xcodebuild -project SwiftFormat.xcodeproj -scheme "SwiftFormat for Xcode" -sdk macosx clean build
 
   editor-extension:
+    needs: check-for-changes
     strategy:
       fail-fast: false
       matrix:
@@ -144,6 +159,7 @@ jobs:
         run: xcodebuild -project SwiftFormat.xcodeproj -scheme "SwiftFormat (Editor Extension)" -sdk macosx clean build
 
   regression-tests:
+    needs: check-for-changes
     strategy:
       fail-fast: false
       matrix:
@@ -163,6 +179,7 @@ jobs:
         run: xcodebuild -project SwiftFormat.xcodeproj -scheme "Regression Tests" test
 
   performance-tests:
+    needs: check-for-changes
     strategy:
       fail-fast: false
       matrix:

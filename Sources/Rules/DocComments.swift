@@ -174,20 +174,9 @@ extension Formatter {
             return false
         }
 
-        // Only use doc comments on declarations in type bodies, or top-level declarations
-        if let startOfEnclosingScope = index(of: .startOfScope, before: startIndex) {
-            switch tokens[startOfEnclosingScope] {
-            case .startOfScope("#if"):
-                break
-            case .startOfScope("{"):
-                guard let scope = lastSignificantKeyword(at: startOfEnclosingScope, excluding: ["where"]),
-                      ["class", "actor", "struct", "enum", "protocol", "extension"].contains(scope)
-                else {
-                    return false
-                }
-            default:
-                return false
-            }
+        // For local declarations other than nested functions, use standard comments.
+        if declarationToken != .keyword("func"), declarationScope(at: startIndex) == .local {
+            return false
         }
 
         // If there are blank lines between comment and declaration, comment is not treated as doc comment

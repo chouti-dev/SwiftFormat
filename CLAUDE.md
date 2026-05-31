@@ -12,17 +12,30 @@ SwiftFormat is a code formatting tool for Swift. It applies a set of rules to Sw
 - `Sources/Options.swift` - Options for configuring the behavior of individual rules
 - `Sources/OptionDescriptor.swift` - Command line flag configuration for rule options
 
+## Branching
+
+All changes and pull requests should target the `develop` branch, not `main`.
+
 ## Building and Testing
 
 ```sh
 # Build the project
 swift build
 
-# Run all tests
+# Run all tests (on macOS)
 swift test
 
-# Test a specific rule
+# Run all tests (on Linux)
+# --enable-test-discovery is required because LinuxMain.swift (kept for Mint
+# compatibility) has an empty test list that overrides automatic discovery.
+swift test --enable-test-discovery
+
+# Test a specific rule (works on both macOS and Linux)
 ./Scripts/test_rule.sh <ruleName>
+
+# Format the codebase (run after making changes)
+# ./Scripts/test_rule.sh runs this automatically
+./format.sh
 ```
 
 ## Adding New Rules
@@ -80,6 +93,7 @@ Rule tests are implemented in `Tests/Rules/MyRuleTests.swift`.
 
 ### Best Practices
 
+- **File author names:** when creating new files, always use the name of the actual user / human author, and the current date. **NEVER** write a file header like "Created by Claude Code" or "Created by GitHub Copilot". Prefer the user's full name as opposed to just their username.
 - **Minimal changes only.** Only modify tokens when an actual change is needed. Any modification triggers a lint error in `--lint` mode.
 - **Preserve comments.** Prefer preserving code as-is if updating would require removing comments.
 - **Keep it simple.** Write as little code as possible. If a change dramatically increases complexity, consider asking if it should be de-scoped.
@@ -130,8 +144,9 @@ func testMyRule() {
 
 - Create several test scenarios covering different cases, but don't exhaustively test every configuration.
 - Use `testFormatting(for: input, [output], rules: [.myRule, .otherRule])` to test multiple rules together.
-- Use `exclude: [.someRule]` if another rule conflicts with your test case. However, only exclude a rule from a test case if the test case would fail otherwise.
-- ALways use multi-line string literals (""") for input and output code.
+- Prefer formatting `input` and `output` code to match the behavior of other rules, instead of excluding other rules with `exclude:`. Only use `exclude:` if the other rule being applied directly conflicts with what the test case is trying to test.
+- Do not use `// MARK` comments in tests.
+- Always use multi-line string literals (""") for input and output code.
 
 ### Debugging
 
@@ -140,13 +155,17 @@ To debug a rule, run the existing tests or create new test cases. **NEVER** try 
 Use print debugging as necessary to gather more context. Run individual test cases using:
 
 ```sh
+# On macOS:
 swift test --filter <TestClassName>.<testMethodName>
+
+# On Linux (--enable-test-discovery required):
+swift test --enable-test-discovery --filter <TestClassName>.<testMethodName>
 ```
 
 ### After Writing the Rule
 
 1. **Run the rule tests:** `./Scripts/test_rule.sh <ruleName>`
-2. **Run the full test suite:** `swift test`
+2. **Run the full test suite:** `swift test` (or `swift test --enable-test-discovery` on Linux)
 3. **[VERY IMPORTANT] Review your code** - ensure it follows all best practices above
 4. **[VERY IMPORTANT] Simplify further** - look for functionality that could be removed to reduce complexity
 

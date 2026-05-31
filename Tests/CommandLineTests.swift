@@ -646,6 +646,39 @@ final class CommandLineTests: XCTestCase {
         }
     }
 
+    func testConfigFileIsReadOnceWhenGatheringOptionsConcurrently() throws {
+        try withTmpFiles([
+            ".swiftformat": """
+            --rules indent
+            """,
+            "File.swift": """
+            let value = 0
+            """,
+        ]) { url in
+            guard url.pathExtension == "swift" else { return }
+
+            let configFile = url.deletingLastPathComponent().appendingPathComponent(".swiftformat")
+            var logMessages = [String]()
+            var errors = [Error]()
+            let logQueue = DispatchQueue(label: "swiftformat.test.config-log")
+
+            DispatchQueue.concurrentPerform(iterations: 50) { _ in
+                var options = Options.default
+                do {
+                    try gatherOptions(&options, for: url, with: { message in
+                        logQueue.sync { logMessages.append(message) }
+                    })
+                } catch {
+                    logQueue.sync { errors.append(error) }
+                }
+            }
+
+            let messages = logMessages.filter { $0 == "Reading config file at \(configFile.path)" }
+            XCTAssertEqual(messages.count, 1, "\(messages)")
+            XCTAssertTrue(errors.isEmpty, "\(errors)")
+        }
+    }
+
     func testLintCommandOutputsOrganizeDeclarationOrderingViolations() {
         var output: [String] = []
         CLI.print = { message, _ in
@@ -1001,6 +1034,96 @@ final class CommandLineTests: XCTestCase {
         }
     }
 
+    func testStdinPathWithNonExistingFile() {
+        var output = [String]()
+        CLI.print = { message, type in
+            switch type {
+            case .raw, .content:
+                output.append(message)
+            case .error, .warning:
+                XCTFail(message)
+            case .info, .success:
+                break
+            }
+        }
+        var readCount = 0
+        CLI.readLine = {
+            readCount += 1
+            switch readCount {
+            case 1:
+                return "func foo()\n"
+            case 2:
+                return "{\n"
+            case 3:
+                return "bar()\n"
+            case 4:
+                return "}"
+            default:
+                return nil
+            }
+        }
+
+        // Use a path that doesn't exist
+        let nonExistingPath = "/tmp/deleted_file_\(UUID().uuidString).swift"
+
+        _ = processArguments([
+            "",
+            "stdin",
+            "--stdin-path", nonExistingPath,
+        ], in: "")
+
+        // Should still format the input, despite file not existing
+        XCTAssertEqual(output, ["""
+        func foo() {
+            bar()
+        }
+
+        """])
+    }
+
+    func testStdinPathWithNonExistingFileExcluded() {
+        var output = [String]()
+        CLI.print = { message, type in
+            switch type {
+            case .raw, .content:
+                output.append(message)
+            case .error, .warning:
+                XCTFail(message)
+            case .info, .success:
+                break
+            }
+        }
+        var readCount = 0
+        CLI.readLine = {
+            readCount += 1
+            switch readCount {
+            case 1:
+                return "func foo()\n"
+            case 2:
+                return "{\n"
+            case 3:
+                return "bar()\n"
+            case 4:
+                return "}"
+            default:
+                return nil
+            }
+        }
+
+        // Use a path that doesn't exist but matches exclusion pattern
+        let nonExistingPath = "/tmp/excluded/deleted_file.swift"
+
+        _ = processArguments([
+            "",
+            "stdin",
+            "--stdin-path", nonExistingPath,
+            "--exclude", "/tmp/excluded",
+        ], in: "")
+
+        // Should NOT format because the path is excluded
+        XCTAssertEqual(output, ["func foo()\n{\nbar()\n}"])
+    }
+
     func testSwiftVersionFileWithNoConfigFile() throws {
         var errors = [String]()
 
@@ -1074,6 +1197,56 @@ final class CommandLineTests: XCTestCase {
         }
 
         XCTAssertEqual(errors, [])
+    }
+
+    func testSwiftVersionNotReadFromExcludedDirectory() throws {
+        var logMessages: [String] = []
+
+        CLI.print = { message, _ in
+            print(message)
+            logMessages.append(message)
+        }
+
+        // .swift-version should NOT be read from a directory that ends up excluded.
+        // The build/.swiftformat excludes itself via "--exclude ." so no files inside
+        // it will be formatted, making the .swift-version there irrelevant.
+        try withTmpFiles([
+            "main.swift": "let x = 1\n",
+            "build/.swiftformat": "--exclude .\n",
+            "build/.swift-version": "5.9\n",
+        ]) { url in
+            let rootDir = url.deletingLastPathComponent()
+            _ = processArguments(["", rootDir.path], in: rootDir.path)
+
+            let buildVersionMsgs = logMessages.filter {
+                $0.contains("swift-version") && $0.contains("build")
+            }
+            XCTAssertTrue(
+                buildVersionMsgs.isEmpty,
+                "Expected no swift-version messages from excluded build directory, got: \(buildVersionMsgs)"
+            )
+        }
+
+        logMessages.removeAll()
+
+        // .swift-version should also NOT be read from a directory excluded by
+        // the root .swiftformat file via "--exclude build".
+        try withTmpFiles([
+            ".swiftformat": "--exclude build\n",
+            "main.swift": "let x = 1\n",
+            "build/.swift-version": "5.9\n",
+        ]) { url in
+            let rootDir = url.deletingLastPathComponent()
+            _ = processArguments(["", rootDir.path], in: rootDir.path)
+
+            let buildVersionMsgs = logMessages.filter {
+                $0.contains("swift-version") && $0.contains("build")
+            }
+            XCTAssertTrue(
+                buildVersionMsgs.isEmpty,
+                "Expected no swift-version messages from build directory excluded by root config, got: \(buildVersionMsgs)"
+            )
+        }
     }
 
     // MARK: Markdown

@@ -838,7 +838,7 @@ struct _Descriptors {
     let selfRequired = OptionDescriptor(
         argumentName: "self-required",
         displayName: "Self Required",
-        help: "Comma-delimited list of functions with @autoclosure arguments",
+        help: "Comma-delimited list of functions / types with @autoclosure arguments",
         keyPath: \FormatOptions.selfRequired
     )
     let throwCapturing = OptionDescriptor(
@@ -856,14 +856,16 @@ struct _Descriptors {
     let importGrouping = OptionDescriptor(
         argumentName: "import-grouping",
         displayName: "Import Grouping",
-        help: "Import statement grouping:",
+        help: "Comma-delimited list of import sorting/grouping options: \"alpha\", \"access-control\", \"length\", \"testable-first\", \"testable-last\". Defaults to \"access-control,alpha\"",
         keyPath: \FormatOptions.importGrouping,
-        altOptions: [
-            "alphabetized": .alpha,
-            "alphabetical": .alpha,
-            "testable-top": .testableFirst,
-            "testable-bottom": .testableLast,
-        ]
+        type: .text,
+        fromArgument: { arg in
+            Set(parseCommaDelimitedList(arg).compactMap { ImportGrouping(rawValue: $0) })
+        },
+        toArgument: { options in
+            let order = ImportGrouping.allCases
+            return order.filter { options.contains($0) }.map(\.rawValue).joined(separator: ",")
+        }
     )
     let trailingClosures = OptionDescriptor(
         argumentName: "trailing-closures",
@@ -1457,6 +1459,27 @@ struct _Descriptors {
         type: .text,
         fromArgument: { PreferSynthesizedInitMode(rawValue: $0) },
         toArgument: { $0.rawValue }
+    )
+
+    let testCaseNameFormat = OptionDescriptor(
+        argumentName: "test-case-name-format",
+        displayName: "Test Case Name Format",
+        help: "Swift Testing test case name format:",
+        keyPath: \.testCaseNameFormat
+    )
+
+    let suiteNameFormat = OptionDescriptor(
+        argumentName: "suite-name-format",
+        displayName: "Suite Name Format",
+        help: "Swift Testing suite name format:",
+        keyPath: \.suiteNameFormat
+    )
+
+    let testCaseAccessControl = OptionDescriptor(
+        argumentName: "test-case-access-control",
+        displayName: "Test Case Access Control",
+        help: "Access control for test methods:",
+        keyPath: \.testCaseAccessControl
     )
 
     // MARK: - Internal

@@ -44,6 +44,13 @@ public extension FormatRule {
                 {
                     formatter.insert(.space(" "), at: i + 1)
                 }
+            case .operator("::", _):
+                if formatter.token(at: i + 1)?.isSpace == true {
+                    formatter.removeToken(at: i + 1)
+                }
+                if formatter.token(at: i - 1)?.isSpace == true {
+                    formatter.removeToken(at: i - 1)
+                }
             case .operator(".", _):
                 if formatter.token(at: i + 1)?.isSpace == true {
                     formatter.removeToken(at: i + 1)
@@ -56,6 +63,8 @@ public extension FormatRule {
                 switch formatter.tokens[prevIndex] {
                 case .operator(_, .infix), .startOfScope:
                     return
+                case let token where [.identifier("unsafe")].contains(token):
+                    return // `unsafe` is contextual, so leave existing spacing unchanged.
                 case let token where token.isUnwrapOperator:
                     if let prevToken = formatter.last(.nonSpace, before: prevIndex),
                        [.keyword("as"), .keyword("try")].contains(prevToken)

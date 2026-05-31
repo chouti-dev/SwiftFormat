@@ -565,9 +565,9 @@ final class RedundantParensTests: XCTestCase {
         for (x) in (y) {}
         """
         let output = """
-        for x in y {}
+        for _ in y {}
         """
-        testFormatting(for: input, output, rule: .redundantParens)
+        testFormatting(for: input, [output], rules: [.redundantParens, .unusedArguments])
     }
 
     func testParensForLoopWhereClauseMethodNotRemoved() {
@@ -958,6 +958,35 @@ final class RedundantParensTests: XCTestCase {
         testFormatting(for: input, rule: .redundantParens)
     }
 
+    func testMainActorEmptyParensWithReturnTypeNotUnwrapped() {
+        let input = """
+        { @MainActor () -> Bool in
+            false
+        }
+        """
+        testFormatting(for: input, rule: .redundantParens)
+    }
+
+    func testMainActorEmptyParensWithReturnTypeNotUnwrappedInTask() {
+        let input = """
+        func someFunction() async -> Bool {
+            await Task { @MainActor () -> Bool in
+                false
+            }.value
+        }
+        """
+        testFormatting(for: input, rule: .redundantParens)
+    }
+
+    func testMainActorEmptyParensWithThrowsNotUnwrapped() {
+        let input = """
+        { @MainActor () throws -> Bool in
+            false
+        }
+        """
+        testFormatting(for: input, rule: .redundantParens)
+    }
+
     func testClosureArgsContainingSelfNotUnwrapped() {
         let input = """
         { (self) in self }
@@ -989,7 +1018,7 @@ final class RedundantParensTests: XCTestCase {
     func testNoRemoveParensAroundForIndexInsideClosure() {
         let input = """
         let foo = {
-            for (i, token) in bar {}
+            for (_, _) in bar {}
         }()
         """
         testFormatting(for: input, rule: .redundantParens)
@@ -1115,7 +1144,7 @@ final class RedundantParensTests: XCTestCase {
 
     func testParensNotRemovedBeforeForBody() {
         let input = """
-        for foo in bar() { /* some code */ }
+        for _ in bar() { /* some code */ }
         """
         testFormatting(for: input, rule: .redundantParens)
     }
@@ -1548,6 +1577,48 @@ final class RedundantParensTests: XCTestCase {
     func testRequiredParensNotRemovedAroundRepeat() {
         let input = """
         (repeat (each foo, each bar))
+        """
+        testFormatting(for: input, rule: .redundantParens)
+    }
+
+    // in attributes
+
+    func testEmptyParensRemovedFromAttribute() {
+        let input = """
+        @Test()
+        func testFoo() {}
+        """
+        let output = """
+        @Test
+        func testFoo() {}
+        """
+        testFormatting(for: input, output, rule: .redundantParens)
+    }
+
+    func testEmptyParensRemovedFromStateAttribute() {
+        let input = """
+        @State()
+        private var foo: Int
+        """
+        let output = """
+        @State
+        private var foo: Int
+        """
+        testFormatting(for: input, output, rule: .redundantParens)
+    }
+
+    func testParensWithContentNotRemovedFromAttribute() {
+        let input = """
+        @Test(arguments: foo)
+        func testFoo() {}
+        """
+        testFormatting(for: input, rule: .redundantParens)
+    }
+
+    func testParensWithContentNotRemovedFromAvailableAttribute() {
+        let input = """
+        @available(iOS 15, *)
+        func foo() {}
         """
         testFormatting(for: input, rule: .redundantParens)
     }

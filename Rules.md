@@ -50,6 +50,7 @@
 * [redundantBackticks](#redundantBackticks)
 * [redundantBreak](#redundantBreak)
 * [redundantClosure](#redundantClosure)
+* [redundantEmptyView](#redundantEmptyView)
 * [redundantEquatable](#redundantEquatable)
 * [redundantExtensionACL](#redundantExtensionACL)
 * [redundantFileprivate](#redundantFileprivate)
@@ -64,15 +65,17 @@
 * [redundantOptionalBinding](#redundantOptionalBinding)
 * [redundantParens](#redundantParens)
 * [redundantPattern](#redundantPattern)
-* [redundantProperty](#redundantProperty)
 * [redundantPublic](#redundantPublic)
 * [redundantRawValues](#redundantRawValues)
 * [redundantReturn](#redundantReturn)
 * [redundantSelf](#redundantSelf)
+* [redundantSendable](#redundantSendable)
 * [redundantStaticSelf](#redundantStaticSelf)
+* [redundantSwiftTestingSuite](#redundantSwiftTestingSuite)
 * [redundantThrows](#redundantThrows)
 * [redundantType](#redundantType)
 * [redundantTypedThrows](#redundantTypedThrows)
+* [redundantVariable](#redundantVariable)
 * [redundantViewBuilder](#redundantViewBuilder)
 * [redundantVoidReturnType](#redundantVoidReturnType)
 * [semicolons](#semicolons)
@@ -122,7 +125,9 @@
 * [noExplicitOwnership](#noExplicitOwnership)
 * [noGuardInTests](#noGuardInTests)
 * [organizeDeclarations](#organizeDeclarations)
+* [preferExplicitFalse](#preferExplicitFalse)
 * [preferFinalClasses](#preferFinalClasses)
+* [preferSwiftStringAPI](#preferSwiftStringAPI)
 * [preferSwiftTesting](#preferSwiftTesting)
 * [privateStateVariables](#privateStateVariables)
 * [propertyTypes](#propertyTypes)
@@ -132,6 +137,7 @@
 * [unusedPrivateDeclarations](#unusedPrivateDeclarations)
 * [urlMacro](#urlMacro)
 * [validateTestCases](#validateTestCases)
+* [wrapCaseBodies](#wrapCaseBodies)
 * [wrapConditionalBodies](#wrapConditionalBodies)
 * [wrapEnumCases](#wrapEnumCases)
 * [wrapMultilineConditionalAssignment](#wrapMultilineConditionalAssignment)
@@ -140,6 +146,7 @@
 
 # Deprecated Rules (do not use)
 
+* [redundantProperty](#redundantProperty)
 * [sortedImports](#sortedImports)
 * [sortedSwitchCases](#sortedSwitchCases)
 * [specifiers](#specifiers)
@@ -2002,9 +2009,29 @@ Prefer `count(where:)` over `filter(_:).count`.
 </details>
 <br/>
 
+## preferExplicitFalse
+
+Prefer `== false` over `!` prefix negation.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- if !flag {
++ if flag == false {
+```
+
+```diff
+- guard !array.isEmpty else { return }
++ guard array.isEmpty == false else { return }
+```
+
+</details>
+<br/>
+
 ## preferFinalClasses
 
-Prefer defining `final` classes. To suppress this rule, add "Base" to the class name, add a doc comment with mentioning "base class" or "subclass", make the class `open`, or use a `// swiftformat:disable:next preferFinalClasses` directive.
+Prefer defining `final` classes. To suppress this rule, add "Base" to the class name, add a doc comment mentioning "base class" or "subclass", make the class `open`, or use a `// swiftformat:disable:next preferFinalClasses` directive.
 
 <details>
 <summary>Examples</summary>
@@ -2090,6 +2117,21 @@ Convert trivial `map { $0.foo }` closures to keyPath-based syntax.
 
 - let barArray = fooArray.compactMap { $0.optionalBar }
 + let barArray = fooArray.compactMap(\.optionalBar)
+```
+
+</details>
+<br/>
+
+## preferSwiftStringAPI
+
+Replace Objective-C bridged String methods with Swift equivalents.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- str.replacingOccurrences(of: "foo", with: "bar")
++ str.replacing("foo", with: "bar")
 ```
 
 </details>
@@ -2213,6 +2255,12 @@ Option | Description
 - let array: [Int] = []
 + let array = [Int]()
 
+- let set: Set<Int> = []
++ let set = Set<Int>()
+
+- let dict: [String: Int] = [:]
++ let dict = [String: Int]()
+
   // with --propertytypes explicit
 - let view = UIView()
 + let view: UIView = .init()
@@ -2222,6 +2270,12 @@ Option | Description
 
 - let array = [Int]()
 + let array: [Int] = []
+
+- let set = Set<Int>()
++ let set: Set<Int> = []
+
+- let dict = [String: Int]()
++ let dict: [String: Int] = [:]
 
   // with --propertytypes infer-locals-only
   class Foo {
@@ -2358,6 +2412,26 @@ which are called immediately.
 - }()
 + lazy var bar = Bar(baaz: baaz,
 +                    quux: quux)
+```
+
+</details>
+<br/>
+
+## redundantEmptyView
+
+Remove redundant `else { EmptyView() }` branches in SwiftUI result builders.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  var body: some View {
+      if condition {
+          Text("Hello")
+-     } else {
+-         EmptyView()
+      }
+  }
 ```
 
 </details>
@@ -2733,6 +2807,11 @@ Remove redundant parentheses.
 + let foo: Int = { ... }()
 ```
 
+```diff
+- @Test()
++ @Test
+```
+
 </details>
 <br/>
 
@@ -2758,21 +2837,9 @@ Remove redundant pattern matching parameter syntax.
 
 ## redundantProperty
 
-Simplifies redundant property definitions that are immediately returned.
+Simplifies redundant variable definitions that are immediately returned.
 
-<details>
-<summary>Examples</summary>
-
-```diff
-  func foo() -> Foo {
--   let foo = Foo()
--   return foo
-+   return Foo()
-  }
-```
-
-</details>
-<br/>
+*Note: redundantProperty rule is deprecated. Use redundantVariable instead.*
 
 ## redundantPublic
 
@@ -2859,7 +2926,7 @@ Insert/remove explicit `self` where applicable.
 Option | Description
 --- | ---
 `--self` | Explicit self: "insert", "remove" (default) or "init-only"
-`--self-required` | Comma-delimited list of functions with @autoclosure arguments
+`--self-required` | Comma-delimited list of functions / types with @autoclosure arguments
 
 <details>
 <summary>Examples</summary>
@@ -2907,6 +2974,29 @@ by using `--self init-only`:
 </details>
 <br/>
 
+## redundantSendable
+
+Remove redundant explicit Sendable conformance from non-public structs and enums.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- struct CacheEntry: Sendable {
++ struct CacheEntry {
+      let id: String
+  }
+
+- fileprivate enum ParsingState: Sendable {
++ fileprivate enum ParsingState {
+      case idle
+      case running
+  }
+```
+
+</details>
+<br/>
+
 ## redundantStaticSelf
 
 Remove explicit `Self` where applicable.
@@ -2921,6 +3011,42 @@ Remove explicit `Self` where applicable.
       static func baaz() -> Bar {
 -         Self.bar()
 +         bar()
+      }
+  }
+```
+
+</details>
+<br/>
+
+## redundantSwiftTestingSuite
+
+Remove redundant @Suite attribute with no arguments.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  import Testing
+
+- @Suite
+  struct MyFeatureTests {
+      @Test func myFeature() {
+          #expect(true)
+      }
+  }
+
+- @Suite()
+  struct OtherTests {
+      @Test func otherFeature() {
+          #expect(true)
+      }
+  }
+
+  // Not redundant - @Suite has arguments
+  @Suite(.serialized)
+  struct SerializedTests {
+      @Test func feature() {
+          #expect(true)
       }
   }
 ```
@@ -3044,6 +3170,24 @@ Converts `throws(any Error)` to `throws`, and converts `throws(Never)` to non-th
 - func foo() throws(any Error) -> Int {
 + func foo() throws -> Int {
       throw MyError.foo
+  }
+```
+
+</details>
+<br/>
+
+## redundantVariable
+
+Simplifies redundant variable definitions that are immediately returned.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  func foo() -> Foo {
+-   let foo = Foo()
+-   return foo
++   return Foo()
   }
 ```
 
@@ -3272,11 +3416,11 @@ Option | Description
 
 ## sortImports
 
-Sort import statements alphabetically.
+Sort and group import statements.
 
 Option | Description
 --- | ---
-`--import-grouping` | Import statement grouping: "alpha" (default), "length", "testable-first" or "testable-last"
+`--import-grouping` | Comma-delimited list of import sorting/grouping options: "alpha", "access-control", "length", "testable-first", "testable-last". Defaults to "access-control,alpha"
 
 <details>
 <summary>Examples</summary>
@@ -3611,7 +3755,12 @@ set to 4.2 or above.
 
 ## swiftTestingTestCaseNames
 
-In Swift Testing, don't prefix @Test methods with 'test'.
+Format Swift Testing @Test and @Suite names.
+
+Option | Description
+--- | ---
+`--test-case-name-format` | Swift Testing test case name format: "preserve", "raw-identifiers" (default) or "standard-identifiers"
+`--suite-name-format` | Swift Testing suite name format: "preserve" (default), "raw-identifiers" or "standard-identifiers"
 
 <details>
 <summary>Examples</summary>
@@ -3621,7 +3770,7 @@ In Swift Testing, don't prefix @Test methods with 'test'.
 
   struct MyFeatureTests {
 -     @Test func testMyFeatureHasNoBugs() {
-+     @Test func myFeatureHasNoBugs() {
++     @Test func `my feature has no bugs`() {
           let myFeature = MyFeature()
           myFeature.runAction()
           #expect(!myFeature.hasBugs, "My feature has no bugs")
@@ -3643,7 +3792,11 @@ In Swift Testing, don't prefix @Test methods with 'test'.
 
 ## testSuiteAccessControl
 
-Test methods should be internal, and other properties / functions in a test suite should be private.
+Test methods should have the configured access control (default internal), and other properties / functions in a test suite should be private.
+
+Option | Description
+--- | ---
+`--test-case-access-control` | Access control for test methods: "open", "public", "package", "internal" (default), "fileprivate" or "private"
 
 <details>
 <summary>Examples</summary>
@@ -3913,6 +4066,16 @@ Option | Description
 
 + request { _, data in
     self.data += data
+  }
+```
+
+```diff
+- for (key, value) in dictionary {
+    print(key)
+  }
+
++ for (key, _) in dictionary {
+    print(key)
   }
 ```
 
@@ -4187,6 +4350,22 @@ Option | Description
 - enum Foo { }
 
 + @objc enum Foo {}
+```
+
+</details>
+<br/>
+
+## wrapCaseBodies
+
+Wrap the bodies of inline switch cases onto a new line.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- case .foo: return bar
++ case .foo:
++     return bar
 ```
 
 </details>

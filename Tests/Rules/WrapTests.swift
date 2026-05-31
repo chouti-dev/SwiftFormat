@@ -834,4 +834,66 @@ final class WrapTests: XCTestCase {
                        options: FormatOptions(maxWidth: 20),
                        exclude: [.trailingCommas])
     }
+
+    func testWrapDoubleColonBreaksBeforeOperator() {
+        let input = """
+        NationalAeronauticsAndSpaceAdministration::RocketEngine
+        """
+        let output = """
+        NationalAeronauticsAndSpaceAdministration
+            ::RocketEngine
+        """
+        let options = FormatOptions(maxWidth: 50)
+        testFormatting(for: input, output, rule: .wrap, options: options)
+    }
+
+    func testWrapDoubleColonWithSpacesBreaksBeforeOperator() {
+        let input = """
+        NationalAeronauticsAndSpaceAdministration :: RocketEngine
+        """
+        let output = """
+        NationalAeronauticsAndSpaceAdministration
+            :: RocketEngine
+        """
+        let output2 = """
+        NationalAeronauticsAndSpaceAdministration
+            ::RocketEngine
+        """
+        let options = FormatOptions(maxWidth: 50)
+        testFormatting(for: input, [output, output2], rules: [.wrap], options: options)
+    }
+
+    func testNoWrapEmptyFuncParens() {
+        let input = """
+        func aVeryLongFunctionNameThatExceedsTheMaxWidthLimit() {
+            print("hello")
+        }
+        """
+        let options = FormatOptions(maxWidth: 40)
+        testFormatting(for: input, rule: .wrap, options: options)
+    }
+
+    func testNoWrapEmptyFuncParensSingleLine() {
+        let input = """
+        func aVeryLongFunctionNameThatExceedsTheMaxWidthLimit() {}
+        """
+        let options = FormatOptions(maxWidth: 40)
+        testFormatting(for: input, rule: .wrap, options: options)
+    }
+
+    func testUnwrapAlreadyWrappedEmptyFuncParens() {
+        let input = """
+        func aVeryLongFunctionNameThatExceedsTheMaxWidthLimit(
+        ) {
+            print("hello")
+        }
+        """
+        let output = """
+        func aVeryLongFunctionNameThatExceedsTheMaxWidthLimit() {
+            print("hello")
+        }
+        """
+        let options = FormatOptions(maxWidth: 40)
+        testFormatting(for: input, output, rule: .wrap, options: options)
+    }
 }
