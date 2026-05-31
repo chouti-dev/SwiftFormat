@@ -1,0 +1,104 @@
+# Sync ChouTi fork with upstream SwiftFormat releases.
+#
+# Testing (safe — default):
+#   Actions → "Sync upstream (ChouTi)" → Run workflow
+#   - dry_run: true (default)
+#   - optional upstream_tag to pin a version (e.g. 0.59.0)
+#
+# Production:
+#   1. Run once with dry_run: true and confirm the job succeeds.
+#   2. Run with dry_run: false to push master, tag, and publish release.
+#   3. Optional: set repository variable CHOUTI_AUTO_SYNC=true to enable daily cron.
+#
+# Requires: contents: write (push branch/tags, create releases).
+
+name: Sync upstream (ChouTi)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "If true, merge/test/build only — no push, tag, or GitHub release"
+        type: boolean
+        default: true
+      upstream_tag:
+        description: "Upstream tag to merge (empty = latest semver tag on upstream)"
+        type: string
+        required: false
+        default: ""
+  schedule:
+    # Runs only when repository variable CHOUTI_AUTO_SYNC is "true" (see job `if`).
+    - cron: "0 14 * * *" # every day at 14:00 UTC (6:00 PST, 7:00 PDT)
+
+concurrency:
+  group: sync-upstream-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync, test, and release
+    runs-on: macos-latest
+    # Cron is opt-in via repo variable; manual runs always allowed.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      vars.CHOUTI_AUTO_SYNC == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve dry run mode
+        id: mode
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+          else
+            # Scheduled runs are never dry-run once auto-sync is enabled.
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync upstream
+        env:
+          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+          UPSTREAM_TAG: ${{ github.event.inputs.upstream_tag }}
+        run: |
+          chmod +x Scripts/chouti-sync-upstream.sh
+          args=()
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          if [[ -n "$UPSTREAM_TAG" ]]; then
+            args+=(--upstream-tag "$UPSTREAM_TAG")
+          fi
+          ./Scripts/chouti-sync-upstream.sh "${args[@]}"
+
+      - name: Upload build artifacts (dry run)
+        if: steps.mode.outputs.dry_run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: chouti-swiftformat-products
+          path: |
+            Products/swiftformat
+            Products/swiftformat.zip
+            Products/swiftformat-arm64.zip
+            Products/swiftformat-x86_64.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## ChouTi upstream sync"
+            echo ""
+            echo "| Setting | Value |"
+            echo "| --- | --- |"
+            echo "| dry_run | \`${{ steps.mode.outputs.dry_run }}\` |"
+            echo "| upstream_tag input | \`${{ github.event.inputs.upstream_tag || '(latest)' }}\` |"
+            echo "| trigger | \`${{ github.event_name }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -17,25 +17,37 @@ if ! command -v swift-build &> /dev/null; then
   exit 1
 fi
 
+is_ci=false
+if [[ -n "${CI:-}" || -n "${GITHUB_ACTIONS:-}" ]]; then
+  is_ci=true
+fi
+
+swift_build_flags=()
+if [[ "$is_ci" == true ]]; then
+  swift_build_flags+=(--force)
+fi
+
 # if ./Products directory exits
 if [ -d "./Products" ]; then
   # if has files in ./Products directory
   if [ "$(ls -A ./Products)" ]; then
-    # prompt "Do you want to continue?" "reply=\"y\"" "reply=\"n\"" "reply=\"n\""
-    reply=""
-    prompt "./Products is not empty, do you want to clean it up?" "reply=\"y\"" "reply=\"n\"" "reply=\"n\""
-    if [ "$reply" == "y" ]; then
-      # remove all files in ./Products directory
+    if [[ "$is_ci" == true ]]; then
       rm -rf ./Products/*
     else
-      echo "🛑 abort"
-      exit 1
+      reply=""
+      prompt "./Products is not empty, do you want to clean it up?" "reply=\"y\"" "reply=\"n\"" "reply=\"n\""
+      if [ "$reply" == "y" ]; then
+        rm -rf ./Products/*
+      else
+        echo "🛑 abort"
+        exit 1
+      fi
     fi
   fi
 fi
 
 # make arm64 binary
-swift-build --arch arm64
+swift-build "${swift_build_flags[@]}" --arch arm64
 if [ $? -ne 0 ]; then
   echo "🛑 failed to make binary"
   exit 1
@@ -50,7 +62,7 @@ zip -r ./swiftformat-arm64.zip ./swiftformat-arm64
 cd .. || exit 1
 
 # make x86_64 binary
-swift-build --arch x86_64
+swift-build "${swift_build_flags[@]}" --arch x86_64
 if [ $? -ne 0 ]; then
   echo "🛑 failed to make binary"
   exit 1
