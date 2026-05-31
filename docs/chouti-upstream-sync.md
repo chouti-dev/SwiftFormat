@@ -22,6 +22,14 @@ Automates what `chouti_pull.sh` does manually: merge the latest upstream [nicklo
 6. Download artifact **chouti-swiftformat-products** and verify the binaries.
 7. Run again with **Run mode:** `Publish release` when ready.
 
+## Publish releases (required secret)
+
+Upstream merges update `.github/workflows/`. **`GITHUB_TOKEN` cannot push those files** — use a PAT:
+
+1. GitHub → **Settings → Developer settings → Personal access tokens** → classic token with **`repo`** and **`workflow`** (or fine-grained: Contents + Actions read/write on this repo).
+2. Repo **Settings → Secrets → Actions** → **`CHOUTI_RELEASE_TOKEN`** = that token.
+3. Run **Publish release** (dry run does not need the secret).
+
 ## Enable automatic daily sync
 
 In the fork repo on GitHub:
@@ -59,7 +67,7 @@ Upstream’s [`release.yml`](../.github/workflows/release.yml) is skipped for `*
 
 - **Merge conflict**: fix on `master` locally, push, re-run workflow.
 - **Tests fail**: fix ChouTi fork code or wait for upstream; do not enable `CHOUTI_AUTO_SYNC` until green.
-- **`git push` / publish fails** (dry run OK, publish fails): usually **branch protection** or **required signed commits** blocking `GITHUB_TOKEN`. Fix: repo **Settings → Actions → General → Workflow permissions** = read/write; add bypass for GitHub Actions on `master`; or create a PAT with `contents` scope, add repo secret **`CHOUTI_RELEASE_TOKEN`**, re-run.
+- **`refusing to allow a GitHub App to create or update workflow`**: add secret **`CHOUTI_RELEASE_TOKEN`** (PAT with `repo` + `workflow`). Not fixable with `permissions:` in the workflow file.
 
 ## Local `git fetch` tag warnings
 

@@ -177,7 +177,7 @@ publish_release() {
 
     log "Pushing $TARGET_BRANCH to origin"
     if ! git push origin "$TARGET_BRANCH"; then
-        fail "git push origin $TARGET_BRANCH failed. If the repo has branch protection, add a PAT as secret CHOUTI_RELEASE_TOKEN and allow it to bypass protection."
+        fail "git push origin $TARGET_BRANCH failed. Common causes: missing workflows: write permission on GITHUB_TOKEN (upstream merges .github/workflows), branch protection, or use secret CHOUTI_RELEASE_TOKEN (PAT)."
     fi
 
     log "Creating GitHub release $chouti_tag"

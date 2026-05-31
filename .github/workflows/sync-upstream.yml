@@ -10,7 +10,7 @@
 #   2. Run with Publish release to push master, tag, and publish.
 #   3. Optional: set repository variable CHOUTI_AUTO_SYNC=true to enable daily cron.
 #
-# Requires: contents: write (push branch/tags, create releases).
+# Requires: contents: write. Publish also needs secret CHOUTI_RELEASE_TOKEN (PAT) — GITHUB_TOKEN cannot push .github/workflows.
 
 name: Sync upstream (ChouTi)
 
@@ -48,12 +48,21 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       vars.CHOUTI_AUTO_SYNC == 'true'
     steps:
+      - name: Require release token for publish
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'Publish release') ||
+          (github.event_name == 'schedule' && vars.CHOUTI_AUTO_SYNC == 'true')
+        run: |
+          if [[ -z "${{ secrets.CHOUTI_RELEASE_TOKEN }}" ]]; then
+            echo "::error::Add repo secret CHOUTI_RELEASE_TOKEN (classic PAT: repo + workflow scopes). GITHUB_TOKEN cannot push upstream .github/workflows changes."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
           persist-credentials: true
-          # Use CHOUTI_RELEASE_TOKEN (PAT) if GITHUB_TOKEN is blocked by branch protection.
           token: ${{ secrets.CHOUTI_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Resolve run mode
