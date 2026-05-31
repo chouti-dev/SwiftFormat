@@ -590,6 +590,21 @@ final class RedundantEquatableTests: XCTestCase {
         testFormatting(for: input, rule: .redundantEquatable)
     }
 
+    func testPreserveCustomEquatableImplementationComparingAnyType() {
+        // `Any.Type` defines an `==` operator but is not Equatable.
+        let input = """
+        struct MyStruct: Equatable {
+            let ty: Any.Type
+
+            static func == (lhs: Self, rhs: Self) -> Bool {
+                lhs.ty == rhs.ty
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .redundantEquatable)
+    }
+
     func testPreserveCustomEquatableImplementationComparingTuple() {
         // Tuples define an `==` operator but are not Equatable.
         let input = """
@@ -613,6 +628,140 @@ final class RedundantEquatableTests: XCTestCase {
 
             static func == (lhs: Foo, rhs: Foo) -> Bool {
                 lhs.tupleValue == rhs.tupleValue
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .redundantEquatable)
+    }
+
+    func testPreserveEquatableImplementationWithUsableFromInlineAttribute() {
+        let input = """
+        public struct Foo: Equatable {
+            let bar: String
+
+            @usableFromInline
+            static func == (lhs: Foo, rhs: Foo) -> Bool {
+                lhs.bar == rhs.bar
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .redundantEquatable)
+    }
+
+    func testPreserveEquatableImplementationWithInlinableAttribute() {
+        let input = """
+        public struct Foo: Equatable {
+            let bar: String
+
+            @inlinable
+            static func == (lhs: Foo, rhs: Foo) -> Bool {
+                lhs.bar == rhs.bar
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .redundantEquatable)
+    }
+
+    func testPreserveEquatableImplementationForStrideableType() {
+        // `Strideable` provides a default `==` implementation via `distance(to:)`,
+        // so a custom `==` on a Strideable type may be intentionally overriding that default.
+        let input = """
+        struct Foo: Strideable, Equatable {
+            let value: Int
+
+            static func == (lhs: Foo, rhs: Foo) -> Bool {
+                lhs.value == rhs.value
+            }
+
+            func distance(to other: Foo) -> Int {
+                other.value - value
+            }
+
+            func advanced(by n: Int) -> Foo {
+                Foo(value: value + n)
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .redundantEquatable)
+    }
+
+    func testPreserveEquatableImplementationForStrideableTypeInExtension() {
+        // `Strideable` provides a default `==` implementation via `distance(to:)`,
+        // so a custom `==` on a Strideable type may be intentionally overriding that default.
+        let input = """
+        struct Foo {
+            let value: Int
+        }
+
+        extension Foo: Strideable {
+            func distance(to other: Foo) -> Int {
+                other.value - value
+            }
+
+            func advanced(by n: Int) -> Foo {
+                Foo(value: value + n)
+            }
+        }
+
+        extension Foo: Equatable {
+            static func == (lhs: Foo, rhs: Foo) -> Bool {
+                lhs.value == rhs.value
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .redundantEquatable)
+    }
+
+    func testPreserveEquatableImplementationForStrideableTypeWithEquatableInExtension() {
+        // `Strideable` provides a default `==` implementation via `distance(to:)`,
+        // so a custom `==` on a Strideable type may be intentionally overriding that default.
+        let input = """
+        struct Foo: Strideable {
+            let value: Int
+
+            func distance(to other: Foo) -> Int {
+                other.value - value
+            }
+
+            func advanced(by n: Int) -> Foo {
+                Foo(value: value + n)
+            }
+        }
+
+        extension Foo: Equatable {
+            static func == (lhs: Foo, rhs: Foo) -> Bool {
+                lhs.value == rhs.value
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .redundantEquatable)
+    }
+
+    func testPreserveEquatableImplementationForStrideableTypeWithStrideableInExtension() {
+        // `Strideable` provides a default `==` implementation via `distance(to:)`,
+        // so a custom `==` on a Strideable type may be intentionally overriding that default.
+        let input = """
+        struct Foo: Equatable {
+            let value: Int
+
+            static func == (lhs: Foo, rhs: Foo) -> Bool {
+                lhs.value == rhs.value
+            }
+        }
+
+        extension Foo: Strideable {
+            func distance(to other: Foo) -> Int {
+                other.value - value
+            }
+
+            func advanced(by n: Int) -> Foo {
+                Foo(value: value + n)
             }
         }
         """

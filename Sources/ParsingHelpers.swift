@@ -334,8 +334,8 @@ extension Formatter {
             } else if next(.nonSpaceOrComment, after: endIndex) == .startOfScope("(") {
                 isType = true
             } else if var prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: index) {
-                if tokens[prevIndex].isAttribute {
-                    prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: prevIndex) ?? prevIndex
+                if let attributeIndex = startOfAttribute(at: prevIndex) {
+                    prevIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: attributeIndex) ?? prevIndex
                 }
                 let prevToken = tokens[prevIndex]
                 switch prevToken {
@@ -447,12 +447,15 @@ extension Formatter {
                     return false
                 }
 
-                // Modifiers can be fully-qualified types like `@ArrayBuilder<String>`, or macros like `@Foo(.bar)`.
+                // Modifiers can be fully-qualified types like `@ArrayBuilder<String>`, macros like `@Foo(.bar)`,
+                // or module-qualified attributes like `@SwiftUI::State`.
                 // Use the full modifier name instead of just the first token.
                 var modifierRange = prevIndex ... prevIndex
-                if let nextIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: prevIndex),
-                   tokens[nextIndex] == .startOfScope("<") || tokens[nextIndex] == .startOfScope("("),
-                   let endOfScope = endOfScope(at: nextIndex)
+                if token.isAttribute, let endOfAttr = endOfAttribute(at: prevIndex), endOfAttr > prevIndex {
+                    modifierRange = prevIndex ... endOfAttr
+                } else if let nextIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: prevIndex),
+                          tokens[nextIndex] == .startOfScope("<") || tokens[nextIndex] == .startOfScope("("),
+                          let endOfScope = endOfScope(at: nextIndex)
                 {
                     modifierRange = prevIndex ... endOfScope
                 }
@@ -462,9 +465,16 @@ extension Formatter {
                 }
             case .endOfScope(")"):
                 guard let startIndex = self.index(of: .startOfScope("("), before: prevIndex),
-                      let identifierIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: startIndex, if: {
-                          $0.isAttribute || _FormatRules.allModifiers.contains($0.string) || $0 == .endOfScope(">")
-                      })
+                      let identifierIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: startIndex)
+                else {
+                    return false
+                }
+                let identifierToken = tokens[identifierIndex]
+                guard identifierToken.isAttribute
+                    || _FormatRules.allModifiers.contains(identifierToken.string)
+                    || identifierToken == .endOfScope(">")
+                    || (identifierToken.isIdentifier
+                        && self.index(of: .nonSpaceOrCommentOrLinebreak, before: identifierIndex, if: { $0.isOperator("::") }) != nil)
                 else {
                     return false
                 }
@@ -483,7 +493,9 @@ extension Formatter {
                 prevIndex = startIndex
             case .identifier:
                 guard let startIndex = startOfAttribute(at: prevIndex),
-                      let nextIndex = self.index(of: .operator(".", .infix), after: startIndex)
+                      let nextIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: startIndex, if: {
+                          $0.isOperator(".") || $0.isOperator("::")
+                      })
                 else {
                     return false
                 }
@@ -771,33 +783,20 @@ extension Formatter {
         return true
     }
 
+    /// Returns true if the index is within a closure's argument list (between `{` and `in`).
     func isInClosureArguments(at i: Int) -> Bool {
-        var i = i
-        while let token = token(at: i) {
-            switch token {
-            case .keyword("in"), .keyword("throws"), .keyword("rethrows"), .identifier("async"):
-                guard let scopeIndex = index(of: .startOfScope, before: i, if: {
-                    $0 == .startOfScope("{")
-                }), isStartOfClosure(at: scopeIndex) else {
+        // Find the enclosing `{` scope, walking past any nested scopes
+        var scopeStart = i
+        while let startIndex = startOfScope(at: scopeStart) {
+            if tokens[startIndex] == .startOfScope("{") {
+                guard isStartOfClosure(at: startIndex),
+                      let closureArgs = parseClosureArguments(at: startIndex)
+                else {
                     return false
                 }
-                if token != .keyword("in"),
-                   let arrowIndex = index(of: .operator("->", .infix), after: i),
-                   next(.keyword, after: arrowIndex) != .keyword("in")
-                {
-                    return false
-                }
-                return true
-            case .startOfScope("("), .startOfScope("["), .startOfScope("<"),
-                 .endOfScope(")"), .endOfScope("]"), .endOfScope(">"),
-                 .keyword where token.isAttribute, _ where token.isComment:
-                break
-            case .keyword, .startOfScope, .endOfScope:
-                return false
-            default:
-                break
+                return i > startIndex && i <= closureArgs.inKeywordIndex
             }
-            i += 1
+            scopeStart = startIndex
         }
         return false
     }
@@ -937,7 +936,8 @@ extension Formatter {
                   !nextToken.isOperator(ofType: .infix),
                   !nextToken.isOperator(ofType: .postfix),
                   nextToken != .startOfScope("("),
-                  nextToken != .startOfScope("{")
+                  nextToken != .startOfScope("{"),
+                  nextToken != .delimiter(",")
             else {
                 return isAfterBrace(index, braceIndex)
             }
@@ -977,9 +977,9 @@ extension Formatter {
             }
             return startOfAttribute(at: prevTokenIndex)
         case .identifier:
-            guard let dotIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: i, if: {
-                $0.isOperator(".")
-            }), let prevTokenIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: dotIndex) else {
+            guard let separatorIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: i, if: {
+                $0.isOperator(".") || $0.isOperator("::")
+            }), let prevTokenIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: separatorIndex) else {
                 return nil
             }
             return startOfAttribute(at: prevTokenIndex)
@@ -1003,6 +1003,13 @@ extension Formatter {
         case .operator(".", .infix):
             guard let nextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: startIndex) else {
                 return nil
+            }
+            return endOfAttribute(at: nextIndex)
+        case .operator("::", .infix) where !tokens[i + 1 ..< startIndex].contains(where: \.isLinebreak):
+            guard let nextIndex = index(of: .nonSpaceOrComment, after: startIndex),
+                  !tokens[nextIndex].isLinebreak
+            else {
+                return i
             }
             return endOfAttribute(at: nextIndex)
         case .startOfScope("<"):
@@ -1166,10 +1173,20 @@ extension Formatter {
             }
             fallthrough
         case .keyword("try"), .keyword("await"):
-            guard let prevToken = last(.nonSpaceOrCommentOrLinebreak, before: i) else {
+            guard let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: i) else {
                 return true
             }
+            let prevToken = tokens[prevIndex]
             switch prevToken {
+            case .operator("?", .postfix)
+                where [.keyword("try"), .keyword("as")].contains(
+                    last(.nonSpaceOrCommentOrLinebreak, before: prevIndex) ?? .space("")
+                ),
+                 .operator("!", .postfix)
+                     where [.keyword("try"), .keyword("as")].contains(
+                         last(.nonSpaceOrCommentOrLinebreak, before: prevIndex) ?? .space("")
+                     ):
+                return false
             case .number, .operator(_, .postfix), .endOfScope, .identifier,
                  .startOfScope("{"), .startOfScope(":"), .delimiter(";"),
                  .keyword("in") where lastSignificantKeyword(at: i) != "for",
@@ -1352,6 +1369,10 @@ extension Formatter {
             }
             return true
         }
+        if index(of: .nonSpaceOrCommentOrLinebreak, before: i, if: { $0.isOperator("::") }) != nil {
+            // After :: (module selector), keywords are ordinary identifiers except for these
+            return ["deinit", "init", "subscript"].contains(unescaped)
+        }
         guard !["let", "var"].contains(unescaped) else {
             return true
         }
@@ -1411,7 +1432,8 @@ extension Formatter {
             return last(.nonSpaceOrLinebreak, before: i) != .keyword("for")
         case .identifier("async"):
             if let nextToken = next(.nonSpaceOrCommentOrLinebreak, after: nextIndex),
-               [.operator("->", .infix), .keyword("throws"), .keyword("rethrows")].contains(nextToken)
+               [.operator("->", .infix), .keyword("throws"), .keyword("rethrows"),
+                .startOfScope("{")].contains(nextToken)
             {
                 return true
             }
@@ -1503,6 +1525,17 @@ extension Formatter {
             return TypeName(range: startOfTypeIndex ... followingType.range.upperBound, formatter: self)
         }
 
+        // `::` can also continue a type (e.g. `Module::Type`), but unlike `.` and `&`,
+        // there must be no newline between `::` and the following identifier.
+        if let nextTokenIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: baseType.range.upperBound),
+           tokens[nextTokenIndex] == .operator("::", .infix),
+           let afterDoubleColonIndex = index(of: .nonSpaceOrComment, after: nextTokenIndex),
+           !tokens[afterDoubleColonIndex].isLinebreak,
+           let followingType = parseType(at: afterDoubleColonIndex, excludeLowercaseIdentifiers: excludeLowercaseIdentifiers)
+        {
+            return TypeName(range: startOfTypeIndex ... followingType.range.upperBound, formatter: self)
+        }
+
         return baseType
     }
 
@@ -1513,7 +1546,7 @@ extension Formatter {
     ) -> TypeName? {
         let startToken = tokens[startOfTypeIndex]
 
-        // Helpers that calls `parseType` with all of the optional params passed in by default
+        /// Helpers that calls `parseType` with all of the optional params passed in by default
         func parseType(at index: Int) -> TypeName? {
             self.parseType(
                 at: index,
@@ -1563,8 +1596,13 @@ extension Formatter {
                 return TypeName(range: startOfTypeIndex ... returnTypeRange.upperBound, formatter: self)
             }
 
-            // If we find a keyword such `as` then this is an expression
-            if tokens[startOfTypeIndex ... endOfScope].contains(where: \.isKeyword) {
+            // If we find an expression-only keyword (like `as`, `is`, `try`) then this is
+            // an expression, not a type. But we allow function-type keywords like `throws`,
+            // `rethrows`, `async` that can appear in nested closure types like `(() throws -> Void)`
+            let expressionKeywords = Set(["as", "is", "try", "await", "if", "switch", "for", "while", "repeat", "guard", "in", "return", "throw"])
+            if tokens[startOfTypeIndex ... endOfScope].contains(where: {
+                $0.isKeyword && expressionKeywords.contains($0.string)
+            }) {
                 return nil
             }
 
@@ -2214,6 +2252,7 @@ extension Formatter {
         var module: String
         var range: Range<Int>
         var attributes: [String]
+        var accessLevel: String?
 
         var isTestable: Bool {
             attributes.contains("@testable")
@@ -2373,8 +2412,12 @@ extension Formatter {
                     }
                     previousKeywordIndex = index(of: .keywordOrAttribute, before: previousIndex)
                     startIndex = nextStart ?? startIndex
+                } else if case let .keyword(kw) = tokens[previousIndex],
+                          _FormatRules.aclModifiers.contains(kw)
+                {
+                    // Allow import access modifiers (Swift 6 SE-0409)
+                    previousKeywordIndex = index(of: .keywordOrAttribute, before: previousIndex)
                 } else if previousIndex >= startIndex {
-                    // Can't handle another keyword on same line as import
                     return
                 } else {
                     break
@@ -2423,10 +2466,15 @@ extension Formatter {
                     partIndex = nextPartIndex
                 }
                 let range = startIndex ..< endIndex as Range
+                let accessLevel: String? = tokens[range].lazy.compactMap { token -> String? in
+                    guard case let .keyword(kw) = token, _FormatRules.aclModifiers.contains(kw) else { return nil }
+                    return kw
+                }.first
                 importRanges.append(ImportRange(
                     module: name,
                     range: range,
-                    attributes: tokens[range].compactMap { $0.isAttribute ? $0.string : nil }
+                    attributes: tokens[range].compactMap { $0.isAttribute ? $0.string : nil },
+                    accessLevel: accessLevel
                 ))
             } else {
                 // Error
@@ -2447,7 +2495,13 @@ extension Formatter {
                     }
                     nextTokenIndex = nextIndex
                 }
-                if tokens[nextTokenIndex] != .keyword("import") {
+                let nextToken = tokens[nextTokenIndex]
+                let isImportKeyword = nextToken == .keyword("import")
+                // Access modifiers only continue the import block when they are immediately followed by import.
+                let isAccessModifierBeforeImport = nextToken.isKeyword &&
+                    _FormatRules.aclModifiers.contains(nextToken.string) &&
+                    next(.nonSpaceOrComment, after: nextTokenIndex) == .keyword("import")
+                if !isImportKeyword, !isAccessModifierBeforeImport {
                     // End of imports
                     pushStack()
                     return
@@ -2772,6 +2826,220 @@ extension Formatter {
         }
 
         return (argumentNames: argumentNames, inKeywordIndex: inKeywordIndex)
+    }
+
+    /// A fully parsed closure arguments list
+    struct ClosureArguments {
+        /// The range of the capture list `[...]` if present
+        let captureListRange: ClosedRange<Int>?
+        /// The index of any global actor attribute like `@MainActor`
+        let globalActorIndex: Int?
+        /// The range of the parameters (either bare identifiers or parenthesized list)
+        let parametersRange: ClosedRange<Int>?
+        /// The indices of individual argument identifiers
+        let argumentIndices: [Int]
+        /// The range of the return type `-> Type` if present
+        let returnTypeRange: ClosedRange<Int>?
+        /// The index of the `in` keyword
+        let inKeywordIndex: Int
+    }
+
+    /// Parses closure arguments from the `{` start of closure through to the `in` keyword.
+    /// Returns nil if the closure has no arguments or if parsing fails.
+    func parseClosureArguments(at closureStartIndex: Int) -> ClosureArguments? {
+        assert(tokens[closureStartIndex] == .startOfScope("{"))
+
+        var currentIndex = closureStartIndex
+
+        // Check for global actor like @MainActor (can appear before capture list)
+        var globalActorIndex: Int?
+        if let nextToken = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex),
+           tokens[nextToken].isAttribute
+        {
+            globalActorIndex = nextToken
+            currentIndex = nextToken
+        }
+
+        // Parse optional capture list [weak self, unowned bar]
+        var captureListRange: ClosedRange<Int>?
+        if let firstToken = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex),
+           tokens[firstToken] == .startOfScope("["),
+           let captureListEnd = endOfScope(at: firstToken)
+        {
+            captureListRange = firstToken ... captureListEnd
+            currentIndex = captureListEnd
+        }
+
+        // Check for global actor after capture list (if not found before)
+        if globalActorIndex == nil,
+           let nextToken = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex),
+           tokens[nextToken].isAttribute
+        {
+            globalActorIndex = nextToken
+            currentIndex = nextToken
+        }
+
+        // Now look for arguments - either bare identifiers or parenthesized list
+        guard let firstParamToken = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex) else {
+            return nil
+        }
+
+        var argumentIndices: [Int] = []
+        var parametersRange: ClosedRange<Int>?
+        var returnTypeRange: ClosedRange<Int>?
+
+        // Case 1: Parenthesized parameters like { (foo: Int, bar: String) in }
+        if tokens[firstParamToken] == .startOfScope("(") {
+            guard let paramsEnd = endOfScope(at: firstParamToken) else {
+                return nil
+            }
+
+            parametersRange = firstParamToken ... paramsEnd
+
+            // Parse arguments inside parens
+            var argIndex = firstParamToken + 1
+            while argIndex < paramsEnd {
+                if let nextNonSpace = index(of: .nonSpaceOrCommentOrLinebreak, in: argIndex ..< paramsEnd),
+                   tokens[nextNonSpace].isIdentifierOrKeyword
+                {
+                    argumentIndices.append(nextNonSpace)
+
+                    // Skip to next comma or end of scope
+                    if let nextComma = index(of: .delimiter(","), in: nextNonSpace ..< paramsEnd) {
+                        argIndex = nextComma + 1
+                    } else {
+                        break
+                    }
+                } else {
+                    break
+                }
+            }
+
+            currentIndex = paramsEnd
+
+            // Skip past throws/rethrows/async keywords and return type
+            if let nextTokenIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex) {
+                var idx = nextTokenIndex
+                // Skip throws/rethrows/async (including typed throws like throws(Foo))
+                while [.keyword("throws"), .keyword("rethrows"), .identifier("async")].contains(tokens[idx]) {
+                    // Handle typed throws: throws(ErrorType)
+                    if let parenStart = index(of: .nonSpaceOrCommentOrLinebreak, after: idx),
+                       tokens[parenStart] == .startOfScope("("),
+                       let parenEnd = endOfScope(at: parenStart),
+                       let next = index(of: .nonSpaceOrCommentOrLinebreak, after: parenEnd)
+                    {
+                        idx = next
+                    } else if let next = index(of: .nonSpaceOrCommentOrLinebreak, after: idx) {
+                        idx = next
+                    } else {
+                        break
+                    }
+                }
+                // Skip return type (-> Type)
+                if tokens[idx] == .operator("->", .infix),
+                   let returnTypeStart = index(of: .nonSpaceOrCommentOrLinebreak, after: idx),
+                   let returnType = parseType(at: returnTypeStart)
+                {
+                    returnTypeRange = nextTokenIndex ... returnType.range.upperBound
+                    currentIndex = returnType.range.upperBound
+                } else if idx != nextTokenIndex {
+                    // Had throws/rethrows/async keywords - advance past them
+                    currentIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: idx) ?? currentIndex
+                }
+            }
+        }
+        // Case 2: Bare identifiers like { foo, bar in }
+        else if tokens[firstParamToken].isIdentifier {
+            let paramsStart = firstParamToken
+            var paramsEnd = firstParamToken
+
+            // Parse bare identifier list
+            var argIndex = firstParamToken
+            while argIndex < tokens.count {
+                if tokens[argIndex].isIdentifier {
+                    argumentIndices.append(argIndex)
+                    paramsEnd = argIndex
+
+                    // Check what comes after this identifier
+                    if let nextNonSpace = index(of: .nonSpaceOrCommentOrLinebreak, after: argIndex) {
+                        if tokens[nextNonSpace] == .delimiter(",") {
+                            // Continue to next parameter
+                            argIndex = nextNonSpace + 1
+                            continue
+                        } else if tokens[nextNonSpace] == .keyword("in")
+                            || tokens[nextNonSpace] == .operator("->", .infix)
+                            || tokens[nextNonSpace] == .keyword("throws")
+                            || tokens[nextNonSpace] == .keyword("rethrows")
+                            || tokens[nextNonSpace] == .identifier("async")
+                        {
+                            // Found the end of parameters
+                            break
+                        } else {
+                            // Unexpected token
+                            return nil
+                        }
+                    } else {
+                        break
+                    }
+                } else if tokens[argIndex].isSpaceOrCommentOrLinebreak {
+                    argIndex += 1
+                } else {
+                    // Unexpected token
+                    return nil
+                }
+            }
+
+            if !argumentIndices.isEmpty {
+                parametersRange = paramsStart ... paramsEnd
+            }
+
+            currentIndex = paramsEnd
+
+            // Skip past throws/rethrows/async keywords and return type
+            if let nextTokenIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex) {
+                var idx = nextTokenIndex
+                // Skip throws/rethrows/async (including typed throws like throws(Foo))
+                while [.keyword("throws"), .keyword("rethrows"), .identifier("async")].contains(tokens[idx]) {
+                    if let parenStart = index(of: .nonSpaceOrCommentOrLinebreak, after: idx),
+                       tokens[parenStart] == .startOfScope("("),
+                       let parenEnd = endOfScope(at: parenStart),
+                       let next = index(of: .nonSpaceOrCommentOrLinebreak, after: parenEnd)
+                    {
+                        idx = next
+                    } else if let next = index(of: .nonSpaceOrCommentOrLinebreak, after: idx) {
+                        idx = next
+                    } else {
+                        break
+                    }
+                }
+                // Skip return type (-> Type)
+                if tokens[idx] == .operator("->", .infix),
+                   let returnTypeStart = index(of: .nonSpaceOrCommentOrLinebreak, after: idx),
+                   let returnType = parseType(at: returnTypeStart)
+                {
+                    returnTypeRange = nextTokenIndex ... returnType.range.upperBound
+                    currentIndex = returnType.range.upperBound
+                } else if idx != nextTokenIndex {
+                    currentIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: idx) ?? currentIndex
+                }
+            }
+        }
+
+        // Must find 'in' keyword
+        guard let inKeywordIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex),
+              tokens[inKeywordIndex] == .keyword("in")
+        else {
+            return nil
+        }
+
+        return ClosureArguments(
+            captureListRange: captureListRange,
+            globalActorIndex: globalActorIndex,
+            parametersRange: parametersRange,
+            argumentIndices: argumentIndices,
+            returnTypeRange: returnTypeRange,
+            inKeywordIndex: inKeywordIndex
+        )
     }
 
     /// Get the type of the declaration starting at the index of the declaration keyword
@@ -3668,10 +3936,13 @@ extension Formatter {
         case optionalBinding(range: ClosedRange<Int>, property: PropertyDeclaration)
         /// A pattern matching condition like `case .foo(let bar) = baaz`
         case patternMatching(range: ClosedRange<Int>)
+        /// An availability condition like `#available(iOS 26.0, *)` or `#unavailable(iOS 26.0)`
+        case availabilityCondition(range: ClosedRange<Int>)
 
         var range: ClosedRange<Int> {
             switch self {
-            case let .booleanExpression(range), let .optionalBinding(range, _), let .patternMatching(range):
+            case let .booleanExpression(range), let .optionalBinding(range, _),
+                 let .patternMatching(range), let .availabilityCondition(range):
                 return range
             }
         }
@@ -3727,6 +3998,8 @@ extension Formatter {
                 }
 
                 element = .optionalBinding(range: conditionStart ... conditionEnd, property: property)
+            } else if tokens[conditionStart] == .keyword("#available") || tokens[conditionStart] == .keyword("#unavailable") {
+                element = .availabilityCondition(range: conditionStart ... conditionEnd)
             } else {
                 element = .booleanExpression(range: conditionStart ... conditionEnd)
             }

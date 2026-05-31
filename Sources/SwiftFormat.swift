@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.59.0"
+let swiftFormatVersion = "0.61.1"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -312,7 +312,7 @@ public func enumerateFiles(withInputURL inputURL: URL,
                    handler: handler)
 }
 
-func collectFileInfo(inputURL: URL, options: Options, resourceValues: URLResourceValues) -> FileInfo {
+func collectFileInfo(inputURL: URL, options: Options, resourceValues: URLResourceValues?) -> FileInfo {
     let fileHeaderRuleEnabled = options.rules?.contains(FormatRule.fileHeader.name) ?? false
     let shouldGetGitInfo = fileHeaderRuleEnabled &&
         options.formatOptions?.fileHeader.needsGitInfo == true
@@ -320,8 +320,8 @@ func collectFileInfo(inputURL: URL, options: Options, resourceValues: URLResourc
     let gitInfo = shouldGetGitInfo ? GitFileInfo(url: inputURL) : nil
 
     return FileInfo(
-        filePath: resourceValues.path,
-        creationDate: gitInfo?.creationDate ?? resourceValues.creationDate,
+        filePath: resourceValues?.path ?? inputURL.path,
+        creationDate: gitInfo?.creationDate ?? resourceValues?.creationDate,
         replacements: [
             .author: ReplacementType(gitInfo?.author),
             .authorName: ReplacementType(gitInfo?.authorName),
@@ -346,10 +346,22 @@ func gatherOptions(_ options: inout Options, for inputURL: URL, with logger: Log
 private var configCache = [URL: [[String: String]]]()
 private let configQueue = DispatchQueue(label: "swiftformat.config", qos: .userInteractive)
 private func processDirectory(_ inputURL: URL, with options: inout Options, logger: Logger?) throws {
-    if let args = configQueue.sync(execute: { configCache[inputURL] }) {
-        try options.addArguments(args, in: inputURL.path)
-        return
+    let inputURL = inputURL.standardizedFileURL
+    let args = try configQueue.sync { () throws -> [[String: String]] in
+        if let args = configCache[inputURL] {
+            return args
+        }
+
+        let args = try parseConfigArguments(in: inputURL, options: options, logger: logger)
+        configCache[inputURL] = args
+        return args
     }
+
+    assert(options.formatOptions != nil)
+    try options.addArguments(args, in: inputURL.path)
+}
+
+private func parseConfigArguments(in inputURL: URL, options: Options, logger: Logger?) throws -> [[String: String]] {
     var args = [[String: String]]()
     let manager = FileManager.default
     let configFile = inputURL.appendingPathComponent(swiftFormatConfigurationFile)
@@ -367,33 +379,34 @@ private func processDirectory(_ inputURL: URL, with options: inout Options, logg
     }
     let versionFile = inputURL.appendingPathComponent(swiftVersionFile)
     if manager.fileExists(atPath: versionFile.path) {
-        let versionString = try String(contentsOf: versionFile, encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if args.first(where: { $0["swift-version"] != nil }) != nil {
-            logger?("Ignoring swift-version file at \(versionFile.path)")
-        } else if Version(rawValue: versionString) != nil {
-            logger?("Reading swift-version file at \(versionFile.path) (version \(versionString))")
+        // Don't read .swift-version from directories that will be excluded (affects no files)
+        var tempOptions = options
+        try tempOptions.addArguments(args, in: inputURL.standardizedFileURL.path)
+        if !tempOptions.shouldSkipFile(inputURL) {
+            let versionString = try String(contentsOf: versionFile, encoding: .utf8)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if args.first(where: { $0["swift-version"] != nil }) != nil {
+                logger?("Ignoring swift-version file at \(versionFile.path)")
+            } else if Version(rawValue: versionString) != nil {
+                logger?("Reading swift-version file at \(versionFile.path) (version \(versionString))")
 
-            if args.isEmpty {
-                args = [["swift-version": versionString]]
-            } else {
-                args = args.map {
-                    var args = $0
-                    args["swift-version"] = versionString
-                    return args
+                if args.isEmpty {
+                    args = [["swift-version": versionString]]
+                } else {
+                    args = args.map {
+                        var args = $0
+                        args["swift-version"] = versionString
+                        return args
+                    }
                 }
+            } else {
+                // Don't treat as error, per: https://github.com/nicklockwood/SwiftFormat/issues/639
+                // TODO: find a better solution for logging warnings here
+                logger?("Unrecognized swift version string '\(versionString)' in \(versionFile.path)")
             }
-        } else {
-            // Don't treat as error, per: https://github.com/nicklockwood/SwiftFormat/issues/639
-            // TODO: find a better solution for logging warnings here
-            logger?("Unrecognized swift version string '\(versionString)' in \(versionFile.path)")
         }
     }
-    configQueue.async {
-        configCache[inputURL] = args
-    }
-    assert(options.formatOptions != nil)
-    try options.addArguments(args, in: inputURL.standardizedFileURL.path)
+    return args
 }
 
 /// Line and column offset in source
@@ -609,7 +622,7 @@ public func applyRules(
         // ChouTi Extended [END]
     }
 
-    // Split tokens into lines
+    /// Split tokens into lines
     func getLines(in tokens: [Token], includingLinebreaks: Bool) -> [Int: ArraySlice<Token>] {
         var lines: [Int: ArraySlice<Token>] = [:]
         var startIndex = 0, nextLine = 1

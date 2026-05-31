@@ -330,6 +330,44 @@ final class TrailingCommasTests: XCTestCase {
         testFormatting(for: input, rule: .trailingCommas)
     }
 
+    func testTrailingCommaNotAddedToCaptureListWithMacro() {
+        let input = """
+        { [
+            a = a(),
+            b = #b
+        ] in
+            a + b
+        }
+        """
+        testFormatting(for: input, rule: .trailingCommas)
+    }
+
+    func testTrailingCommaNotAddedToCaptureListWithMacroCollectionsOnly() {
+        let input = """
+        { [
+            a = a(),
+            b = #b
+        ] in
+            a + b
+        }
+        """
+        let options = FormatOptions(trailingCommas: .collectionsOnly)
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommaNotAddedToCaptureListWithMacroSwift6() {
+        let input = """
+        { [
+            a = a(),
+            b = #b
+        ] in
+            a + b
+        }
+        """
+        let options = FormatOptions(swiftVersion: "6.0")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
     func testTrailingCommaNotAddedToArrayExtension() {
         let input = """
         extension [
@@ -866,6 +904,14 @@ final class TrailingCommasTests: XCTestCase {
             quux: String // trailing comma not supported
         )
 
+        let closure: @convention(block) (
+            String,
+            String // trailing comma not supported
+        ) -> (
+            bar: String,
+            quux: String // trailing comma not supported
+        )
+
         let closure: (
             String,
             String // trailing comma not supported
@@ -936,6 +982,10 @@ final class TrailingCommasTests: XCTestCase {
         public typealias StringToInt = (
             String
         ) -> Int
+
+        public typealias BlockClosure = @convention(block) (
+            String
+        ) -> Void
 
         public enum Toster {
             public typealias StringToInt = ((
@@ -1451,6 +1501,27 @@ final class TrailingCommasTests: XCTestCase {
             capturedValue1,
             capturedValue2,
         ] in
+        }
+        """
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options)
+    }
+
+    func testTrailingCommasAddedToCaptureListWithMacro() {
+        let input = """
+        { [
+            a = a(),
+            b = #b
+        ] in
+            a + b
+        }
+        """
+        let output = """
+        { [
+            a = a(),
+            b = #b,
+        ] in
+            a + b
         }
         """
         let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.1")
@@ -2452,7 +2523,7 @@ final class TrailingCommasTests: XCTestCase {
     }
 
     func testTrailingCommasNotAddedToClosureTupleReturnType() {
-        // Trailing commas are unexpectedly not allowed here in Swift 6.2
+        // Trailing commas are not supported in closure return types in Swift 6.2 and earlier
         let input = """
         let closure = { () -> (
             foo: String,
@@ -2487,6 +2558,85 @@ final class TrailingCommasTests: XCTestCase {
 
         let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.2")
         testFormatting(for: input, output, rule: .trailingCommas, options: options, exclude: [.typeSugar, .propertyTypes])
+    }
+
+    func testTrailingCommaInClosureArgsButNotReturnType() {
+        // Trailing commas are allowed in closure arguments but not in closure return types
+        let input = """
+        let closure1 = { (
+            foo: String,
+            bar: String
+        ) in
+            print(foo, bar)
+        }
+
+        let closure2 = { () -> (
+            foo: String,
+            bar: String
+        ) in
+            return (foo: "foo", bar: "bar")
+        }
+        """
+
+        let output = """
+        let closure1 = { (
+            foo: String,
+            bar: String,
+        ) in
+            print(foo, bar)
+        }
+
+        let closure2 = { () -> (
+            foo: String,
+            bar: String
+        ) in
+            return (foo: "foo", bar: "bar")
+        }
+        """
+
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.2")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options, exclude: [.typeSugar, .propertyTypes])
+    }
+
+    func testTrailingCommaNotAddedToClosureReturnTypeWithArgs() {
+        let input = """
+        let closure = { (
+            arg: String
+        ) -> (
+            foo: String,
+            bar: String
+        ) in
+            return (foo: arg, bar: arg)
+        }
+        """
+
+        let output = """
+        let closure = { (
+            arg: String,
+        ) -> (
+            foo: String,
+            bar: String
+        ) in
+            return (foo: arg, bar: arg)
+        }
+        """
+
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.2")
+        testFormatting(for: input, output, rule: .trailingCommas, options: options, exclude: [.typeSugar, .propertyTypes])
+    }
+
+    func testTrailingCommaNotAddedToClosureReturnTypeWithBareArgs() {
+        let input = """
+        let closure = { foo, bar -> (
+            foo: String,
+            bar: String
+        ) in
+            (foo: foo, bar: bar)
+        }
+        """
+
+        let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.2")
+        testFormatting(for: input, rule: .trailingCommas, options: options, exclude: [.typeSugar, .propertyTypes])
     }
 
     func testTrailingCommasAddedToClosureTupleReturnTypeSwift6_3() {
@@ -2571,6 +2721,14 @@ final class TrailingCommasTests: XCTestCase {
             quux: String
         )
 
+        let closure: @convention(block) (
+            String,
+            String
+        ) -> (
+            bar: String,
+            quux: String
+        )
+
         let closure: (
             String,
             String
@@ -2602,6 +2760,14 @@ final class TrailingCommasTests: XCTestCase {
         )
 
         let closure: @Sendable (
+            String,
+            String,
+        ) -> (
+            bar: String,
+            quux: String,
+        )
+
+        let closure: @convention(block) (
             String,
             String,
         ) -> (
@@ -2704,6 +2870,10 @@ final class TrailingCommasTests: XCTestCase {
             String
         ) -> Int
 
+        public typealias BlockClosure = @convention(block) (
+            String
+        ) -> Void
+
         public enum Toster {
             public typealias StringToInt = ((
                 String
@@ -2725,6 +2895,10 @@ final class TrailingCommasTests: XCTestCase {
         public typealias StringToInt = (
             String,
         ) -> Int
+
+        public typealias BlockClosure = @convention(block) (
+            String,
+        ) -> Void
 
         public enum Toster {
             public typealias StringToInt = ((
@@ -3652,6 +3826,40 @@ final class TrailingCommasTests: XCTestCase {
         ])?.compactMap(parse)
         """
         let options = FormatOptions(trailingCommas: .always, swiftVersion: "6.2")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testNoTrailingCommaAddedToAvailableCheck() {
+        let input = """
+        if #available(
+            iOS 16.0,
+            *
+        ) {}
+        """
+        let options = FormatOptions(swiftVersion: "6.2")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testNoTrailingCommaAddedToUnavailableCheck() {
+        let input = """
+        if #unavailable(
+            iOS 16.0,
+            *
+        ) {}
+        """
+        let options = FormatOptions(swiftVersion: "6.2")
+        testFormatting(for: input, rule: .trailingCommas, options: options)
+    }
+
+    func testNoTrailingCommaAddedToAvailableCheckWithMultiplePlatforms() {
+        let input = """
+        if #available(
+            iOS 16.0,
+            macOS 13.0,
+            *
+        ) {}
+        """
+        let options = FormatOptions(swiftVersion: "6.2")
         testFormatting(for: input, rule: .trailingCommas, options: options)
     }
 }

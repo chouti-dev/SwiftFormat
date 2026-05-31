@@ -187,6 +187,13 @@ public enum ClosureVoidReturn: String, CaseIterable {
     case preserve
 }
 
+/// Format for Swift Testing test case / suite names
+public enum SwiftTestingNameFormat: String, CaseIterable {
+    case preserve
+    case rawIdentifiers = "raw-identifiers"
+    case standardIdentifiers = "standard-identifiers"
+}
+
 public enum TrailingCommas: String, CaseIterable {
     case never
     case always
@@ -439,12 +446,34 @@ public enum Grouping: Equatable, RawRepresentable, CustomStringConvertible {
     }
 }
 
-/// Grouping for sorting imports
-public enum ImportGrouping: String, CaseIterable {
+/// Individual import sorting/grouping options, combined as a Set
+public enum ImportGrouping: String, CaseIterable, Hashable {
     case alpha
     case length
+    case accessControl = "access-control"
     case testableFirst = "testable-first"
     case testableLast = "testable-last"
+
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "alphabetized",
+             "alphabetical",
+             "alpha":
+            self = .alpha
+        case "length":
+            self = .length
+        case "access-control":
+            self = .accessControl
+        case "testable-first",
+             "testable-top":
+            self = .testableFirst
+        case "testable-last",
+             "testable-bottom":
+            self = .testableLast
+        default:
+            return nil
+        }
+    }
 }
 
 /// Self insertion mode
@@ -796,7 +825,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var throwCapturing: Set<String>
     public var asyncCapturing: Set<String>
     public var experimentalRules: Bool
-    public var importGrouping: ImportGrouping
+    public var importGrouping: Set<ImportGrouping>
     public var trailingClosures: Set<String>
     public var neverTrailing: Set<String>
     public var xcodeIndentation: Bool
@@ -878,6 +907,9 @@ public struct FormatOptions: CustomStringConvertible {
     public var redundantAsync: RedundantEffectMode
     public var allowPartialWrapping: Bool
     public var preferSynthesizedInitForInternalStructs: PreferSynthesizedInitMode
+    public var testCaseNameFormat: SwiftTestingNameFormat
+    public var suiteNameFormat: SwiftTestingNameFormat
+    public var testCaseAccessControl: Visibility
 
     /// Deprecated
     public var indentComments: Bool
@@ -941,7 +973,7 @@ public struct FormatOptions: CustomStringConvertible {
                 throwCapturing: Set<String> = [],
                 asyncCapturing: Set<String> = [],
                 experimentalRules: Bool = false,
-                importGrouping: ImportGrouping = .alpha,
+                importGrouping: Set<ImportGrouping> = [.accessControl, .alpha],
                 trailingClosures: Set<String> = [],
                 neverTrailing: Set<String> = [],
                 xcodeIndentation: Bool = false,
@@ -1023,6 +1055,9 @@ public struct FormatOptions: CustomStringConvertible {
                 redundantAsync: RedundantEffectMode = .testsOnly,
                 allowPartialWrapping: Bool = true,
                 preferSynthesizedInitForInternalStructs: PreferSynthesizedInitMode = .never,
+                testCaseNameFormat: SwiftTestingNameFormat = .rawIdentifiers,
+                suiteNameFormat: SwiftTestingNameFormat = .preserve,
+                testCaseAccessControl: Visibility = .internal,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
@@ -1157,6 +1192,9 @@ public struct FormatOptions: CustomStringConvertible {
         self.redundantAsync = redundantAsync
         self.allowPartialWrapping = allowPartialWrapping
         self.preferSynthesizedInitForInternalStructs = preferSynthesizedInitForInternalStructs
+        self.testCaseNameFormat = testCaseNameFormat
+        self.suiteNameFormat = suiteNameFormat
+        self.testCaseAccessControl = testCaseAccessControl
         self.indentComments = indentComments
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers
@@ -1194,6 +1232,8 @@ public struct FormatOptions: CustomStringConvertible {
                 value = array.joined(separator: ",")
             case let set as Set<String>:
                 value = set.sorted().joined(separator: ",")
+            case let set as Set<ImportGrouping>:
+                value = ImportGrouping.allCases.filter { set.contains($0) }.map(\.rawValue).joined(separator: ",")
             default:
                 break
             }

@@ -133,6 +133,11 @@ extension Declaration {
         return allModifiers
     }
 
+    /// The attributes before this declaration's keyword.
+    var attributes: [String] {
+        modifiers.filter(\.isAttribute)
+    }
+
     /// Whether or not this declaration has the given modifier
     func hasModifier(_ modifier: String) -> Bool {
         formatter.modifiersForDeclaration(at: keywordIndex, contains: modifier)
@@ -401,10 +406,13 @@ extension Collection<Declaration> {
         forEachRecursiveDeclaration { declaration in
             guard declaration.range.contains(index) else { return }
 
-            if let containingDeclaration,
-               !containingDeclaration.range.contains(declaration.range)
-            {
-                return
+            // Back-deployable range containment check (avoids macOS 13+ API)
+            if let outer = containingDeclaration?.range {
+                let containsInner = outer.lowerBound <= declaration.range.lowerBound
+                    && outer.upperBound >= declaration.range.upperBound
+                if !containsInner {
+                    return
+                }
             }
 
             containingDeclaration = declaration
@@ -442,7 +450,7 @@ extension Declaration {
 // MARK: - Visibility
 
 /// The visibility of a declaration
-enum Visibility: String, CaseIterable, Comparable {
+public enum Visibility: String, CaseIterable, Comparable {
     case open
     case `public`
     case package
@@ -450,7 +458,7 @@ enum Visibility: String, CaseIterable, Comparable {
     case `fileprivate`
     case `private`
 
-    static func < (lhs: Visibility, rhs: Visibility) -> Bool {
+    public static func < (lhs: Visibility, rhs: Visibility) -> Bool {
         allCases.firstIndex(of: lhs)! > allCases.firstIndex(of: rhs)!
     }
 }

@@ -848,9 +848,9 @@ final class FileHeaderTests: XCTestCase {
         ])
     }
 
-    func testFileHeaderDateTimeZoneAbbreviations() {
+    func testFileHeaderDateTimeZoneAbbreviations() throws {
         // GMT+0530
-        testTimeZone(timeZone: FormatTimeZone(rawValue: "IST")!, tests: [
+        try testTimeZone(timeZone: XCTUnwrap(FormatTimeZone(rawValue: "IST")), tests: [
             "15:00Z": "20:30",
             "16:00+1": "20:30",
             "01:00+10": "20:30",
@@ -858,9 +858,9 @@ final class FileHeaderTests: XCTestCase {
         ])
     }
 
-    func testFileHeaderDateTimeZoneIdentifiers() {
+    func testFileHeaderDateTimeZoneIdentifiers() throws {
         // GMT+0845
-        testTimeZone(timeZone: FormatTimeZone(rawValue: "Australia/Eucla")!, tests: [
+        try testTimeZone(timeZone: XCTUnwrap(FormatTimeZone(rawValue: "Australia/Eucla")), tests: [
             "15:00Z": "23:45",
             "16:00+1": "23:45",
             "01:00+10": "23:45",
@@ -897,6 +897,42 @@ final class FileHeaderTests: XCTestCase {
         let foo = bar
         """
         let options = FormatOptions(fileHeader: "// {file}.", fileInfo: FileInfo())
+        XCTAssertThrowsError(try format(input, rules: [.fileHeader], options: options))
+    }
+
+    func testFileHeaderWithFilePathButNoCreationDate() {
+        let input = """
+        let foo = bar
+        """
+        let output = """
+        // File: test.swift
+
+        let foo = bar
+        """
+        let fileInfo = FileInfo(filePath: "/path/to/test.swift", creationDate: nil)
+        let options = FormatOptions(fileHeader: "// File: {file}", fileInfo: fileInfo)
+        testFormatting(for: input, output, rule: .fileHeader, options: options)
+    }
+
+    func testFileHeaderWithFilePathButNoCreationDateDoesNotUseCreatedPlaceholder() {
+        let input = """
+        let foo = bar
+        """
+        let fileInfo = FileInfo(filePath: "/path/to/test.swift", creationDate: nil)
+        let options = FormatOptions(fileHeader: "// Created: {created}", fileInfo: fileInfo)
+        XCTAssertThrowsError(try format(input, rules: [.fileHeader], options: options))
+    }
+
+    func testFileHeaderWithExistingHeaderAndNoCreationDate() {
+        let input = """
+        // Existing header
+        // Created on 2020-01-01
+
+        let foo = bar
+        """
+        let fileInfo = FileInfo(filePath: "/path/to/test.swift", creationDate: nil)
+        let options = FormatOptions(fileHeader: "// New header\n// Created: {created}", fileInfo: fileInfo)
+        // When creation date is unavailable and template uses {created}, throws error even if file has existing header
         XCTAssertThrowsError(try format(input, rules: [.fileHeader], options: options))
     }
 }

@@ -130,6 +130,53 @@ Alternatively, you can install the tool on macOS or Linux by using [Mint](https:
 $ mint install nicklockwood/SwiftFormat
 ```
 
+If you use Nix, you can add SwiftFormat to a `devShell` using `nixpkgs`:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  };
+
+  outputs = { nixpkgs, ... }:
+    let
+      system = "aarch64-darwin";
+      pkgs = import nixpkgs { inherit system; };
+    in {
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [
+          pkgs.swiftformat
+        ];
+      };
+    };
+}
+```
+
+If you need to pin SwiftFormat to a specific version in your `devShell`, you can use [`acevif/swiftformat-nix`](https://github.com/acevif/swiftformat-nix):
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    swiftformat-nix.url = "github:acevif/swiftformat-nix";
+  };
+
+  outputs = { nixpkgs, swiftformat-nix, ... }:
+    let
+      system = "aarch64-darwin";
+      pkgs = import nixpkgs { inherit system; };
+    in {
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [
+          swiftformat-nix.packages.${system}.swiftformat_0_58_7
+        ];
+      };
+    };
+}
+```
+
+Replace `aarch64-darwin` with your system, and replace `swiftformat_0_58_7` with the version you want to install.
+
 Or if you prefer, you can check out and build SwiftFormat manually on macOS, Linux or Windows as follows:
 
 ```bash
@@ -286,7 +333,7 @@ let package = Package(
     name: "BuildTools",
     platforms: [.macOS(.v10_11)],
     dependencies: [
-        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.59.0"),
+        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.61.1"),
     ],
     targets: [.target(name: "BuildTools", path: "")]
 )
@@ -320,7 +367,7 @@ You can also use `swift run -c release --package-path BuildTools swiftformat "$S
 1. Add the `swiftformat` binary to your project directory via [CocoaPods](https://cocoapods.org/), by adding the following line to your Podfile then running `pod install`:
 
     ```ruby
-    pod 'SwiftFormat/CLI', '~> 0.59.0'
+    pod 'SwiftFormat/CLI', '~> 0.61.1'
     ```
 
 **NOTE:** This will only install the pre-built command-line app, not the source code for the SwiftFormat framework.
@@ -388,7 +435,7 @@ You can use `SwiftFormat` as a SwiftPM command plugin.
 ```swift
 dependencies: [
     // ...
-    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.59.0"),
+    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.61.1"),
 ]
 ```
 
@@ -436,10 +483,29 @@ end tell
 Some Apps you can trigger this from are [BetterTouchTool](https://folivora.ai), [Alfred](https://www.alfredapp.com) or [Keyboard Maestro](https://www.keyboardmaestro.com/main/). Another option is to define a QuickAction for Xcode via Automator and then assign a keyboard shortcut for it in the System Preferences.
 
 
-VSCode plugin
---------------
+VSCode integration
+-------------------
 
-If you prefer to use Microsoft's [VSCode](https://code.visualstudio.com) editor for writing Swift, [Valentin Knabel](https://github.com/vknabel) has created a [VSCode plugin](https://marketplace.visualstudio.com/items?itemName=vknabel.vscode-swiftformat) for SwiftFormat.
+If you prefer to use Microsoft's [VSCode](https://code.visualstudio.com) editor for writing Swift, SwiftFormat can be integrated using the [Run on Save](https://marketplace.visualstudio.com/items?itemName=emeraldwalk.RunOnSave) extension:
+
+1. Install the SwiftFormat command-line tool
+2. Install the VSCode extension: [Run on Save](https://marketplace.visualstudio.com/items?itemName=emeraldwalk.RunOnSave)
+3. Add the following to your `.vscode/settings.json`:
+
+```json
+{
+  "emeraldwalk.runonsave": {
+    "commands": [
+      {
+        "match": "\\.swift$",
+        "cmd": "swiftformat ${file}"
+      }
+    ]
+  }
+}
+```
+
+This will automatically format Swift files on save.
 
 
 Sublime Text plugin
@@ -1119,6 +1185,10 @@ Known issues
 * The `propertyTypes` rule can cause a build failure in cases where the property's type is a protocol / existential like `let shapeStyle: ShapeStyle = .myShapeStyle`, and the value used on the right-hand side is defined in an extension like `extension ShapeStyle where Self == MyShapeStyle { static var myShapeStyle: MyShapeStyle { ... } }`. As a workaround you can use the existential `any` syntax (`let shapeStyle: any ShapeStyle = .myShapeStyle`), which the rule will preserve as-is, or exclude the type name and/or property name with `--preserve-symbols ShapeStyle,myShapeStyle,etc`.
 
 * The `propertyTypes` rule can cause a build failure in cases like `let foo = Foo.bar` where the value is a static member that doesn't return the same time. For example, `let foo: Foo = .bar` would be invalid if the `bar` property was defined as `static var bar: Bar`. As a workaround you can write the name of the type explicitly, like `let foo: Bar = Foo.bar`, or exclude the type name and/or property name with `--preserve-symbols Bar,bar,etc`.
+
+* The `propertyTypes` rule can cause a build failure in cases like `let value = Tools.makeString()` where `Tools` is used as a namespace (e.g. a caseless enum) and `makeString()` is a static factory method that returns a different type (e.g. `String`). The rule converts this to `let value: Tools = .makeString()`, which fails to compile. As a workaround you can write the type explicitly, like `let value: String = Tools.makeString()`, or exclude the type name and/or property name with `--preserve-symbols Tools,makeString,etc`, or use `// swiftformat:disable:next propertyTypes`.
+
+* The `redundantEquatable` rule may incorrectly remove a `==` implementation that intentionally overrides a default `==` provided by another protocol. For example, `Strideable` provides a default `==` implementation derived from `distance(to:)`, and a type may override it with a custom `==`. SwiftFormat handles this case when the `Strideable` conformance is defined in the same file, but it cannot detect conformances in a different file, nor default `==` implementations provided by other protocols. As a workaround you can use the `// swiftformat:disable:next redundantEquatable` comment directive to disable the rule for the affected type (or just disable the `redundantEquatable` rule completely).
 
 
 Tip Jar

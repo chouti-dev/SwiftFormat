@@ -115,6 +115,11 @@ final class DocCommentsTests: XCTestCase {
                 /// an entire following block of code (not just the property)
                 let bar: Bar? = Bar()
                 print(bar)
+
+                #if DEBUG
+                    /// This comment is in a conditional compilation block
+                    let baaz = Baaz()
+                #endif
             }
 
             var baaz: Baaz {
@@ -150,6 +155,11 @@ final class DocCommentsTests: XCTestCase {
                 // an entire following block of code (not just the property)
                 let bar: Bar? = Bar()
                 print(bar)
+
+                #if DEBUG
+                    // This comment is in a conditional compilation block
+                    let baaz = Baaz()
+                #endif
             }
 
             var baaz: Baaz {
@@ -169,7 +179,7 @@ final class DocCommentsTests: XCTestCase {
         """
 
         testFormatting(for: input, output, rule: .docComments,
-                       exclude: [.spaceInsideComments, .redundantProperty, .propertyTypes])
+                       exclude: [.spaceInsideComments, .redundantVariable, .propertyTypes])
     }
 
     func testPreservesDocComments() {
@@ -246,7 +256,7 @@ final class DocCommentsTests: XCTestCase {
         """
 
         let options = FormatOptions(preserveDocComments: true)
-        testFormatting(for: input, output, rule: .docComments, options: options, exclude: [.spaceInsideComments, .redundantProperty, .propertyTypes])
+        testFormatting(for: input, output, rule: .docComments, options: options, exclude: [.spaceInsideComments, .redundantVariable, .propertyTypes])
     }
 
     func testDoesntConvertCommentBeforeConsecutivePropertiesToDocComment() {
@@ -680,5 +690,29 @@ final class DocCommentsTests: XCTestCase {
         """
 
         testFormatting(for: input, rule: .docComments)
+    }
+
+    func testDocCommentOnNestedFunction() {
+        let input = """
+        // Parent function at file scope
+        func parentFunction() {
+            // Nested function inside parent function
+            func nestedFunction() {
+                print("foo bar")
+            }
+        }
+        """
+
+        let output = """
+        /// Parent function at file scope
+        func parentFunction() {
+            /// Nested function inside parent function
+            func nestedFunction() {
+                print("foo bar")
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: .docComments)
     }
 }

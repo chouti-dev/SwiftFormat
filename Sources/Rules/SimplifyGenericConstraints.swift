@@ -152,36 +152,45 @@ extension Formatter {
         removeTokens(in: sourceRangesToRemove)
 
         // Check if the where clause is now empty and remove it if so
-        // Find the next significant token after the where keyword
-        if let tokenAfterWhereIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: whereClauseIndex) {
-            let tokenAfterWhere = tokens[tokenAfterWhereIndex]
-            if tokenAfterWhere == .startOfScope("{") {
-                // Where clause followed by opening brace - remove everything between where and {
-                removeTokens(in: whereClauseIndex.index ..< tokenAfterWhereIndex)
-            } else if tokenAfterWhere.isLinebreak || tokenAfterWhere == .endOfScope("}") {
-                // Where clause followed by linebreak or closing brace - means it's empty
-                // Remove the where keyword and any whitespace/linebreaks after it
-                // Also remove the space before where if present
-                let startIndex = (whereClauseIndex.index > 0 && tokens[whereClauseIndex.index - 1].isSpace)
-                    ? whereClauseIndex.index - 1
-                    : whereClauseIndex.index
+        // Re-parse the where clause to get the updated range and check if it has any constraints
+        let (whereTypes, updatedWhereRange) = parseGenericTypes(from: whereIndex)
 
-                if let linebreakIndex = index(of: .linebreak, after: whereClauseIndex) {
-                    removeTokens(in: startIndex ..< linebreakIndex)
+        // If the where clause has no constraints (empty), remove it
+        if whereTypes.allSatisfy(\.conformances.isEmpty) {
+            // Get the token after the where keyword
+            if let tokenAfterWhereIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: updatedWhereRange.lowerBound) {
+                let tokenAfterWhere = tokens[tokenAfterWhereIndex]
+                if tokenAfterWhere == .startOfScope("{") {
+                    // Where clause followed by opening brace - remove everything between where and {
+                    removeTokens(in: whereClauseIndex.index ..< tokenAfterWhereIndex)
+                } else if tokenAfterWhere.isLinebreak || tokenAfterWhere == .endOfScope("}") {
+                    // Where clause followed by linebreak or closing brace - remove where and whitespace
+                    let startIndex = (whereClauseIndex.index > 0 && tokens[whereClauseIndex.index - 1].isSpace)
+                        ? whereClauseIndex.index - 1
+                        : whereClauseIndex.index
+
+                    if let linebreakIndex = index(of: .linebreak, after: whereClauseIndex) {
+                        removeTokens(in: startIndex ..< linebreakIndex)
+                    }
+                } else {
+                    // Where clause followed by something else (e.g., next function in protocol)
+                    // Remove where and any trailing whitespace up to linebreak
+                    let startIndex = (whereClauseIndex.index > 0 && tokens[whereClauseIndex.index - 1].isSpace)
+                        ? whereClauseIndex.index - 1
+                        : whereClauseIndex.index
+
+                    if let linebreakIndex = index(of: .linebreak, after: whereClauseIndex) {
+                        removeTokens(in: startIndex ..< linebreakIndex)
+                    } else {
+                        // No linebreak found - remove where and trailing content
+                        var endIndex = whereClauseIndex.index + 1
+                        while endIndex < tokens.count, !tokens[endIndex].isLinebreak {
+                            endIndex += 1
+                        }
+                        removeTokens(in: startIndex ..< endIndex)
+                    }
                 }
             }
-        } else {
-            // No non-whitespace token after where at all - remove where and trailing content
-            // Also remove the space before where if present
-            let startIndex = (whereClauseIndex.index > 0 && tokens[whereClauseIndex.index - 1].isSpace)
-                ? whereClauseIndex.index - 1
-                : whereClauseIndex.index
-
-            var endIndex = whereClauseIndex.index + 1
-            while endIndex < tokens.count, !tokens[endIndex].isLinebreak {
-                endIndex += 1
-            }
-            removeTokens(in: startIndex ..< endIndex)
         }
 
         // Clean up any trailing commas before the opening brace or end of declaration
@@ -233,8 +242,24 @@ extension Formatter {
                         endIndex = nextIndex
                     }
 
-                    // Build the constraint suffix
-                    let protocolNames = conformances.map(\.name)
+                    // Build the constraint suffix, filtering out duplicates.
+                    // A constraint is a duplicate if it already appears in the inline
+                    // generic parameters (sourceRange before the where keyword) or if
+                    // it appears more than once in the where clause itself.
+                    let inlineConformanceNames = Set(
+                        genericTypes
+                            .first(where: { $0.name == typeName })?
+                            .conformances
+                            .filter { $0.sourceRange.lowerBound < whereIndex }
+                            .map(\.name)
+                            ?? []
+                    )
+                    var seen = Set<String>()
+                    let protocolNames = conformances.map(\.name).filter { name in
+                        !inlineConformanceNames.contains(name) && seen.insert(name).inserted
+                    }
+                    // If all constraints were already inline, nothing new to insert
+                    guard !protocolNames.isEmpty else { break }
                     let constraintSuffix: String
                     if hasInlineConstraints {
                         // Append with & if there are already constraints

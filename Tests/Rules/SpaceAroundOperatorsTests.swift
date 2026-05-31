@@ -54,6 +54,20 @@ final class SpaceAroundOperatorsTests: XCTestCase {
         testFormatting(for: input, rule: .spaceAroundOperators)
     }
 
+    func testSpacePreservedBetweenUnsafeAndDot() {
+        let input = """
+        unsafe .foo
+        """
+        testFormatting(for: input, rule: .spaceAroundOperators)
+    }
+
+    func testNoSpaceAddedBetweenUnsafeAndDot() {
+        let input = """
+        unsafe.foo
+        """
+        testFormatting(for: input, rule: .spaceAroundOperators)
+    }
+
     func testSpaceBetweenOptionalAndDefaultValueInFunction() {
         let input = """
         func foo(bar _: String?=nil) {}
@@ -1169,5 +1183,29 @@ final class SpaceAroundOperatorsTests: XCTestCase {
             rule: .spaceAroundOperators,
             options: options
         )
+    }
+
+    func testNoSpaceAroundDoubleColonOperator() {
+        let input = """
+        let x = Module::TypeName
+        """
+        testFormatting(for: input, rule: .spaceAroundOperators)
+    }
+
+    func testSpaceRemovedAroundDoubleColonOperator() {
+        let input = """
+        let x = Module :: TypeName
+        """
+        let output = """
+        let x = Module::TypeName
+        """
+        testFormatting(for: input, output, rule: .spaceAroundOperators)
+    }
+
+    func testNoSpaceAroundDoubleColonInMemberAccess() {
+        let input = """
+        let x = foo.Module::functionName()
+        """
+        testFormatting(for: input, rule: .spaceAroundOperators)
     }
 }

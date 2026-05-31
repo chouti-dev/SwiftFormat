@@ -20,6 +20,12 @@ public extension FormatRule {
             guard let viewBuilderIndex = formatter.indexOfViewBuilderAttribute(for: declaration)
             else { return }
 
+            // Never remove @ViewBuilder from protocol members, as conforming types
+            // rely on the implicit result builder being added
+            if formatter.isInsideProtocol(at: declaration.keywordIndex) {
+                return
+            }
+
             let bodyScope: ClosedRange<Int>?
             let isBodyMember: Bool
 
@@ -126,24 +132,28 @@ extension Formatter {
         var startIndex = attributeIndex
         var endIndex = attributeIndex
 
+        // Check if there's a leading space (between another attribute and this one)
+        let hasLeadingSpace = attributeIndex > 0 && tokens[attributeIndex - 1].isSpace
+        let leadingSpaceIsAfterAttribute = hasLeadingSpace && attributeIndex > 1 && !tokens[attributeIndex - 2].isLinebreak
+
         let nextNonSpaceIndex = index(of: .nonSpace, after: attributeIndex)
         let hasTrailingLinebreak = nextNonSpaceIndex != nil && tokens[nextNonSpaceIndex!].isLinebreak
         let hasTrailingSpace = attributeIndex + 1 < tokens.count && tokens[attributeIndex + 1].isSpace
 
-        if hasTrailingLinebreak, let nextIndex = nextNonSpaceIndex {
+        if leadingSpaceIsAfterAttribute {
+            // Remove the space before @ViewBuilder (space between attributes)
+            startIndex = attributeIndex - 1
+            // Don't remove trailing linebreak - preserve the line structure
+            // Don't remove trailing space - it separates from the next token
+        } else if hasTrailingLinebreak, let nextIndex = nextNonSpaceIndex {
+            // @ViewBuilder is at the start of the line (possibly with indentation)
             endIndex = nextIndex
+            // Also remove leading indentation
+            if hasLeadingSpace, attributeIndex > 1, tokens[attributeIndex - 2].isLinebreak {
+                startIndex = attributeIndex - 1
+            }
         } else if hasTrailingSpace {
             endIndex = attributeIndex + 1
-        }
-
-        if hasTrailingLinebreak, attributeIndex > 0 {
-            let prevIndex = attributeIndex - 1
-            if tokens[prevIndex].isSpace,
-               prevIndex > 0,
-               tokens[prevIndex - 1].isLinebreak
-            {
-                startIndex = prevIndex
-            }
         }
 
         removeTokens(in: startIndex ... endIndex)

@@ -989,6 +989,12 @@ extension UnicodeScalarView {
             }
         }
 
+        // `::` is always parsed as a single operator.
+        // `:` is not a valid operator head, so it must be handled specially here.
+        if readString("::") {
+            return .operator("::", .none)
+        }
+
         var start = self
         if var tail = readCharacter(where: isHead) {
             switch tail {
@@ -1687,7 +1693,7 @@ public func tokenize(_ source: String) -> [Token] {
         let prevToken: Token = tokens[i - 1]
         let type: OperatorType
         switch string {
-        case ":", "=", "->":
+        case ":", "::", "=", "->":
             type = .infix
         case ".":
             var _type = OperatorType.prefix
@@ -1973,9 +1979,9 @@ public func tokenize(_ source: String) -> [Token] {
                     convertOpeningChevronToOperator(at: scopeIndex)
                     processToken()
                     return
-                case .keyword("throws"):
+                case .keyword("throws"), .keyword("repeat"), .keyword("let"):
                     break
-                case .keyword where !token.isAttribute && token != .keyword("repeat"), .endOfScope:
+                case .keyword where !token.isAttribute, .endOfScope:
                     // If we encountered a keyword other than `repeat`, or closing scope
                     // token that wasn't > then the opening < must have been an operator after all
                     convertOpeningChevronToOperator(at: scopeIndex)

@@ -1156,6 +1156,30 @@ final class WrapArgumentsTests: XCTestCase {
         testFormatting(for: input, rule: .wrapArguments, options: options)
     }
 
+    func testWrapArgumentsDoesNotAffectAsyncFunctionDeclaration() {
+        let input = """
+        func foo(
+            bar _: Int,
+            baz _: String
+        ) async {}
+        """
+        let options = FormatOptions(wrapArguments: .afterFirst, wrapParameters: .preserve)
+        testFormatting(for: input, rule: .wrapArguments, options: options)
+    }
+
+    func testWrapParametersUsedForAsyncFunctionDeclaration() {
+        let input = """
+        func testAsync(first: String,
+                       second: String,
+                       third: String) async {
+            debugPrint("")
+        }
+        """
+        let options = FormatOptions(wrapArguments: .beforeFirst, wrapParameters: .afterFirst)
+        testFormatting(for: input, rule: .wrapArguments, options: options,
+                       exclude: [.unusedArguments, .wrapMultilineStatementBraces])
+    }
+
     // MARK: afterFirst
 
     func testWrapArgumentsConvertBeforeFirstToAfterFirst() {
@@ -3007,6 +3031,82 @@ final class WrapArgumentsTests: XCTestCase {
         )
     }
 
+    func testWrapConditionsAfterFirstGuardElseOnOwnLine() {
+        let input = """
+        guard let something = complexCall(...),
+              isOnline,
+              shouldReallyRefresh
+        else { return }
+        """
+        testFormatting(
+            for: input, rule: .wrapArguments,
+            options: FormatOptions(wrapConditions: .afterFirst),
+            exclude: [.wrapConditionalBodies]
+        )
+    }
+
+    func testWrapConditionsBeforeFirstGuardElseOnOwnLine() {
+        let input = """
+        guard
+            let something = complexCall(...),
+            isOnline,
+            shouldReallyRefresh
+        else { return }
+        """
+        testFormatting(
+            for: input, rule: .wrapArguments,
+            options: FormatOptions(wrapConditions: .beforeFirst),
+            exclude: [.wrapConditionalBodies]
+        )
+    }
+
+    func testWrapConditionsAfterFirstGuardElseOnOwnLineIndented() {
+        let input = """
+        func foo() {
+            guard let something = complexCall(...),
+                  isOnline,
+                  shouldReallyRefresh
+            else { return }
+        }
+        """
+        testFormatting(
+            for: input, rule: .wrapArguments,
+            options: FormatOptions(wrapConditions: .afterFirst),
+            exclude: [.wrapConditionalBodies]
+        )
+    }
+
+    func testWrapConditionsAfterFirstIfBraceOnOwnLine() {
+        let input = """
+        if let something = complexCall(...),
+           isOnline,
+           shouldReallyRefresh
+        {
+            print("True branch")
+        }
+        """
+        testFormatting(
+            for: input, rule: .wrapArguments,
+            options: FormatOptions(wrapConditions: .afterFirst)
+        )
+    }
+
+    func testWrapConditionsBeforeFirstIfBraceOnOwnLine() {
+        let input = """
+        if
+            let something = complexCall(...),
+            isOnline,
+            shouldReallyRefresh
+        {
+            print("True branch")
+        }
+        """
+        testFormatting(
+            for: input, rule: .wrapArguments,
+            options: FormatOptions(wrapConditions: .beforeFirst)
+        )
+    }
+
     func testWrapPartiallyWrappedFunctionCall() {
         let input = """
         func foo(
@@ -3133,5 +3233,42 @@ final class WrapArgumentsTests: XCTestCase {
         testFormatting(for: input, rule: .wrapArguments, options: FormatOptions(
             wrapArguments: .beforeFirst, closingParenPosition: .balanced, maxWidth: 1000
         ))
+    }
+
+    func testNoWrapEmptyFuncParensBeforeFirst() {
+        let input = """
+        func aVeryLongFunctionNameThatExceedsTheMaxWidthLimit() {
+            foo()
+        }
+        """
+        let options = FormatOptions(wrapParameters: .beforeFirst, maxWidth: 40)
+        testFormatting(for: input, rule: .wrapArguments, options: options)
+    }
+
+    func testNoWrapEmptyInitParensBeforeFirst() {
+        let input = """
+        init() {
+            foo()
+        }
+        """
+        let options = FormatOptions(wrapParameters: .beforeFirst, maxWidth: 8)
+        testFormatting(for: input, rule: .wrapArguments, options: options,
+                       exclude: [.wrap])
+    }
+
+    func testUnwrapAlreadyWrappedEmptyFuncParensBeforeFirst() {
+        let input = """
+        func aVeryLongFunctionNameThatExceedsTheMaxWidthLimit(
+        ) {
+            foo()
+        }
+        """
+        let output = """
+        func aVeryLongFunctionNameThatExceedsTheMaxWidthLimit() {
+            foo()
+        }
+        """
+        let options = FormatOptions(wrapParameters: .beforeFirst, maxWidth: 40)
+        testFormatting(for: input, output, rule: .wrapArguments, options: options)
     }
 }

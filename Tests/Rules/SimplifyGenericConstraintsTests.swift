@@ -435,4 +435,124 @@ final class SimplifyGenericConstraintsTests: XCTestCase {
         """
         testFormatting(for: input, rule: .simplifyGenericConstraints, exclude: [.indent, .emptyBraces, .braces])
     }
+
+    func testPreserveProtocolMethodWithWhereClauseButNoGenericParameters() {
+        // Issue #2366: Protocol methods may have where clauses referencing associated types
+        // rather than generic parameters defined on the function itself
+        let input = """
+        protocol DatabaseMigrator {
+            func runDatabaseMigration(migration: T.Type, version: Int, databaseVersions: inout [Int]) throws where T: Migration
+        }
+        """
+        testFormatting(for: input, rule: .simplifyGenericConstraints)
+    }
+
+    func testPreserveProtocolMethodWithAssociatedTypeConstraint() {
+        // Issue #2366: Protocol with associatedtype - the function has no generic
+        // parameters but has a where clause referencing the associated type
+        let input = """
+        protocol Migration {}
+
+        protocol DatabaseMigrator {
+            associatedtype T
+            func runDatabaseMigration(migration: T.Type, version: Int, databaseVersions: inout [Int]) throws where T: Migration
+        }
+        """
+        testFormatting(for: input, rule: .simplifyGenericConstraints)
+    }
+
+    func testPreserveMethodWithWhereClauseReferencingOuterGeneric() {
+        // Function with no generic parameters referencing generic from containing type
+        let input = """
+        struct Container<T> {
+            func process() where T: Codable {}
+        }
+        """
+        testFormatting(for: input, rule: .simplifyGenericConstraints)
+    }
+
+    func testSimplifyProtocolMethodWithGenerics() {
+        // Protocol method with <T> generic parameters should be simplified
+        let input = """
+        protocol DatabaseMigrator {
+            func runDatabaseMigration<T>(migration: T.Type, version: Int, databaseVersions: inout [Int]) throws where T: Migration
+        }
+        """
+        let output = """
+        protocol DatabaseMigrator {
+            func runDatabaseMigration<T: Migration>(migration: T.Type, version: Int, databaseVersions: inout [Int]) throws
+        }
+        """
+        testFormatting(for: input, output, rule: .simplifyGenericConstraints)
+    }
+
+    func testSimplifyProtocolMethodWithGenericsFollowedByAnotherMethod() {
+        // Issue #2366: Protocol method with <T> should be simplified even when followed by another method
+        let input = """
+        protocol DatabaseMigrator {
+            func runDatabaseMigration<T>(migration: T.Type, version: Int, databaseVersions: inout [Int]) throws where T: Migration
+            func migrateDatabase(version: Int, databaseVersions: inout [Int], migration: () throws -> Void) throws
+        }
+        """
+        let output = """
+        protocol DatabaseMigrator {
+            func runDatabaseMigration<T: Migration>(migration: T.Type, version: Int, databaseVersions: inout [Int]) throws
+            func migrateDatabase(version: Int, databaseVersions: inout [Int], migration: () throws -> Void) throws
+        }
+        """
+        testFormatting(for: input, output, rule: .simplifyGenericConstraints)
+    }
+
+    func testDeduplicateConstraintAlreadyPresentInline() {
+        // Constraint appears both inline and in the where clause; should not duplicate
+        let input = """
+        func test<T: Service>(
+            service: T.Type
+        ) async throws -> String? where T: Service {
+            return nil
+        }
+        """
+        let output = """
+        func test<T: Service>(
+            service: T.Type
+        ) async throws -> String? {
+            return nil
+        }
+        """
+        testFormatting(for: input, output, rule: .simplifyGenericConstraints, exclude: [.unusedArguments])
+    }
+
+    func testDeduplicateDuplicateConstraintsInWhereClause() {
+        // Same constraint listed twice in the where clause; should add only once
+        let input = """
+        func test<T>(_ value: T) where T: Service, T: Service {}
+        """
+        let output = """
+        func test<T: Service>(_ value: T) {}
+        """
+        testFormatting(for: input, output, rule: .simplifyGenericConstraints, exclude: [.unusedArguments])
+    }
+
+    func testSameConstraintOnDifferentTypesInWhereClauseNotDeduplicated() {
+        // T: Service and U: Service are constraints on different types — both should be moved inline
+        let input = """
+        func test<T, U>(_ a: T, _ b: U) where T: Service, U: Service {}
+        """
+        let output = """
+        func test<T: Service, U: Service>(_ a: T, _ b: U) {}
+        """
+        testFormatting(for: input, output, rule: .simplifyGenericConstraints, exclude: [.unusedArguments])
+    }
+
+    func testSameConstraintInlineForOneTypeAndWhereClauseForAnotherNotDeduplicated() {
+        // T already has Service inline; U has Service in the where clause.
+        // The existing T: Service inline should not prevent U: Service from being moved inline.
+        let input = """
+        func test<T: Service, U>(_ a: T, _ b: U) where U: Service {}
+        """
+        let output = """
+        func test<T: Service, U: Service>(_ a: T, _ b: U) {}
+        """
+        testFormatting(for: input, output, rule: .simplifyGenericConstraints, exclude: [.unusedArguments])
+    }
 }
