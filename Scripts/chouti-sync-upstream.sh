@@ -166,10 +166,27 @@ write_github_output() {
     fi
 }
 
+resolve_gh_repo() {
+    # gh defaults to the "upstream" remote (nicklockwood/SwiftFormat); releases must be on origin (fork).
+    if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
+        echo "$GITHUB_REPOSITORY"
+        return
+    fi
+    local url
+    url="$(git remote get-url origin)"
+    if [[ "$url" =~ github\.com[:/]([^/]+)/([^/.]+) ]]; then
+        echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+        return
+    fi
+    fail "Could not determine GitHub repo for gh release (set GITHUB_REPOSITORY or check origin remote)"
+}
+
 publish_release() {
     local upstream_tag="$1"
     local chouti_tag="${upstream_tag}-chouti"
-    local release_url="https://github.com/nicklockwood/SwiftFormat/releases/tag/${upstream_tag}"
+    local gh_repo release_url
+    gh_repo="$(resolve_gh_repo)"
+    release_url="https://github.com/nicklockwood/SwiftFormat/releases/tag/${upstream_tag}"
 
     for asset in Products/swiftformat.zip Products/swiftformat-arm64.zip Products/swiftformat-x86_64.zip; do
         [[ -f "$asset" ]] || fail "Missing release asset: $asset"
@@ -180,7 +197,7 @@ publish_release() {
         fail "git push origin $TARGET_BRANCH failed. Common causes: missing workflows: write permission on GITHUB_TOKEN (upstream merges .github/workflows), branch protection, or use secret CHOUTI_RELEASE_TOKEN (PAT)."
     fi
 
-    log "Creating GitHub release $chouti_tag"
+    log "Creating GitHub release $chouti_tag on $gh_repo"
     if [[ -z "${GH_TOKEN:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
         export GH_TOKEN="$GITHUB_TOKEN"
     fi
@@ -188,13 +205,14 @@ publish_release() {
     : "${GH_TOKEN:?GH_TOKEN (or GITHUB_TOKEN) is required for gh release create}"
 
     if ! gh release create "$chouti_tag" \
+        --repo "$gh_repo" \
         --target "$TARGET_BRANCH" \
         --title "Merged from upstream (${upstream_tag})" \
         --notes "Merged ${release_url}" \
         Products/swiftformat.zip \
         Products/swiftformat-arm64.zip \
         Products/swiftformat-x86_64.zip; then
-        fail "gh release create failed for $chouti_tag"
+        fail "gh release create failed for $chouti_tag on $gh_repo"
     fi
 }
 
