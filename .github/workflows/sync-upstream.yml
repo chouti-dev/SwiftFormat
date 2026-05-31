@@ -52,7 +52,9 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
+          # Use CHOUTI_RELEASE_TOKEN (PAT) if GITHUB_TOKEN is blocked by branch protection.
+          token: ${{ secrets.CHOUTI_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Resolve run mode
         id: mode
@@ -71,6 +73,8 @@ jobs:
         env:
           DRY_RUN: ${{ steps.mode.outputs.dry_run }}
           UPSTREAM_TAG: ${{ github.event.inputs.upstream_version }}
+          GH_TOKEN: ${{ secrets.CHOUTI_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CHOUTI_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           chmod +x Scripts/chouti-sync-upstream.sh
           args=()

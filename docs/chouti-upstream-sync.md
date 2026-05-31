@@ -59,6 +59,7 @@ Upstream’s [`release.yml`](../.github/workflows/release.yml) is skipped for `*
 
 - **Merge conflict**: fix on `master` locally, push, re-run workflow.
 - **Tests fail**: fix ChouTi fork code or wait for upstream; do not enable `CHOUTI_AUTO_SYNC` until green.
+- **`git push` / publish fails** (dry run OK, publish fails): usually **branch protection** or **required signed commits** blocking `GITHUB_TOKEN`. Fix: repo **Settings → Actions → General → Workflow permissions** = read/write; add bypass for GitHub Actions on `master`; or create a PAT with `contents` scope, add repo secret **`CHOUTI_RELEASE_TOKEN`**, re-run.
 
 ## Local `git fetch` tag warnings
 

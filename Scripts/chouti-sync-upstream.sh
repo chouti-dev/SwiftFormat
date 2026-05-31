@@ -171,20 +171,31 @@ publish_release() {
     local chouti_tag="${upstream_tag}-chouti"
     local release_url="https://github.com/nicklockwood/SwiftFormat/releases/tag/${upstream_tag}"
 
-    log "Pushing $TARGET_BRANCH to origin"
-    git push origin "$TARGET_BRANCH"
+    for asset in Products/swiftformat.zip Products/swiftformat-arm64.zip Products/swiftformat-x86_64.zip; do
+        [[ -f "$asset" ]] || fail "Missing release asset: $asset"
+    done
 
-    log "Creating tag $chouti_tag"
-    git tag "$chouti_tag"
-    git push origin "$chouti_tag"
+    log "Pushing $TARGET_BRANCH to origin"
+    if ! git push origin "$TARGET_BRANCH"; then
+        fail "git push origin $TARGET_BRANCH failed. If the repo has branch protection, add a PAT as secret CHOUTI_RELEASE_TOKEN and allow it to bypass protection."
+    fi
 
     log "Creating GitHub release $chouti_tag"
-    gh release create "$chouti_tag" \
+    if [[ -z "${GH_TOKEN:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
+        export GH_TOKEN="$GITHUB_TOKEN"
+    fi
+    command -v gh >/dev/null 2>&1 || fail "gh CLI not found on runner"
+    : "${GH_TOKEN:?GH_TOKEN (or GITHUB_TOKEN) is required for gh release create}"
+
+    if ! gh release create "$chouti_tag" \
+        --target "$TARGET_BRANCH" \
         --title "Merged from upstream (${upstream_tag})" \
         --notes "Merged ${release_url}" \
         Products/swiftformat.zip \
         Products/swiftformat-arm64.zip \
-        Products/swiftformat-x86_64.zip
+        Products/swiftformat-x86_64.zip; then
+        fail "gh release create failed for $chouti_tag"
+    fi
 }
 
 main() {
