@@ -1,6 +1,6 @@
 # Sync chouti-dev/SwiftFormat with upstream SwiftFormat releases.
 
-name: sync upstream
+name: Sync upstream
 
 on:
   workflow_dispatch:
@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   sync:
-    name: Sync, test, and release
+    name: Sync upstream
     runs-on: macos-latest
     if: >-
       github.event_name == 'workflow_dispatch'
