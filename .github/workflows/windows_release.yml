@@ -12,6 +12,7 @@ on:
 jobs:
   build:
     name: Build SwiftFormat for Windows
+    if: github.repository == 'nicklockwood/SwiftFormat'
     runs-on: windows-latest
 
     strategy:
@@ -72,9 +73,9 @@ jobs:
 
   upload:
     name: Upload release artifacts
+    if: github.repository == 'nicklockwood/SwiftFormat' && always()
     runs-on: ubuntu-latest
     needs: [build]
-    if: always()
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v5

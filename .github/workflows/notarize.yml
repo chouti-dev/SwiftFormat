@@ -12,6 +12,7 @@ on:
 jobs:
   build-and-notarize:
     name: Build and Notarize SwiftFormat for Xcode
+    if: github.repository == 'nicklockwood/SwiftFormat'
     runs-on: macos-15
     
     steps:

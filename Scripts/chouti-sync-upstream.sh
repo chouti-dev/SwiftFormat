@@ -1,15 +1,16 @@
 #!/bin/bash
 #
 # Non-interactive upstream sync for ChouTi SwiftFormat fork.
-# Used by .github/workflows/sync-upstream.yml and for local dry runs.
+# Used by .github/workflows/sync-upstream.yml
 #
 # Usage:
-#   ./Scripts/chouti-sync-upstream.sh [--dry-run] [--upstream-tag VERSION]
+#   ./Scripts/chouti-sync-upstream.sh [--upstream-tag VERSION]
 #
 # Environment:
-#   UPSTREAM_REPO   default: nicklockwood/SwiftFormat
-#   TARGET_BRANCH   default: master
+#   UPSTREAM_REPO     default: nicklockwood/SwiftFormat
+#   TARGET_BRANCH     default: master
 #   CHOUTI_SHELL_REPO default: https://github.com/honghaoz/chouti-shell.git
+#   GH_TOKEN / GITHUB_TOKEN / CHOUTI_RELEASE_TOKEN for push and gh release
 #
 
 set -euo pipefail
@@ -17,28 +18,22 @@ set -euo pipefail
 UPSTREAM_REPO="${UPSTREAM_REPO:-nicklockwood/SwiftFormat}"
 TARGET_BRANCH="${TARGET_BRANCH:-master}"
 CHOUTI_SHELL_REPO="${CHOUTI_SHELL_REPO:-https://github.com/honghaoz/chouti-shell.git}"
-DRY_RUN="${DRY_RUN:-false}"
 
 usage() {
     cat <<'EOF'
 Usage: chouti-sync-upstream.sh [options]
 
 Options:
-  --dry-run              Merge, test, and build locally but do not push, tag, or release.
   --upstream-tag TAG     Merge this upstream tag instead of the latest semver tag.
   -h, --help             Show this help.
 
 Environment:
-  UPSTREAM_REPO, TARGET_BRANCH, CHOUTI_SHELL_REPO, DRY_RUN
+  UPSTREAM_REPO, TARGET_BRANCH, CHOUTI_SHELL_REPO, GITHUB_REPOSITORY, GH_TOKEN
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dry-run)
-            DRY_RUN=true
-            shift
-            ;;
         --upstream-tag)
             UPSTREAM_TAG="${2:?--upstream-tag requires a value}"
             shift 2
@@ -161,7 +156,6 @@ write_github_output() {
         {
             echo "upstream_tag=$upstream_tag"
             echo "chouti_tag=$chouti_tag"
-            echo "dry_run=$DRY_RUN"
         } >>"$GITHUB_OUTPUT"
     fi
 }
@@ -234,14 +228,6 @@ main() {
     merge_upstream_tag "$upstream_tag"
     run_tests
     build_products
-
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log "Dry run complete — merge, tests, and build succeeded; no push or release."
-        log "Products:"
-        ls -la Products/ || true
-        exit 0
-    fi
-
     publish_release "$upstream_tag"
     log "Published release ${upstream_tag}-chouti"
 }

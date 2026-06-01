@@ -1,35 +1,15 @@
-# Sync ChouTi fork with upstream SwiftFormat releases.
-#
-# Testing (safe — default):
-#   Actions → "Sync upstream (ChouTi)" → Run workflow
-#   - Run mode: Test (dry run) (default)
-#   - Upstream version: optional (e.g. 0.61.1)
-#
-# Production:
-#   1. Run once with Test (dry run) and confirm the job succeeds.
-#   2. Run with Publish release to push master, tag, and publish.
-#   3. Optional: set repository variable CHOUTI_AUTO_SYNC=true to enable daily cron.
-#
-# Requires: contents: write. Publish also needs secret CHOUTI_RELEASE_TOKEN (PAT) — GITHUB_TOKEN cannot push .github/workflows.
+# Sync chouti-dev/SwiftFormat with upstream SwiftFormat releases.
 
-name: Sync upstream (ChouTi)
+name: sync upstream
 
 on:
   workflow_dispatch:
     inputs:
-      run_mode:
-        description: What this run should do
-        type: choice
-        options:
-          - Test (dry run)
-          - Publish release
-        default: Test (dry run)
       upstream_version:
-        description: Pin an upstream version (e.g. 0.61.1). Leave blank for latest.
+        description: Upstream version (e.g. 0.61.1). Leave blank for latest.
         type: string
         required: false
   schedule:
-    # Runs only when repository variable CHOUTI_AUTO_SYNC is "true" (see job `if`).
     - cron: "0 14 * * *" # every day at 14:00 UTC (6:00 PST, 7:00 PDT)
 
 concurrency:
@@ -43,18 +23,13 @@ jobs:
   sync:
     name: Sync, test, and release
     runs-on: macos-latest
-    # Cron is opt-in via repo variable; manual runs always allowed.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      vars.CHOUTI_AUTO_SYNC == 'true'
+      github.event_name == 'workflow_dispatch'
     steps:
-      - name: Require release token for publish
-        if: >-
-          (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'Publish release') ||
-          (github.event_name == 'schedule' && vars.CHOUTI_AUTO_SYNC == 'true')
+      - name: Require release token
         run: |
           if [[ -z "${{ secrets.CHOUTI_RELEASE_TOKEN }}" ]]; then
-            echo "::error::Add CHOUTI_RELEASE_TOKEN: classic PAT (repo+workflow) OR fine-grained (Contents+Actions+Workflows write, org authorized)."
+            echo "::error::Add CHOUTI_RELEASE_TOKEN (fine-grained PAT: Contents + Actions + Workflows write, org authorized)."
             exit 1
           fi
 
@@ -63,62 +38,30 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
-          token: ${{ secrets.CHOUTI_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Resolve run mode
-        id: mode
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            case "${{ inputs.run_mode }}" in
-              "Test (dry run)") echo "dry_run=true" >> "$GITHUB_OUTPUT" ;;
-              "Publish release") echo "dry_run=false" >> "$GITHUB_OUTPUT" ;;
-              *) echo "dry_run=true" >> "$GITHUB_OUTPUT" ;;
-            esac
-          else
-            echo "dry_run=false" >> "$GITHUB_OUTPUT"
-          fi
+          token: ${{ secrets.CHOUTI_RELEASE_TOKEN }}
 
       - name: Sync upstream
         env:
-          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
           UPSTREAM_TAG: ${{ github.event.inputs.upstream_version }}
-          GH_TOKEN: ${{ secrets.CHOUTI_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.CHOUTI_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CHOUTI_RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CHOUTI_RELEASE_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           chmod +x Scripts/chouti-sync-upstream.sh
           args=()
-          if [[ "$DRY_RUN" == "true" ]]; then
-            args+=(--dry-run)
-          fi
           if [[ -n "$UPSTREAM_TAG" ]]; then
             args+=(--upstream-tag "$UPSTREAM_TAG")
           fi
           ./Scripts/chouti-sync-upstream.sh "${args[@]}"
 
-      - name: Upload build artifacts (dry run)
-        if: steps.mode.outputs.dry_run == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: chouti-swiftformat-products
-          path: |
-            Products/swiftformat
-            Products/swiftformat.zip
-            Products/swiftformat-arm64.zip
-            Products/swiftformat-x86_64.zip
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Job summary
         if: always()
         run: |
           {
-            echo "## ChouTi upstream sync"
+            echo "## Upstream Sync"
             echo ""
             echo "| Setting | Value |"
             echo "| --- | --- |"
-            echo "| Run mode | \`${{ inputs.run_mode || 'Publish release (scheduled)' }}\` |"
             echo "| Upstream version | \`${{ github.event.inputs.upstream_version || 'latest' }}\` |"
-            echo "| Dry run | \`${{ steps.mode.outputs.dry_run }}\` |"
-            echo "| trigger | \`${{ github.event_name }}\` |"
+            echo "| Trigger | \`${{ github.event_name }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"

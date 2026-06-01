@@ -5,7 +5,7 @@ name: Build Release Artifacts
 jobs:
   macos:
     name: Build macOS binary
-    if: ${{ !endsWith(github.event.release.tag_name, '-chouti') }}
+    if: ${{ github.repository == 'nicklockwood/SwiftFormat' && !endsWith(github.event.release.tag_name, '-chouti') }}
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -31,7 +31,7 @@ jobs:
 
   linux:
     name: Build SwiftFormat for Linux
-    if: ${{ !endsWith(github.event.release.tag_name, '-chouti') }}
+    if: ${{ github.repository == 'nicklockwood/SwiftFormat' && !endsWith(github.event.release.tag_name, '-chouti') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -70,7 +70,7 @@ jobs:
 
   upload:
     name: Upload release artifacts
-    if: ${{ !endsWith(github.event.release.tag_name, '-chouti') }}
+    if: ${{ github.repository == 'nicklockwood/SwiftFormat' && !endsWith(github.event.release.tag_name, '-chouti') }}
     runs-on: ubuntu-latest
     needs: [macos, linux]
     steps:
