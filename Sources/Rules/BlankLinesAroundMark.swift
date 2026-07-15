@@ -18,7 +18,10 @@ public extension FormatRule {
         formatter.forEachToken { i, token in
             guard case let .commentBody(comment) = token, comment.hasPrefix("MARK:"),
                   let startIndex = formatter.index(of: .nonSpace, before: i),
-                  formatter.tokens[startIndex] == .startOfScope("//") else { return }
+                  formatter.tokens[startIndex] == .startOfScope("//")
+            else {
+                return
+            }
             if let nextIndex = formatter.index(of: .linebreak, after: i),
                let nextToken = formatter.next(.nonSpace, after: nextIndex),
                !nextToken.isLinebreak, nextToken != .endOfScope("}"),
@@ -38,7 +41,8 @@ public extension FormatRule {
                     // would not be removed by that rule (i.e. in a type body with insert or preserve option)
                     guard let braceIndex = formatter.index(of: .nonSpaceOrComment, before: lastIndex),
                           formatter.isStartOfTypeBody(at: braceIndex),
-                          formatter.options.typeBlankLines != .remove
+                          formatter.options.typeBlankLines != .remove,
+                          formatter.options.typeBlankLines != .endOnly
                     else { return }
                 }
                 formatter.insertLinebreak(at: lastIndex)
@@ -47,14 +51,6 @@ public extension FormatRule {
     } examples: {
         """
         ```diff
-          func foo() {
-            // foo
-          }
-          // MARK: bar
-          func bar() {
-            // bar
-          }
-
           func foo() {
             // foo
           }

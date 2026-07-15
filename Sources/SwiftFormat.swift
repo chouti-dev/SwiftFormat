@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.61.1"
+let swiftFormatVersion = "0.62.1"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -385,7 +385,7 @@ private func parseConfigArguments(in inputURL: URL, options: Options, logger: Lo
         if !tempOptions.shouldSkipFile(inputURL) {
             let versionString = try String(contentsOf: versionFile, encoding: .utf8)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            if args.first(where: { $0["swift-version"] != nil }) != nil {
+            if args.contains(where: { $0["swift-version"] != nil }) {
                 logger?("Ignoring swift-version file at \(versionFile.path)")
             } else if Version(rawValue: versionString) != nil {
                 logger?("Reading swift-version file at \(versionFile.path) (version \(versionString))")
@@ -507,7 +507,9 @@ public func newOffset(for offset: SourceOffset, in tokens: [Token], tabWidth: In
 public func parsingError(for tokens: [Token], options: FormatOptions, allowErrorsInFragments: Bool = true) -> FormatError? {
     guard let index = tokens.firstIndex(where: {
         guard (options.fragment && allowErrorsInFragments) || !$0.isError else { return true }
-        guard !options.ignoreConflictMarkers, case let .operator(string, _) = $0 else { return false }
+        guard !options.ignoreConflictMarkers, case let .operator(string, _) = $0 else {
+            return false
+        }
         return string.hasPrefix("<<<<<") || string.hasPrefix("=====") || string.hasPrefix(">>>>>")
     }) else {
         return nil

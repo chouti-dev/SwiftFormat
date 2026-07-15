@@ -255,7 +255,7 @@ final class DocCommentsTests: XCTestCase {
         }
         """
 
-        let options = FormatOptions(preserveDocComments: true)
+        let options = FormatOptions(docComments: .preserve)
         testFormatting(for: input, output, rule: .docComments, options: options, exclude: [.spaceInsideComments, .redundantVariable, .propertyTypes])
     }
 
@@ -405,6 +405,52 @@ final class DocCommentsTests: XCTestCase {
         """
 
         testFormatting(for: input, output, rule: .docComments)
+    }
+
+    func testDoesntConvertCommentBeforeCommaDelimitedEnumCasesWhenPreviousGroupIsPreserved() {
+        let input = """
+        // Infix operators
+        enum InfixOperator: String {
+            // Arithmetic operators
+            case plus = "+"
+            case minus = "-"
+            // Comparison operators
+            case lt = "<"
+            case gt = ">"
+            // Boolean operators
+            case and, or
+        }
+        """
+
+        let output = """
+        /// Infix operators
+        enum InfixOperator: String {
+            // Arithmetic operators
+            case plus = "+"
+            case minus = "-"
+            // Comparison operators
+            case lt = "<"
+            case gt = ">"
+            // Boolean operators
+            case and, or
+        }
+        """
+
+        testFormatting(for: input, output, rule: .docComments)
+    }
+
+    func testDoesntConvertCommentBeforeSingleEnumCaseWhenPreviousGroupIsPreserved() {
+        let input = """
+        enum InfixOperator: String {
+            // Comparison operators
+            case lt = "<"
+            case gt = ">"
+            // Single case group
+            case and
+        }
+        """
+
+        testFormatting(for: input, rule: .docComments)
     }
 
     func testDoesntConvertAnnotationCommentsToDocComments() {
@@ -714,5 +760,83 @@ final class DocCommentsTests: XCTestCase {
         """
 
         testFormatting(for: input, output, rule: .docComments)
+    }
+
+    func testBeforeNonLocalDeclarationsConvertsTopLevelComments() {
+        let input = """
+        // A top-level type
+        struct Foo {
+            // A property in a type
+            let bar: Int
+
+            // A method in a type
+            func baz() {
+                // A local variable
+                let quux = 1
+                print(quux)
+            }
+        }
+
+        // A top-level function
+        func topLevel() {}
+        """
+
+        let output = """
+        /// A top-level type
+        struct Foo {
+            /// A property in a type
+            let bar: Int
+
+            /// A method in a type
+            func baz() {
+                // A local variable
+                let quux = 1
+                print(quux)
+            }
+        }
+
+        /// A top-level function
+        func topLevel() {}
+        """
+
+        let options = FormatOptions(docComments: .beforeNonLocalDeclarations)
+        testFormatting(for: input, output, rule: .docComments, options: options)
+    }
+
+    func testBeforeNonLocalDeclarationsDoesNotConvertNestedFunctionComments() {
+        let input = """
+        func parentFunction() {
+            // Nested function inside parent function
+            func nestedFunction() {
+                print("foo bar")
+            }
+        }
+        """
+
+        let options = FormatOptions(docComments: .beforeNonLocalDeclarations)
+        testFormatting(for: input, rule: .docComments, options: options)
+    }
+
+    func testBeforeNonLocalDeclarationsConvertsDocCommentOnNestedFunctionToRegularComment() {
+        let input = """
+        func parentFunction() {
+            /// Nested function inside parent function
+            func nestedFunction() {
+                print("foo bar")
+            }
+        }
+        """
+
+        let output = """
+        func parentFunction() {
+            // Nested function inside parent function
+            func nestedFunction() {
+                print("foo bar")
+            }
+        }
+        """
+
+        let options = FormatOptions(docComments: .beforeNonLocalDeclarations)
+        testFormatting(for: input, output, rule: .docComments, options: options)
     }
 }

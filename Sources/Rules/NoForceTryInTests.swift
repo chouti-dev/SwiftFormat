@@ -24,7 +24,9 @@ public extension FormatRule {
                 guard let nextTokenIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: index)
                 else { return }
                 let nextToken = formatter.tokens[nextTokenIndex]
-                if nextToken != .operator("!", .postfix) { continue }
+                if nextToken != .operator("!", .postfix) {
+                    continue
+                }
 
                 // Only remove the `!` if we are not within a closure or nested function,
                 // where it's not safe to just remove the `!` and make our function throw.
@@ -42,25 +44,27 @@ public extension FormatRule {
     } examples: {
         """
         ```diff
-            import Testing
+          import Testing
 
-            struct MyFeatureTests {
-        -       @Test func doSomething() {
-        +       @Test func doSomething() throws {
-        -           try! MyFeature().doSomething()
-        +           try MyFeature().doSomething()
+          struct MyFeatureTests {
+        -     @Test func doSomething() {
+        -         try! MyFeature().doSomething()
+        +     @Test func doSomething() throws {
+        +         try MyFeature().doSomething()
               }
-            }
+          }
+        ```
 
-            import XCTeset
+        ```diff
+          import XCTest
 
-            class MyFeatureTests: XCTestCase {
-        -       func test_doSomething() {
-        +       func test_doSomething() throws {
-        -           try! MyFeature().doSomething()
-        +           try MyFeature().doSomething()
+          class MyFeatureTests: XCTestCase {
+        -     func test_doSomething() {
+        -         try! MyFeature().doSomething()
+        +     func test_doSomething() throws {
+        +         try MyFeature().doSomething()
               }
-            }
+          }
         ```
         """
     }

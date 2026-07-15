@@ -10,7 +10,8 @@ import Foundation
 
 public extension FormatRule {
     static let preferCountWhere = FormatRule(
-        help: "Prefer `count(where:)` over `filter(_:).count`."
+        help: "Prefer `count(where:)` over `filter(_:).count`.",
+        disabledByDefault: true
     ) { formatter in
         // count(where:) was added in Swift 6.0
         guard formatter.options.swiftVersion >= "6.0" else { return }
@@ -61,7 +62,9 @@ public extension FormatRule {
             // Ensure the `.count` is a property access, not a method call.
             if let tokenAfterCount = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: countIndex),
                formatter.tokens[tokenAfterCount].isStartOfScope
-            { return }
+            {
+                return
+            }
 
             // Remove the `.count` property access.
             formatter.removeToken(at: countIndex)
@@ -102,17 +105,6 @@ public extension FormatRule {
         ```diff
         - planets.filter { !$0.moons.isEmpty }.count
         + planets.count(where: { !$0.moons.isEmpty })
-
-        - planets.filter { planet in
-        -     planet.moons.filter { moon in
-        -         moon.hasAtmosphere
-        -     }.count > 1
-        - }.count
-        + planets.count(where: { planet in
-        +     planet.moons.count(where: { moon in
-        +         moon.hasAtmosphere
-        +     }) > 1
-        + })
         ```
         """
     }

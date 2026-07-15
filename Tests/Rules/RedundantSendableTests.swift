@@ -55,6 +55,30 @@ final class RedundantSendableTests: XCTestCase {
         testFormatting(for: input, rules: [.redundantSendable], exclude: [.simplifyGenericConstraints])
     }
 
+    func testDoesNotRemoveSendableFromIndirectEnum() {
+        let input = """
+        indirect enum TestIndirect: Sendable {
+            case leaf
+            case node(TestIndirect)
+        }
+        """
+
+        testFormatting(for: input, rules: [.redundantSendable])
+    }
+
+    func testDoesNotRemoveSendableFromEnumWithIndirectCase() {
+        // Removing `Sendable` here produces a warning in Swift 6.3
+        // https://github.com/nicklockwood/SwiftFormat/issues/2563
+        let input = """
+        enum ValueType: Sendable, Hashable {
+            case any
+            indirect case list(ValueType)
+        }
+        """
+
+        testFormatting(for: input, rules: [.redundantSendable])
+    }
+
     func testIgnoresCommentsAndStrings() {
         let input = """
         func demo() {

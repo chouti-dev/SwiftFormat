@@ -543,6 +543,9 @@ public enum TypeBlankLines: String, CaseIterable {
     case remove
     case insert
     case preserve
+    case consistent
+    case startOnly = "start-only"
+    case endOnly = "end-only"
 }
 
 /// Treatment of semicolons
@@ -779,6 +782,16 @@ public enum PreferSynthesizedInitMode: Equatable, CustomStringConvertible {
     }
 }
 
+/// Doc comment placement mode
+public enum DocCommentMode: String, CaseIterable {
+    /// Preserve doc comments in their current form
+    case preserve
+    /// Use doc comments before all declarations
+    case beforeDeclarations = "before-declarations"
+    /// Use doc comments before non-local declarations only
+    case beforeNonLocalDeclarations = "before-non-local-declarations"
+}
+
 /// Configuration options for formatting. These aren't actually used by the
 /// Formatter class itself, but it makes them available to the format rules.
 public struct FormatOptions: CustomStringConvertible {
@@ -831,6 +844,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var xcodeIndentation: Bool
     public var tabWidth: Int
     public var maxWidth: Int
+    public var listWrapThreshold: Int?
     public var smartTabs: Bool
     public var assetLiteralWidth: AssetLiteralWidth
     public var noSpaceOperators: Set<String>
@@ -879,6 +893,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var emptyBracesSpacing: EmptyBracesSpacing
     public var acronyms: Set<String>
     public var preserveAcronyms: Set<String>
+    public var indentBlankLines: Bool
     public var indentStrings: Bool
     public var closureVoidReturn: ClosureVoidReturn
     public var enumNamespaces: EnumNamespacesMode
@@ -888,7 +903,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var wrapEffects: WrapEffects
     public var preserveAnonymousForEach: Bool
     public var preserveSingleLineForEach: Bool
-    public var preserveDocComments: Bool
+    public var docComments: DocCommentMode
     public var conditionalAssignmentOnlyAfterNewProperties: Bool
     public var typeDelimiterSpacing: DelimiterSpacing
     public var initCoderNil: Bool
@@ -910,6 +925,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var testCaseNameFormat: SwiftTestingNameFormat
     public var suiteNameFormat: SwiftTestingNameFormat
     public var testCaseAccessControl: Visibility
+    public var guardLikeIfStatements: Bool
 
     /// Deprecated
     public var indentComments: Bool
@@ -979,6 +995,7 @@ public struct FormatOptions: CustomStringConvertible {
                 xcodeIndentation: Bool = false,
                 tabWidth: Int = 0,
                 maxWidth: Int = 0,
+                listWrapThreshold: Int? = nil,
                 smartTabs: Bool = true,
                 assetLiteralWidth: AssetLiteralWidth = .visualWidth,
                 noSpaceOperators: Set<String> = [],
@@ -1027,6 +1044,7 @@ public struct FormatOptions: CustomStringConvertible {
                 emptyBracesSpacing: EmptyBracesSpacing = .noSpace,
                 acronyms: Set<String> = ["ID", "URL", "UUID"],
                 preserveAcronyms: Set<String> = [],
+                indentBlankLines: Bool = false,
                 indentStrings: Bool = false,
                 closureVoidReturn: ClosureVoidReturn = .remove,
                 enumNamespaces: EnumNamespacesMode = .always,
@@ -1036,7 +1054,7 @@ public struct FormatOptions: CustomStringConvertible {
                 wrapEffects: WrapEffects = .preserve,
                 preserveAnonymousForEach: Bool = false,
                 preserveSingleLineForEach: Bool = true,
-                preserveDocComments: Bool = false,
+                docComments: DocCommentMode = .beforeDeclarations,
                 conditionalAssignmentOnlyAfterNewProperties: Bool = true,
                 typeDelimiterSpacing: DelimiterSpacing = .spaceAfter,
                 initCoderNil: Bool = false,
@@ -1058,6 +1076,7 @@ public struct FormatOptions: CustomStringConvertible {
                 testCaseNameFormat: SwiftTestingNameFormat = .rawIdentifiers,
                 suiteNameFormat: SwiftTestingNameFormat = .preserve,
                 testCaseAccessControl: Visibility = .internal,
+                guardLikeIfStatements: Bool = false,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
@@ -1116,6 +1135,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.xcodeIndentation = xcodeIndentation
         self.tabWidth = tabWidth
         self.maxWidth = maxWidth
+        self.listWrapThreshold = listWrapThreshold
         self.smartTabs = smartTabs
         self.assetLiteralWidth = assetLiteralWidth
         self.noSpaceOperators = noSpaceOperators
@@ -1164,6 +1184,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.emptyBracesSpacing = emptyBracesSpacing
         self.acronyms = acronyms
         self.preserveAcronyms = preserveAcronyms
+        self.indentBlankLines = indentBlankLines
         self.indentStrings = indentStrings
         self.closureVoidReturn = closureVoidReturn
         self.enumNamespaces = enumNamespaces
@@ -1173,7 +1194,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.wrapEffects = wrapEffects
         self.preserveAnonymousForEach = preserveAnonymousForEach
         self.preserveSingleLineForEach = preserveSingleLineForEach
-        self.preserveDocComments = preserveDocComments
+        self.docComments = docComments
         self.conditionalAssignmentOnlyAfterNewProperties = conditionalAssignmentOnlyAfterNewProperties
         self.typeDelimiterSpacing = typeDelimiterSpacing
         self.initCoderNil = initCoderNil
@@ -1195,6 +1216,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.testCaseNameFormat = testCaseNameFormat
         self.suiteNameFormat = suiteNameFormat
         self.testCaseAccessControl = testCaseAccessControl
+        self.guardLikeIfStatements = guardLikeIfStatements
         self.indentComments = indentComments
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers

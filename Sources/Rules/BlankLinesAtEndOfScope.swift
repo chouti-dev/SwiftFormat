@@ -35,12 +35,18 @@ public extension FormatRule {
 
             if formatter.isStartOfTypeBody(at: startOfScope) {
                 switch formatter.options.typeBlankLines {
-                case .insert:
+                case .insert, .endOnly:
                     formatter.addTrailingBlankLineIfNeeded(in: rangeInsideScope)
-                case .remove:
+                case .remove, .startOnly:
                     formatter.removeTrailingBlankLinesIfPresent(in: rangeInsideScope)
                 case .preserve:
                     break
+                case .consistent:
+                    if formatter.tokens[rangeInsideScope].numberOfLeadingLinebreaks() >= 2 {
+                        formatter.addTrailingBlankLineIfNeeded(in: rangeInsideScope)
+                    } else {
+                        formatter.removeTrailingBlankLinesIfPresent(in: rangeInsideScope)
+                    }
                 }
             } else {
                 formatter.removeTrailingBlankLinesIfPresent(in: rangeInsideScope)
@@ -59,27 +65,38 @@ public extension FormatRule {
           }
         ```
 
-        ```diff
-          array = [
-            foo,
-            bar,
-            baz,
-        -
-          ]
-
-          array = [
-            foo,
-            bar,
-            baz,
-          ]
-        ```
-
         With `--type-blank-lines insert`:
 
         ```diff
           struct Foo {
               let bar: Bar
         +
+          }
+        ```
+
+        With `--type-blank-lines end-only`:
+
+        ```diff
+          struct Foo {
+              let bar: Bar
+        +
+          }
+        ```
+
+        With `--type-blank-lines consistent`:
+
+        ```diff
+          // Blank line at start → blank line added at end
+          struct Foo {
+
+              let bar: Bar
+        +
+          }
+
+          // No blank line at start → blank line removed at end
+          struct Bar {
+              let foo: Foo
+        -
           }
         ```
         """

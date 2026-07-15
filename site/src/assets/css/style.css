@@ -1,0 +1,552 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --nav-height: 63px; /* Fallback, updated dynamically by JS */
+  --color-background: #fff;
+  --color-text: #1d1d1f;
+  --color-heading: #000;
+  --color-muted: #86868b;
+  --color-link: #000;
+  --color-nav-link: #555;
+  --color-nav-background: #fff;
+  --color-sidebar-background: #fafafa;
+  --color-code-background: #f5f5f5;
+  --color-pre-background: #f6f8fa;
+  --color-border: #e5e5e5;
+  --color-subtle-border: #ddd;
+  --color-separator: #ccc;
+  --color-heading-anchor: #bbb;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Matches GitHub's dark theme canvas color (rgb(22, 27, 34)) rather than
+       a near-black background. */
+    --color-background: #161b22;
+    --color-text: #e6e6ea;
+    --color-heading: #fff;
+    --color-muted: #a0a0aa;
+    --color-link: #ffffff;
+    --color-nav-link: #c7c7cf;
+    --color-nav-background: #161b22;
+    --color-sidebar-background: #161b22;
+    --color-code-background: #232327;
+    --color-pre-background: #0d1117;
+    --color-border: #3e444c;
+    --color-subtle-border: #3e444c;
+    --color-separator: #3e444c;
+    --color-heading-anchor: #6f6f78;
+    color-scheme: dark;
+  }
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 26px;
+  margin: 0;
+  padding: 0;
+  color: var(--color-text);
+  background: var(--color-background);
+  /* Break long tokens (URLs, flags, type names) instead of overflowing. */
+  overflow-wrap: break-word;
+}
+
+/* Navigation */
+html {
+  /* Extra offset so anchor targets aren't hidden under the sticky nav. */
+  scroll-padding-top: calc(var(--nav-height) + 15px);
+}
+
+.top-nav {
+  background: var(--color-nav-background);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.nav-content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.brand-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+.nav-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-heading);
+  letter-spacing: -0.3px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nav-link {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-nav-link);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-link:hover {
+  color: var(--color-heading);
+}
+
+.nav-link.active {
+  color: var(--color-heading);
+  font-weight: 600;
+}
+
+.nav-separator {
+  color: var(--color-separator);
+  font-weight: 400;
+}
+
+/* Table-of-contents toggle button (shown only on mobile). */
+.toc-toggle {
+  display: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-heading);
+  background: none;
+  border: 1px solid var(--color-subtle-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+/* Page layout: table-of-contents sidebar + content */
+.page {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  column-gap: 3rem;
+  /* No top padding so the sidebar tucks flush under the header; flush left
+     too, with a gutter kept only on the right edge. */
+  padding: 0 2rem 0 0;
+}
+
+.page.no-toc {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+/* No TOC to show, so the sidebar would otherwise render as an empty
+   full-height box (it's still a grid item even with nothing in it). */
+.page.no-toc .toc-sidebar {
+  display: none;
+}
+
+.content {
+  /* Without an explicit width, a grid item with auto margins doesn't stretch
+     to fill its track - it shrinks to fit its content instead (like
+     inline-block), so wide unbreakable content (e.g. long code lines) would
+     blow out the layout instead of scrolling within it. */
+  width: 100%;
+  min-width: 0;
+  max-width: 860px;
+  /* Center the content within the remaining space to the right of the sidebar. */
+  margin: 0 auto;
+  /* Top padding lives here (not on .page) so the sidebar can reach the header. */
+  padding: 2rem 0;
+  /* Break long tokens (URLs, flags) instead of overflowing on narrow screens. */
+  overflow-wrap: break-word;
+}
+
+/* Keep images (logo, screenshots) within the content, never spilling off. */
+.content img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Table of contents sidebar */
+.toc-sidebar {
+  position: sticky;
+  top: var(--nav-height);
+  align-self: start;
+  /* Full-height panel so the right border reads as a continuous divider. */
+  min-height: calc(100vh - var(--nav-height));
+  max-height: calc(100vh - var(--nav-height));
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--color-sidebar-background);
+  border-right: 1px solid var(--color-border);
+  font-size: 14px;
+  line-height: 1.5;
+  /* Hide the scrollbar while keeping the sidebar scrollable. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.toc-sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+.toc-sidebar #markdown-toc {
+  list-style: none;
+  margin: 0;
+  /* A little breathing room on the left; the column gap handles the right. */
+  padding: 0.75rem 0.5rem 1.5rem 1rem;
+}
+
+.toc-sidebar #markdown-toc ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+}
+
+.toc-sidebar #markdown-toc li {
+  margin: 0.15rem 0;
+}
+
+.toc-sidebar #markdown-toc a {
+  display: block;
+  color: var(--color-nav-link);
+  text-decoration: none;
+  font-weight: 500;
+  /* Wrap long rule names instead of scrolling the sidebar horizontally. */
+  overflow-wrap: anywhere;
+}
+
+/* Bold text renders heavier on a dark background, so nested entries (e.g.
+   rule names under a category) use a lighter weight than in light mode. */
+@media (prefers-color-scheme: dark) {
+  .toc-sidebar #markdown-toc > li > ul a {
+    font-weight: 400;
+  }
+}
+
+.toc-sidebar #markdown-toc a:hover {
+  color: var(--color-heading);
+}
+
+/* The entry matching the current URL fragment is highlighted as selected. */
+.toc-sidebar #markdown-toc a.active {
+  color: var(--color-heading);
+  font-weight: 700;
+}
+
+/* Top-level TOC entries stand out a little more, since they group the page
+   into sections (e.g. rules.md's categories) - even ones with no nested
+   sub-entries of their own (e.g. a lone "Prerelease Rules" entry). On a flat
+   TOC with no categorization (e.g. index.md, tagged `toc_style: flat`),
+   every entry stays the regular gray instead. */
+.toc-sidebar:not(.toc-flat) > #markdown-toc > li > a {
+  color: var(--color-heading);
+  font-weight: 600;
+}
+
+/* Give grouped categories a bit of breathing room from the previous group,
+   but not before the first one. Flat TOCs are unaffected. */
+.toc-sidebar:not(.toc-flat) > #markdown-toc > li:not(:first-child) {
+  margin-top: 0.75rem;
+}
+
+strong,
+b {
+  font-weight: 700;
+}
+
+a {
+  color: var(--color-link);
+  font-weight: 700;
+  text-decoration-line: underline;
+  text-decoration-thickness: auto;
+  text-underline-offset: 2px;
+}
+
+h1 {
+  color: var(--color-heading);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 44px;
+  letter-spacing: -1.2px;
+}
+
+/* Muted label under a heading (e.g. a category's "Enabled by default", or
+   the homepage subtitle), set apart from regular body text so it reads as
+   metadata, not content. */
+.heading-note {
+  margin-top: -0.75rem;
+  color: var(--color-muted);
+  font-size: 15px;
+}
+
+/* Disclaimer box (e.g. the /rules/develop prerelease notice). */
+.callout {
+  margin: 0 0 1.5rem;
+  padding: 0.1rem 1.25rem;
+  background: var(--color-code-background);
+  border-left: 3px solid var(--color-heading);
+  border-radius: 4px;
+}
+
+/* `<br/>` is used throughout the generated pages as a manual spacer (e.g.
+   between rule examples, after callouts). The visible gap is dominated by
+   the empty line's own line-height, not by the paragraph's margin (which
+   collapses into the larger margins of neighboring elements like `pre`/`h2`
+   either way) - so shrink line-height directly to make the beat smaller. */
+.content p:has(> br:only-child) {
+  margin: 0;
+  line-height: 0.5em;
+}
+
+h2 {
+  color: var(--color-heading);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 30px;
+  letter-spacing: -0.52px;
+  margin-top: 2.5rem;
+}
+
+h3 {
+  color: var(--color-heading);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 26px;
+  letter-spacing: -0.44px;
+}
+
+/* Heading anchors: keep the heading looking plain, reveal a `#` on hover. */
+.content :is(h1, h2, h3, h4, h5, h6) .header-anchor {
+  color: inherit;
+  text-decoration: none;
+}
+
+.content :is(h1, h2, h3, h4, h5, h6) .header-anchor::after {
+  content: " #";
+  color: var(--color-heading-anchor);
+  opacity: 0;
+  font-weight: 400;
+}
+
+.content :is(h1, h2, h3, h4, h5, h6):hover .header-anchor::after,
+.content :is(h1, h2, h3, h4, h5, h6) .header-anchor:focus::after {
+  opacity: 1;
+}
+
+pre,
+code {
+  font-family: 'SF Mono', Monaco, Menlo, 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+:not(pre) > code {
+  background: var(--color-code-background);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+pre {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+  background: var(--color-pre-background);
+  border-radius: 6px;
+}
+
+/* Rouge's generated syntax.css sets its own `.highlight` background (to
+   match its theme's own canvas color), which otherwise wins over the rule
+   above since a class selector outranks a bare element selector. */
+pre.highlight {
+  background: var(--color-pre-background);
+}
+
+/* Rouge's generated github.dark theme sets a somewhat dim default token
+   color (#c9d1d9) for unhighlighted code text; lighten it to match the
+   rest of the page's body text. */
+@media (prefers-color-scheme: dark) {
+  pre.highlight,
+  pre.highlight .w {
+    color: var(--color-text);
+  }
+}
+
+/* Tables scroll horizontally within this wrapper (added by default.html)
+   instead of forcing the whole page wider than the viewport. */
+.table-scroll {
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5rem 0;
+}
+
+/* Inside the scroll wrapper the table grows with its content (and scrolls),
+   but still fills the width when the content is narrow. */
+.table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+}
+
+th,
+td {
+  border: 1px solid var(--color-subtle-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+th {
+  background: var(--color-code-background);
+}
+
+/* Footer */
+.site-footer {
+  margin-top: 3rem;
+  color: #86868b;
+  font-size: 14px;
+  text-align: center;
+}
+
+.site-footer .nav-separator {
+  margin: 0 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 700px) {
+  .nav-content {
+    padding: 0.6rem 1rem;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  /* Stack the Contents button beneath the logo on the left. */
+  .nav-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+
+  .nav-links {
+    gap: 0.9rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .nav-separator {
+    display: none;
+  }
+
+  .nav-link {
+    font-size: 14px;
+  }
+
+  .nav-title {
+    font-size: 16px;
+  }
+
+  /* The Contents button replaces the sidebar on mobile. */
+  .toc-toggle {
+    display: inline-block;
+  }
+
+  /* Single column; the TOC becomes a toggled full-screen overlay. */
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 1.5rem;
+  }
+
+  /* Lock background scrolling while the TOC overlay is open. */
+  body.toc-open {
+    overflow: hidden;
+  }
+
+  .toc-sidebar {
+    display: none;
+    position: fixed;
+    /* Reset the desktop rule's align-self: start, which otherwise breaks
+       the top/bottom-based height resolution below and makes the overlay
+       grow to its full content height instead of clipping to the viewport. */
+    align-self: auto;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    background: var(--color-background);
+    border-right: none;
+    /* Unlike the desktop sidebar, show the scroll indicator here since this
+       overlay covers the whole screen with no other affordance that it
+       scrolls. */
+    scrollbar-width: thin;
+    -ms-overflow-style: auto;
+  }
+
+  .toc-sidebar::-webkit-scrollbar {
+    display: block;
+    width: 6px;
+  }
+
+  body.toc-open .toc-sidebar {
+    display: block;
+  }
+
+  /* Roomier list with larger tap targets in the full-screen overlay. */
+  .toc-sidebar #markdown-toc {
+    padding: 1.25rem 1.5rem 2rem;
+    font-size: 16px;
+  }
+
+  .toc-sidebar #markdown-toc a {
+    padding: 0.3rem 0;
+  }
+
+  h1 {
+    font-size: 32px;
+    line-height: 36px;
+  }
+
+  h2 {
+    font-size: 22px;
+    line-height: 26px;
+  }
+}

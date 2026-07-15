@@ -96,18 +96,20 @@ public extension FormatRule {
         ```diff
         - if foo.count == 0 {
         + if foo.isEmpty {
+        ```
 
+        ```diff
         - if foo.count > 0 {
         + if !foo.isEmpty {
+        ```
 
+        ```diff
         - if foo?.count == 0 {
         + if foo?.isEmpty == true {
         ```
 
         ***NOTE:*** In rare cases, the `isEmpty` rule may insert an `isEmpty` call for
-        a type that doesn't implement that property, breaking the program. For this
-        reason, the rule is disabled by default, and must be manually enabled via the
-        `--enable isEmpty` option.
+        a type that doesn't implement that property, breaking the program.
         """
     }
 }

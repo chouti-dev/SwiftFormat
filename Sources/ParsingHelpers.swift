@@ -573,6 +573,86 @@ extension Formatter {
         return index(of: .operator("->", .infix), in: startIndex + 1 ..< endIndex)
     }
 
+    /// Given the index of the `.` immediately before a member call (e.g. the `.` before
+    /// `foo` in `receiver.foo(...)`), returns the index of the first token of the receiver
+    /// expression the member is called on — the position where a prefix operator like `!`
+    /// could be inserted to negate the whole expression.
+    ///
+    /// Walks backwards across member-access dots and balanced trailing scopes (subscripts, call
+    /// parentheses, and generic argument clauses), stopping at the first token that bounds the
+    /// expression (an infix operator, delimiter, keyword, or start of an enclosing scope).
+    ///
+    /// Returns `nil` when a prefix operator couldn't be placed safely:
+    /// - optional chaining / force-unwrap in the receiver (`foo?.bar()`), since the result type
+    ///   then differs (e.g. an `Optional`),
+    /// - a leading-dot (implicit member) receiver (`.foo.bar()`), where a prefix operator would be
+    ///   malformed,
+    /// - a prefix operator immediately before the receiver (`-foo.bar()`), where inserting another
+    ///   prefix operator would juxtapose unary operators.
+    ///
+    /// Pass `stoppingAtLeadingNegation: true` when the caller wants to *cancel* an existing prefix
+    /// `!` rather than insert one (e.g. `!xs.filter { … }.isEmpty` → `xs.contains(where: …)`). A
+    /// leading prefix `!` then bounds the receiver on the left (the returned index is the receiver
+    /// root just after the `!`) instead of causing a `nil` bail; the caller can find the `!` itself
+    /// with `index(of:.nonSpaceOrCommentOrLinebreak, before:)`.
+    func startOfMemberCallReceiver(endingAt dotIndex: Int, stoppingAtLeadingNegation: Bool = false) -> Int? {
+        var start = dotIndex
+        while let prev = index(of: .nonSpaceOrCommentOrLinebreak, before: start) {
+            switch tokens[prev] {
+            case .operator(".", _), .delimiter("."):
+                // Only an identifier or a closing scope can precede an ordinary member-access dot.
+                // Anything else (or nothing) means a leading-dot implicit member (`.foo`), which
+                // has no value token to prefix, so bail.
+                guard let beforeDot = index(of: .nonSpaceOrCommentOrLinebreak, before: prev),
+                      tokens[beforeDot].isIdentifier || tokens[beforeDot].isEndOfScope
+                else { return nil }
+                start = prev
+
+            case .identifier:
+                // An identifier directly followed by another identifier (`start`) is a juxtaposition
+                // that can't occur mid-expression — it means `prev` is the last token of a *previous*
+                // statement on the line above (Swift's newline statement terminator isn't a token, so
+                // it can't otherwise bound the walk). The current `start` is the receiver root.
+                if tokens[start].isIdentifier {
+                    return start
+                }
+                start = prev
+
+            case .operator("!", .prefix) where stoppingAtLeadingNegation:
+                // Leading boolean negation the caller intends to cancel — it bounds the receiver on
+                // the left. Return the receiver root (the current `start`, just after the `!`).
+                return start
+
+            case .operator("?", _), .operator("!", _):
+                // Optional chaining (or force-unwrap) in the receiver changes the result type.
+                return nil
+
+            case .operator(_, .prefix):
+                // A prefix operator right before the receiver (e.g. `-foo`) would be juxtaposed
+                // with the operator we'd insert. Bail rather than emit invalid syntax.
+                return nil
+
+            case .endOfScope(")"), .endOfScope("]"), .endOfScope(">"), .endOfScope("}"):
+                // A closing scope directly followed by an identifier (`start`) is a juxtaposition
+                // that can't occur mid-expression (a member access would need a `.` between them), so
+                // `prev` closes a *previous* statement on the line above and `start` is the receiver
+                // root. Otherwise skip the balanced trailing scope: call parens `()`, subscripts `[]`,
+                // generic argument clauses `<>`, and trailing closures `{}` (`foo.filter { ... }.bar`).
+                if tokens[start].isIdentifier {
+                    return start
+                }
+                guard let scopeStart = startOfScope(at: prev) else { return nil }
+                start = scopeStart
+
+            default:
+                // Any other token (infix operator, delimiter, keyword, start of scope) bounds
+                // the receiver expression.
+                return start
+            }
+        }
+        return start
+    }
+
     /// Recursively searches to the start of scopes until we either no longer find a scope or we know we are in a closure.
     func isInClosure(at index: Int) -> Bool {
         guard let startOfScopeIndex = startOfScope(at: index) else {
@@ -836,14 +916,164 @@ extension Formatter {
         startOfConditionalStatement(at: i, excluding: excluding) != nil
     }
 
+    /// Returns true if the `if` keyword at the given index is being used as an if expression
+    /// (as opposed to an if statement). If expressions can appear in three locations:
+    /// 1. Immediately following an `=` operator (`let foo = if ...`)
+    /// 2. As the single expression in a function/var/closure body
+    /// 3. Nested within other if/switch expressions
+    func isIfExpression(at i: Int) -> Bool {
+        guard tokens[i] == .keyword("if") else { return false }
+        // If expressions are only valid in Swift 5.9+
+        guard options.swiftVersion >= "5.9" else { return false }
+
+        // Find the outermost if/switch that contains this if by expanding outward through
+        // { if/switch scopes. A nested if can only be an if expression if the outermost
+        // containing if/switch is itself an if expression.
+        let outermostIndex = outermostConditionalKeyword(startingAt: i)
+
+        // If the outermost conditional is an `if` without an else branch, it can't be
+        // an if expression (if expressions must be exhaustive).
+        if tokens[outermostIndex] == .keyword("if"),
+           !ifStatementHasElseBranch(at: outermostIndex)
+        {
+            return false
+        }
+
+        // All branches must be single expressions (no return keyword) for this to be a valid
+        // if expression. e.g. `if condition { return foo } else { bar }` is an if statement.
+        if let branches = conditionalBranches(at: outermostIndex),
+           !branches.allSatisfy({ branch in
+               blockBodyHasSingleStatement(
+                   atStartOfScope: branch.startOfBranch,
+                   includingConditionalStatements: true,
+                   includingReturnStatements: false
+               )
+           })
+        {
+            return false
+        }
+
+        // Case 1: The outermost if/switch directly follows an = operator (e.g. `let foo = if ...`)
+        if isConditionalAssignment(at: outermostIndex) {
+            return true
+        }
+
+        // Case 2: The outermost if is the single expression in a function/var/closure body
+        guard let containingScope = startOfScope(at: outermostIndex) else {
+            return false
+        }
+
+        // If the containing scope is a for/while/repeat/guard/do, this is a statement
+        if let keyword = lastSignificantKeyword(at: containingScope, excluding: ["where"]),
+           ["for", "while", "repeat", "guard", "do", "else", "catch"].contains(keyword)
+        {
+            return false
+        }
+
+        // If the containing scope is a conditional statement (if/switch) body,
+        // it's only an expression if the parent conditional is itself an expression
+        if let parentConditional = startOfConditionalStatement(at: containingScope),
+           [.keyword("if"), .keyword("switch")].contains(tokens[parentConditional])
+        {
+            // Already handled by outermostConditionalKeyword walk above
+        }
+
+        // If the containing scope belongs to a func/subscript/init without a return type,
+        // the if is a statement, not an expression
+        if let funcKeywordIndex = indexOfLastSignificantKeyword(at: containingScope, excluding: ["where"]),
+           ["func", "subscript", "init"].contains(tokens[funcKeywordIndex].string)
+        {
+            if let funcDecl = parseFunctionDeclaration(keywordIndex: funcKeywordIndex),
+               funcDecl.returnType == nil
+            {
+                return false
+            }
+        }
+
+        return scopeBodyIsSingleExpression(at: containingScope)
+    }
+
+    /// Returns true if the `if` statement at the given index has an `else` branch
+    /// (either `else` or `else if ... else`).
+    func ifStatementHasElseBranch(at ifIndex: Int) -> Bool {
+        assert(tokens[ifIndex] == .keyword("if"))
+        var currentIndex = ifIndex
+
+        while let startOfBody = startOfConditionalBranchBody(after: currentIndex),
+              let endOfBody = endOfScope(at: startOfBody)
+        {
+            guard let nextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfBody),
+                  tokens[nextIndex] == .keyword("else")
+            else {
+                return false
+            }
+            // Check if this is a plain `else` (not `else if`)
+            if let afterElse = index(of: .nonSpaceOrCommentOrLinebreak, after: nextIndex),
+               tokens[afterElse] != .keyword("if")
+            {
+                return true
+            }
+            currentIndex = nextIndex
+        }
+        return false
+    }
+
+    /// Walks outward from the given if/switch keyword index through `{` if/switch scopes,
+    /// returning the outermost containing if/switch keyword index.
+    func outermostConditionalKeyword(startingAt i: Int) -> Int {
+        var current = i
+        while true {
+            // If preceded by `else`, this is part of an else-if chain.
+            // Walk backward through the preceding } ... { to find the parent if/switch.
+            if let prevNonSpace = index(of: .nonSpaceOrCommentOrLinebreak, before: current),
+               tokens[prevNonSpace] == .keyword("else"),
+               let closingBrace = index(of: .nonSpaceOrCommentOrLinebreak, before: prevNonSpace),
+               tokens[closingBrace] == .endOfScope("}"),
+               let openingBrace = startOfScope(at: closingBrace),
+               let parentKeyword = startOfConditionalStatement(at: openingBrace),
+               [.keyword("if"), .keyword("switch")].contains(tokens[parentKeyword])
+            {
+                current = parentKeyword
+                continue
+            }
+
+            // If inside a conditional statement's { scope, walk up to the parent if/switch.
+            // But stop if `current` is itself a conditional assignment — it's self-contained.
+            if let containingScope = startOfScope(at: current),
+               tokens[containingScope] == .startOfScope("{"),
+               let parentKeyword = startOfConditionalStatement(at: containingScope),
+               [.keyword("if"), .keyword("switch")].contains(tokens[parentKeyword]),
+               !isConditionalAssignment(at: current)
+            {
+                current = parentKeyword
+                continue
+            }
+
+            break
+        }
+        return current
+    }
+
     /// Returns true if the token at the specified index is part of a conditional assignment
     /// (e.g. an if or switch expression following an `=` token)
     func isConditionalAssignment(at i: Int) -> Bool {
-        guard let startOfConditional = startOfConditionalStatement(at: i),
-              let previousToken = lastToken(before: startOfConditional, where: { !$0.isSpaceOrCommentOrLinebreak })
-        else { return false }
-
-        return previousToken.isOperator("=")
+        guard let startOfConditional = startOfConditionalStatement(at: i) else { return false }
+        // Walk backwards past any try/await that may precede the conditional expression
+        var j = startOfConditional
+        while let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: j) {
+            switch tokens[prevIndex] {
+            case .keyword("try"), .keyword("await"):
+                j = prevIndex
+            case _ where tokens[prevIndex].isUnwrapOperator:
+                guard let beforeOp = index(of: .nonSpaceOrCommentOrLinebreak, before: prevIndex),
+                      tokens[beforeOp] == .keyword("try")
+                else { return false }
+                j = beforeOp
+            default:
+                return tokens[prevIndex].isOperator("=")
+            }
+        }
+        return false
     }
 
     /// If the token at the specified index is part of a conditional statement, returns the index of the first
@@ -1991,17 +2221,23 @@ extension Formatter {
         var startOfDeclaration = range.lowerBound
         let startOfScopeAtDeclaration = startOfScope(at: startOfDeclaration)
 
+        let isDeclarationStart = { [self] (index: Int, token: Token) in
+            token.isDeclarationTypeKeyword
+                || token == .startOfScope("#if")
+                || isFreestandingMacroExpansion(at: index, in: range)
+        }
+
         let handleIndex = { [self] (index: Int, token: Token) in
             guard range.contains(index),
                   index >= startOfDeclaration,
-                  token.isDeclarationTypeKeyword || token == .startOfScope("#if"),
+                  isDeclarationStart(index, token),
                   startOfScopeAtDeclaration == startOfScope(at: index)
             else {
                 return
             }
 
             let keywordIndex = index
-            let declarationKeyword = declarationType(at: keywordIndex) ?? "#if"
+            let declarationKeyword = declarationType(at: keywordIndex) ?? token.string
             let endOfDeclaration = _endOfDeclarationInTypeBody(atDeclarationKeyword: keywordIndex)
 
             let declarationRange = startOfDeclaration ... min(endOfDeclaration ?? .max, range.upperBound - 1)
@@ -2091,15 +2327,16 @@ extension Formatter {
     /// Returns the end index of the `Declaration` containing `declarationKeywordIndex`.
     /// This is mostly an implementation detail of `parseDeclarations` and only correctly
     /// handles declarations within type bodies (not within function bodies).
-    ///  - `declarationKeywordIndex.isDeclarationTypeKeyword` must be `true`
-    ///    (e.g. it must be a keyword like `let`, `var`, `func`, `class`, etc.
+    ///  - The token at `declarationKeywordIndex` must be a declaration start,
+    ///    e.g. a keyword like `let`, `var`, `func`, `#if`, or a freestanding macro expansion.
     func _endOfDeclarationInTypeBody(atDeclarationKeyword declarationKeywordIndex: Int) -> Int? {
         assert(tokens[declarationKeywordIndex].isDeclarationTypeKeyword
-            || tokens[declarationKeywordIndex] == .startOfScope("#if"))
+            || tokens[declarationKeywordIndex] == .startOfScope("#if")
+            || tokens[declarationKeywordIndex].string.isMacro)
 
         // Get declaration keyword
         var searchIndex = declarationKeywordIndex
-        let declarationKeyword = declarationType(at: declarationKeywordIndex) ?? "#if"
+        let declarationKeyword = declarationType(at: declarationKeywordIndex) ?? tokens[declarationKeywordIndex].string
         var endOfDeclaration: Int?
         switch tokens[declarationKeywordIndex] {
         case .startOfScope("#if"):
@@ -2135,13 +2372,16 @@ extension Formatter {
                 searchIndex = functionDeclaration.range.upperBound
                 endOfDeclaration = functionDeclaration.range.upperBound
             }
+        case let .keyword(keyword) where keyword.isMacro:
+            if let expressionRange = parseExpressionRange(startingAt: declarationKeywordIndex) {
+                searchIndex = expressionRange.upperBound
+                endOfDeclaration = expressionRange.upperBound
+            }
         default:
             break
         }
 
-        let nextDeclarationKeywordIndex = index(after: searchIndex, where: {
-            $0.isDeclarationTypeKeyword || $0 == .startOfScope("#if")
-        })
+        let nextDeclarationKeywordIndex = indexOfNextDeclarationStart(after: searchIndex)
 
         // If this is the last declaration in the type body, return nil to ensure we include all remaining tokens in the type body.
         if nextDeclarationKeywordIndex == nil {
@@ -2151,11 +2391,18 @@ extension Formatter {
         // Search for the next declaration so we know where this declaration ends
         // (the token before the first token of the following declaration).
         if let nextDeclarationKeywordIndex,
-           let lastIndexBeforeNextDeclaration = index(
+           let lastSignificantIndexBeforeNextDeclaration = index(
                before: startOfModifiers(at: nextDeclarationKeywordIndex, includingAttributes: true),
                where: { !$0.isSpaceOrCommentOrLinebreak }
-           ).map({ endOfLine(at: $0) })
+           )
         {
+            let lastIndexBeforeNextDeclaration: Int
+            if tokens[lastSignificantIndexBeforeNextDeclaration] == .delimiter(";") {
+                lastIndexBeforeNextDeclaration = lastSignificantIndexBeforeNextDeclaration
+            } else {
+                lastIndexBeforeNextDeclaration = endOfLine(at: lastSignificantIndexBeforeNextDeclaration)
+            }
+
             // If we have an existing `endOfDeclaration` index from a parsing implementation like
             // `parsePropertyDeclaration` or `parseFunctionDeclaration`, prefer that index.
             if let existingEndOfDeclarationValue = endOfDeclaration {
@@ -2183,6 +2430,49 @@ extension Formatter {
         }
 
         return endOfDeclaration
+    }
+
+    /// Whether the token at the given index is a freestanding macro expansion
+    /// that can appear as a declaration in a declaration body.
+    func isFreestandingMacroExpansion(at index: Int, in range: Range<Int>) -> Bool {
+        guard range.contains(index),
+              tokens[index].string.isMacro
+        else { return false }
+
+        guard let previousIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: index),
+              range.contains(previousIndex)
+        else { return true }
+
+        if token(at: previousIndex) == .delimiter(";") {
+            return true
+        }
+
+        guard tokens[previousIndex ..< index].contains(where: \.isLinebreak),
+              token(at: previousIndex)?.isOperator(ofType: .infix) != true,
+              token(at: previousIndex) != .delimiter(",")
+        else { return false }
+
+        return true
+    }
+
+    /// Returns the next declaration start following the given index.
+    func indexOfNextDeclarationStart(after index: Int) -> Int? {
+        var searchIndex = index
+
+        while let nextDeclarationIndex = self.index(after: searchIndex, where: {
+            $0.isDeclarationTypeKeyword || $0 == .startOfScope("#if") || $0.string.isMacro
+        }) {
+            if tokens[nextDeclarationIndex].isDeclarationTypeKeyword
+                || tokens[nextDeclarationIndex] == .startOfScope("#if")
+                || isFreestandingMacroExpansion(at: nextDeclarationIndex, in: tokens.indices)
+            {
+                return nextDeclarationIndex
+            }
+
+            searchIndex = nextDeclarationIndex
+        }
+
+        return nil
     }
 
     /// Parses the inner-most type that contains the given index.
@@ -2218,6 +2508,47 @@ extension Formatter {
         else { return false }
 
         return index(of: .nonSpaceOrCommentOrLinebreak, after: expressionRange.upperBound) == endOfScopeIndex
+    }
+
+    /// Whether the body is a single expression that is not a conditional (if/switch).
+    /// Conditional expressions need @ViewBuilder when branches return different types.
+    func scopeBodyIsSingleNonConditionalExpression(at startOfScopeIndex: Int) -> Bool {
+        guard let firstTokenInBody = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfScopeIndex),
+              tokens[firstTokenInBody] != .keyword("if"),
+              tokens[firstTokenInBody] != .keyword("switch")
+        else { return false }
+        return scopeBodyIsSingleExpression(at: startOfScopeIndex)
+    }
+
+    /// Whether the given type conforms to View
+    func isViewType(_ type: TypeDeclaration?) -> Bool {
+        guard let type else { return false }
+        return type.conformances.contains { conformance in
+            conformance.conformance.string == "View"
+        }
+    }
+
+    /// Whether the given type conforms to ViewModifier
+    func isViewModifierType(_ type: TypeDeclaration?) -> Bool {
+        guard let type else { return false }
+        return type.conformances.contains { conformance in
+            conformance.conformance.string == "ViewModifier"
+        }
+    }
+
+    /// Finds the index of a @ViewBuilder attribute for the given declaration, if present
+    func indexOfViewBuilderAttribute(for declaration: Declaration) -> Int? {
+        let startOfModifiers = declaration.startOfModifiersIndex(includingAttributes: true)
+        let keywordIndex = declaration.keywordIndex
+
+        var index = startOfModifiers
+        while index < keywordIndex {
+            if tokens[index].string == "@ViewBuilder" {
+                return index
+            }
+            index += 1
+        }
+        return nil
     }
 
     /// Whether or not the comment starting at the given index is a doc comment
@@ -2467,7 +2798,9 @@ extension Formatter {
                 }
                 let range = startIndex ..< endIndex as Range
                 let accessLevel: String? = tokens[range].lazy.compactMap { token -> String? in
-                    guard case let .keyword(kw) = token, _FormatRules.aclModifiers.contains(kw) else { return nil }
+                    guard case let .keyword(kw) = token, _FormatRules.aclModifiers.contains(kw) else {
+                        return nil
+                    }
                     return kw
                 }.first
                 importRanges.append(ImportRange(
@@ -2701,7 +3034,9 @@ extension Formatter {
     /// Adds imports for the given list of modules to this file if not already present
     func addImports(_ importsToAddIfNeeded: [String]) {
         // Don't add imports in fragments
-        if options.fragment { return }
+        if options.fragment {
+            return
+        }
 
         let importRanges = parseImports()
         let currentImports = Set(importRanges.flatMap { $0.map(\.module) })
@@ -3700,93 +4035,163 @@ extension Formatter {
         let valueRange: ClosedRange<Int>
     }
 
-    /// Parses the parameter labels of the function call with its `(` start of scope
-    /// token at the given index.
+    /// Parses the arguments of a function call starting at the given `(` or `{`
+    /// start-of-scope index.
+    ///
+    /// - When `startOfScope` is a `{`, the entire brace scope is returned as a
+    ///   single unlabeled argument (a trailing closure with no parentheses),
+    ///   followed by any additional labeled trailing closures.
+    /// - When `startOfScope` is a `(`, the parenthesized arguments are parsed
+    ///   and any trailing closures that immediately follow the `)` are appended
+    ///   as additional arguments.
     func parseFunctionCallArguments(startOfScope: Int, preserveWhitespace: Bool = false) -> [FunctionCallArgument] {
+        // Handle calls that are solely a trailing closure with no parentheses,
+        // e.g. `filter { $0.isActive }` or `animate { } completion: { }`.
+        if tokens[startOfScope] == .startOfScope("{") {
+            guard let endOfClosure = endOfScope(at: startOfScope) else { return [] }
+            let valueRange = startOfScope ... endOfClosure
+            var arguments = [FunctionCallArgument(
+                label: nil,
+                labelIndex: nil,
+                value: tokens[valueRange].string,
+                valueRange: valueRange
+            )]
+            arguments += parseAdditionalTrailingClosures(after: endOfClosure)
+            return arguments
+        }
+
         assert(tokens[startOfScope] == .startOfScope("("))
-        guard let endOfScope = endOfScope(at: startOfScope),
-              index(of: .nonSpaceOrCommentOrLinebreak, after: startOfScope) != endOfScope
-        else { return [] }
+        guard let endOfScope = endOfScope(at: startOfScope) else { return [] }
 
         var argumentLabels: [FunctionCallArgument] = []
 
-        var currentIndex = startOfScope
-        while currentIndex < endOfScope {
-            let endOfPreviousArgument = currentIndex
-            let endOfCurrentArgument = index(of: .delimiter(","), in: endOfPreviousArgument + 1 ..< endOfScope) ?? endOfScope
+        if index(of: .nonSpaceOrCommentOrLinebreak, after: startOfScope) != endOfScope {
+            var currentIndex = startOfScope
+            while currentIndex < endOfScope {
+                let endOfPreviousArgument = currentIndex
+                let endOfCurrentArgument = index(of: .delimiter(","), in: endOfPreviousArgument + 1 ..< endOfScope) ?? endOfScope
 
-            // If we find a trailing comma, then there's nothing else to parse
-            if index(of: .nonSpaceOrCommentOrLinebreak, after: endOfPreviousArgument) == endOfScope {
-                return argumentLabels
-            }
-
-            if let colonIndex = index(of: .delimiter(":"), in: (endOfPreviousArgument + 1) ..< endOfCurrentArgument),
-               let argumentLabelIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: colonIndex),
-               tokens[argumentLabelIndex].isIdentifier
-            {
-                // Conditionally trim whitespace and newlines from the value range
-                var valueStart = colonIndex + 1
-                var valueEnd = endOfCurrentArgument - 1
-
-                if !preserveWhitespace {
-                    while valueStart <= valueEnd, tokens[valueStart].isSpaceOrLinebreak {
-                        valueStart += 1
-                    }
-                    while valueEnd >= valueStart, tokens[valueEnd].isSpaceOrLinebreak {
-                        valueEnd -= 1
-                    }
+                // If we find a trailing comma, then there's nothing else to parse
+                if index(of: .nonSpaceOrCommentOrLinebreak, after: endOfPreviousArgument) == endOfScope {
+                    break
                 }
 
-                // Ensure we have a valid range
-                guard valueStart <= valueEnd else {
+                if let colonIndex = index(of: .delimiter(":"), in: (endOfPreviousArgument + 1) ..< endOfCurrentArgument),
+                   let argumentLabelIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: colonIndex),
+                   tokens[argumentLabelIndex].isIdentifier
+                {
+                    // Conditionally trim whitespace and newlines from the value range
+                    var valueStart = colonIndex + 1
+                    var valueEnd = endOfCurrentArgument - 1
+
+                    if !preserveWhitespace {
+                        while valueStart <= valueEnd, tokens[valueStart].isSpaceOrLinebreak {
+                            valueStart += 1
+                        }
+                        while valueEnd >= valueStart, tokens[valueEnd].isSpaceOrLinebreak {
+                            valueEnd -= 1
+                        }
+                    }
+
+                    // Ensure we have a valid range
+                    guard valueStart <= valueEnd else {
+                        currentIndex = endOfCurrentArgument
+                        continue
+                    }
+
+                    let valueRange = valueStart ... valueEnd
+                    argumentLabels.append(FunctionCallArgument(
+                        label: tokens[argumentLabelIndex].string,
+                        labelIndex: argumentLabelIndex,
+                        value: tokens[valueRange].string,
+                        valueRange: valueRange
+                    ))
+                } else {
+                    // Conditionally trim whitespace and newlines from the value range
+                    var valueStart = endOfPreviousArgument + 1
+                    var valueEnd = endOfCurrentArgument - 1
+
+                    if !preserveWhitespace {
+                        while valueStart <= valueEnd, tokens[valueStart].isSpaceOrLinebreak {
+                            valueStart += 1
+                        }
+                        while valueEnd >= valueStart, tokens[valueEnd].isSpaceOrLinebreak {
+                            valueEnd -= 1
+                        }
+                    }
+
+                    // Ensure we have a valid range
+                    guard valueStart <= valueEnd else {
+                        currentIndex = endOfCurrentArgument
+                        continue
+                    }
+
+                    let valueRange = valueStart ... valueEnd
+                    argumentLabels.append(FunctionCallArgument(
+                        label: nil,
+                        labelIndex: nil,
+                        value: tokens[valueRange].string,
+                        valueRange: valueRange
+                    ))
+                }
+
+                if endOfCurrentArgument >= endOfScope {
+                    break
+                } else {
                     currentIndex = endOfCurrentArgument
-                    continue
                 }
-
-                let valueRange = valueStart ... valueEnd
-                argumentLabels.append(FunctionCallArgument(
-                    label: tokens[argumentLabelIndex].string,
-                    labelIndex: argumentLabelIndex,
-                    value: tokens[valueRange].string,
-                    valueRange: valueRange
-                ))
-            } else {
-                // Conditionally trim whitespace and newlines from the value range
-                var valueStart = endOfPreviousArgument + 1
-                var valueEnd = endOfCurrentArgument - 1
-
-                if !preserveWhitespace {
-                    while valueStart <= valueEnd, tokens[valueStart].isSpaceOrLinebreak {
-                        valueStart += 1
-                    }
-                    while valueEnd >= valueStart, tokens[valueEnd].isSpaceOrLinebreak {
-                        valueEnd -= 1
-                    }
-                }
-
-                // Ensure we have a valid range
-                guard valueStart <= valueEnd else {
-                    currentIndex = endOfCurrentArgument
-                    continue
-                }
-
-                let valueRange = valueStart ... valueEnd
-                argumentLabels.append(FunctionCallArgument(
-                    label: nil,
-                    labelIndex: nil,
-                    value: tokens[valueRange].string,
-                    valueRange: valueRange
-                ))
-            }
-
-            if endOfCurrentArgument >= endOfScope {
-                break
-            } else {
-                currentIndex = endOfCurrentArgument
             }
         }
 
+        // Append any trailing closures that immediately follow the closing paren
+        if let openBraceIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfScope),
+           tokens[openBraceIndex] == .startOfScope("{"),
+           let endOfClosure = self.endOfScope(at: openBraceIndex)
+        {
+            let valueRange = openBraceIndex ... endOfClosure
+            argumentLabels.append(FunctionCallArgument(
+                label: nil,
+                labelIndex: nil,
+                value: tokens[valueRange].string,
+                valueRange: valueRange
+            ))
+            argumentLabels += parseAdditionalTrailingClosures(after: endOfClosure)
+        }
+
         return argumentLabels
+    }
+
+    /// Parses the arguments of a function call where the next non-space/comment
+    /// token after `index` is either a `(` or `{`.
+    func parseFunctionCallArguments(after index: Int, preserveWhitespace: Bool = false) -> [FunctionCallArgument]? {
+        guard let scopeIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index),
+              tokens[scopeIndex] == .startOfScope("(") || tokens[scopeIndex] == .startOfScope("{")
+        else { return nil }
+        return parseFunctionCallArguments(startOfScope: scopeIndex, preserveWhitespace: preserveWhitespace)
+    }
+
+    /// Parses additional labeled trailing closures after the end of a trailing
+    /// closure body (multiple trailing closure syntax), e.g. `onFailure: { }`.
+    private func parseAdditionalTrailingClosures(after endOfClosure: Int) -> [FunctionCallArgument] {
+        var arguments: [FunctionCallArgument] = []
+        var currentIndex = endOfClosure
+        while let labelIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: currentIndex),
+              isTrailingClosureLabel(at: labelIndex),
+              let colonIndex = index(of: .nonSpaceOrComment, after: labelIndex, if: { $0 == .delimiter(":") }),
+              let openBraceIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: colonIndex),
+              tokens[openBraceIndex] == .startOfScope("{"),
+              let endOfBrace = endOfScope(at: openBraceIndex)
+        {
+            let valueRange = openBraceIndex ... endOfBrace
+            arguments.append(FunctionCallArgument(
+                label: tokens[labelIndex].string,
+                labelIndex: labelIndex,
+                value: tokens[valueRange].string,
+                valueRange: valueRange
+            ))
+            currentIndex = endOfBrace
+        }
+        return arguments
     }
 
     /// Parses the parameter labels of the tuple type or value with its `(` start of scope

@@ -9,7 +9,8 @@ import Foundation
 
 public extension FormatRule {
     static let redundantSendable = FormatRule(
-        help: "Remove redundant explicit Sendable conformance from non-public structs and enums."
+        help: "Remove redundant explicit Sendable conformance from non-public structs and enums.",
+        disabledByDefault: true
     ) { formatter in
         let declarations = formatter.parseDeclarations()
 
@@ -17,6 +18,17 @@ public extension FormatRule {
             guard let typeDeclaration = declaration.asTypeDeclaration,
                   typeDeclaration.keyword == "struct" || typeDeclaration.keyword == "enum"
             else { return }
+
+            // Indirect enums (or enums with indirect cases) with recursive cases are not
+            // implicitly Sendable, so we must not remove an explicit Sendable conformance from them.
+            if typeDeclaration.keyword == "enum" {
+                if typeDeclaration.hasModifier("indirect") {
+                    return
+                }
+                if typeDeclaration.body.contains(where: { $0.keyword == "case" && $0.hasModifier("indirect") }) {
+                    return
+                }
+            }
 
             switch typeDeclaration.visibility() {
             case .public, .open:
@@ -48,12 +60,6 @@ public extension FormatRule {
         - struct CacheEntry: Sendable {
         + struct CacheEntry {
               let id: String
-          }
-
-        - fileprivate enum ParsingState: Sendable {
-        + fileprivate enum ParsingState {
-              case idle
-              case running
           }
         ```
         """

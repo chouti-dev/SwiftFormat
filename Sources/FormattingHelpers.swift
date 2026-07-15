@@ -74,7 +74,9 @@ extension Formatter {
             case "unsafe":
                 return options.swiftVersion >= "6.2" || options.swiftVersion == .undefined
             default:
-                return name.isKeywordInTypeContext && isTypePosition(at: index)
+                return name.isKeywordInTypeContext
+                    && token(at: index - 1)?.isOperator(".") != true
+                    && isTypePosition(at: index)
             }
         case .endOfScope("]"):
             return isInClosureArguments(at: index)
@@ -372,6 +374,8 @@ extension Formatter {
     /// Shared wrap implementation
     func wrapCollectionsAndArguments(completePartialWrapping: Bool, wrapSingleArguments: Bool) {
         let maxWidth = options.maxWidth
+        let listWrapThreshold = options.listWrapThreshold
+        let effectiveWrapThreshold = listWrapThreshold ?? maxWidth
         func removeLinebreakBeforeEndOfScope(at endOfScope: inout Int) {
             guard let lastIndex = index(of: .nonSpace, before: endOfScope, if: {
                 $0.isLinebreak
@@ -544,7 +548,8 @@ extension Formatter {
             // issues with an open paren being wrapped unnecessarily and sitting on its own line in
             // cases like long closure types in parens.
             let insertLinebreakAfterOpeningParen = self.index(of: .delimiter(","), after: i) != nil
-                || lineLength(at: endOfLine(at: i)) > maxWidth
+                || (maxWidth > 0 && lineLength(at: endOfLine(at: i)) > maxWidth)
+                || listWrapThreshold.map { lineLength(at: endOfLine(at: i)) > $0 } ?? false
 
             // Insert linebreak and indent after opening paren
             if insertLinebreakAfterOpeningParen, let nextIndex = self.index(of: .nonSpaceOrComment, after: i) {
@@ -754,6 +759,7 @@ extension Formatter {
 
             let mode: WrapMode
             let hasMultipleArguments = index(of: .delimiter(","), in: i + 1 ..< endOfScope) != nil
+            let hasSomeArguments = index(of: .nonSpaceOrCommentOrLinebreak, in: i + 1 ..< endOfScope) != nil
             var isParameters = false
             switch string {
             case "(":
@@ -835,7 +841,7 @@ extension Formatter {
                     assertionFailure() // Shouldn't happen
                 }
 
-            } else if maxWidth > 0, hasMultipleArguments || wrapSingleArguments {
+            } else if maxWidth > 0 || listWrapThreshold != nil, hasMultipleArguments || wrapSingleArguments {
                 func willWrapAtStartOfReturnType(maxWidth: Int) -> Bool {
                     isInReturnType(at: i) && maxWidth < lineLength(at: i)
                 }
@@ -893,16 +899,25 @@ extension Formatter {
 
                 if currentRule == .wrap {
                     let nextWrapIndex = indexOfNextWrap() ?? endOfLine(at: i)
+                    let lineLen = lineLength(upTo: nextWrapIndex)
+                    let exceedsMaxWidth = maxWidth > 0 && maxWidth < lineLen
                     if nextWrapIndex > lastIndex,
-                       maxWidth < lineLength(upTo: nextWrapIndex),
-                       !willWrapAtStartOfReturnType(maxWidth: maxWidth)
+                       effectiveWrapThreshold < lineLen,
+                       !willWrapAtStartOfReturnType(maxWidth: effectiveWrapThreshold),
+                       hasSomeArguments || (wrapSingleArguments && exceedsMaxWidth)
                     {
                         wrapArgumentsWithoutPartialWrapping()
                         lastIndex = nextWrapIndex
                         return
                     }
-                } else if maxWidth < lineLength(upTo: endOfScope) {
-                    wrapArgumentsWithoutPartialWrapping()
+                } else {
+                    let lineLen = lineLength(upTo: endOfScope)
+                    let exceedsMaxWidth = maxWidth > 0 && maxWidth < lineLen
+                    if effectiveWrapThreshold < lineLen,
+                       hasSomeArguments || (wrapSingleArguments && exceedsMaxWidth)
+                    {
+                        wrapArgumentsWithoutPartialWrapping()
+                    }
                 }
             }
 
@@ -1723,9 +1738,13 @@ extension Formatter {
                     return (endifIndex: i, containsSwitchCase: containsSwitchCase)
                 }
             case .startOfScope("{"), .startOfScope("("), .startOfScope("["):
-                if ifdefDepth == 1 { braceDepth += 1 }
+                if ifdefDepth == 1 {
+                    braceDepth += 1
+                }
             case .endOfScope("}"), .endOfScope(")"), .endOfScope("]"):
-                if ifdefDepth == 1 { braceDepth -= 1 }
+                if ifdefDepth == 1 {
+                    braceDepth -= 1
+                }
             default:
                 if ifdefDepth == 1, braceDepth == 0, tokens[i].isSwitchCaseOrDefault {
                     containsSwitchCase = true
@@ -2891,6 +2910,13 @@ extension Formatter {
                             continue
                         }
                         closureLocalNames.insert(name)
+                        // A `$name` closure parameter binds the projected value as `name`
+                        // (without the `$` prefix) inside the closure body. Add the
+                        // unprefixed name as a local so that `name` is not mistakenly
+                        // treated as a reference to `self.name`.
+                        if name.hasPrefix("$") {
+                            closureLocalNames.insert(String(name.dropFirst()))
+                        }
                     }
 
                     // Functions defined inside closures with `[weak self]` captures can
@@ -3336,6 +3362,42 @@ extension Formatter {
             guard let firstNewlineIndex = index(of: .linebreak, in: Range(range.range)) else { break }
             removeTokens(in: range.lowerBound ... firstNewlineIndex)
         }
+    }
+
+    /// If the token at index `i` is on the same line as a preceding `{`,
+    /// inserts a linebreak after the `{` so the token starts on its own line,
+    /// and a linebreak before the matching `}` if it immediately follows.
+    func wrapIfFollowingOpeningBrace(at i: Int) {
+        let lineStart = startOfLine(at: i)
+        guard let openBrace = lastIndex(of: .startOfScope("{"), in: lineStart ..< i) else {
+            return
+        }
+
+        // If the matching `}` is on the same line as the last `}` of the if body,
+        // insert a linebreak before it so it ends up on its own line.
+        if let closeBrace = endOfScope(at: openBrace),
+           let prevToken = index(of: .nonSpaceOrComment, before: closeBrace),
+           tokens[prevToken] == .endOfScope("}"),
+           startOfLine(at: prevToken) == startOfLine(at: closeBrace)
+        {
+            let closeIndent = currentIndentForLine(at: openBrace)
+            var insertAt = closeBrace
+            if tokens[insertAt - 1].isSpace {
+                removeToken(at: insertAt - 1)
+                insertAt -= 1
+            }
+            insertLinebreak(at: insertAt)
+            insertSpace(closeIndent, at: insertAt + 1)
+        }
+
+        // Insert a linebreak after the `{`.
+        let insertionIndex = openBrace + 1
+        if tokens[insertionIndex].isSpace {
+            removeToken(at: insertionIndex)
+        }
+        let indent = currentIndentForLine(at: openBrace) + options.indent
+        insertLinebreak(at: insertionIndex)
+        insertSpace(indent, at: insertionIndex + 1)
     }
 }
 

@@ -665,7 +665,7 @@ struct _Descriptors {
     let fileHeader = OptionDescriptor(
         argumentName: "header",
         displayName: "Header",
-        help: "Header comments: \"strip\", \"ignore\", or the text you wish use",
+        help: "Header comments: \"strip\", \"ignore\" (default), or the text you wish use",
         keyPath: \.fileHeader
     )
     let ifdefIndent = OptionDescriptor(
@@ -904,6 +904,15 @@ struct _Descriptors {
         type: .int,
         fromArgument: { $0.lowercased() == "none" ? 0 : Int($0).map { max(0, $0) } },
         toArgument: { $0 > 0 ? String($0) : "none" }
+    )
+    let listWrapThreshold = OptionDescriptor(
+        argumentName: "list-wrap-threshold",
+        displayName: "List Wrap Threshold",
+        help: "Line length triggering wrap for comma-separated lists, in addition to --max-width. Defaults to \"none\"",
+        keyPath: \.listWrapThreshold,
+        type: .int,
+        fromArgument: { $0.lowercased() == "none" ? .some(nil) : Int($0).map { max(0, $0) } },
+        toArgument: { $0.map(String.init) ?? "none" }
     )
     let smartTabs = OptionDescriptor(
         argumentName: "smart-tabs",
@@ -1266,6 +1275,14 @@ struct _Descriptors {
         help: "List of symbols to be ignored by the acronyms rule",
         keyPath: \.preserveAcronyms
     )
+    let indentBlankLines = OptionDescriptor(
+        argumentName: "indent-blank-lines",
+        displayName: "Indent Blank Lines",
+        help: "Indent blank lines:",
+        keyPath: \.indentBlankLines,
+        trueValues: ["true", "enabled"],
+        falseValues: ["false", "disabled"]
+    )
     let indentStrings = OptionDescriptor(
         argumentName: "indent-strings",
         displayName: "Indent Strings",
@@ -1322,13 +1339,12 @@ struct _Descriptors {
         trueValues: ["ignore", "preserve"],
         falseValues: ["convert"]
     )
-    let preserveDocComments = OptionDescriptor(
+    let docComments = OptionDescriptor(
         argumentName: "doc-comments",
         displayName: "Doc comments",
-        help: "Preserve doc comments:",
-        keyPath: \.preserveDocComments,
-        trueValues: ["preserve"],
-        falseValues: ["before-declarations", "declarations"]
+        help: "Doc comment placement:",
+        keyPath: \.docComments,
+        altOptions: ["declarations": .beforeDeclarations, "preserve": .preserve]
     )
     let conditionalAssignmentOnlyAfterNewProperties = OptionDescriptor(
         argumentName: "conditional-assignment",
@@ -1480,6 +1496,15 @@ struct _Descriptors {
         displayName: "Test Case Access Control",
         help: "Access control for test methods:",
         keyPath: \.testCaseAccessControl
+    )
+
+    let guardLikeIfStatements = OptionDescriptor(
+        argumentName: "guard-like-if-statements",
+        displayName: "Guard-Like If Statements",
+        help: "Convert guard-like trailing if statements in tests:",
+        keyPath: \.guardLikeIfStatements,
+        trueValues: ["convert"],
+        falseValues: ["preserve"]
     )
 
     // MARK: - Internal

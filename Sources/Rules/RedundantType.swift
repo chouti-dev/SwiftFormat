@@ -163,23 +163,6 @@ public extension FormatRule {
         +         let view = UIView()
               }
           }
-
-          // Swift 5.9+, with --propertytypes inferred (SE-0380)
-        - let foo: Foo = if condition {
-        + let foo = if condition {
-              Foo("foo")
-          } else {
-              Foo("bar")
-          }
-
-          // Swift 5.9+, with --propertytypes explicit (SE-0380)
-          let foo: Foo = if condition {
-        -     Foo("foo")
-        +     .init("foo")
-          } else {
-        -     Foo("bar")
-        +     .init("foo")
-          }
         ```
         """
     }
@@ -256,7 +239,9 @@ extension Formatter {
               let closeAngle = index(of: .nonSpaceOrCommentOrLinebreak, after: argTypeIndex),
               closeAngle == typeEndIndex,
               tokens[closeAngle] == .endOfScope(">")
-        else { return nil }
+        else {
+            return nil
+        }
         return (baseTypeIndex, openAngle, argTypeIndex)
     }
 
@@ -285,7 +270,9 @@ extension Formatter {
             guard inferred != token else { return nil }
 
             if let existing = elementType {
-                if existing != inferred { return nil }
+                if existing != inferred {
+                    return nil
+                }
             } else {
                 elementType = inferred
             }

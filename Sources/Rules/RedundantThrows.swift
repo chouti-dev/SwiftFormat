@@ -24,7 +24,9 @@ public extension FormatRule {
                   let functionDecl = formatter.parseFunctionDeclaration(keywordIndex: keywordIndex),
                   functionDecl.effects.contains(where: { $0.hasPrefix("throws") }),
                   let bodyRange = functionDecl.bodyRange
-            else { return }
+            else {
+                return
+            }
 
             // Don't modify override functions - they need to match their parent's signature
             if formatter.modifiersForDeclaration(at: keywordIndex, contains: "override") {
@@ -77,10 +79,12 @@ public extension FormatRule {
           import Testing
 
         - @Test func myFeature() throws {
-        + @Test func myFeature() throws {
+        + @Test func myFeature() {
               #expect(foo == 1)
           }
+        ```
 
+        ```diff
           import XCTest
 
           class TestCase: XCTestCase {

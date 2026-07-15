@@ -36,7 +36,13 @@ final class MetadataTests: XCTestCase {
 
     /// NOTE: if test fails, just run it again locally to update rules file
     func testGenerateRulesDocumentation() throws {
-        var result = "# Default Rules (enabled by default)\n"
+        var result = """
+        > [!NOTE]
+        > Rule documentation is also available at [swiftformat.info/rules](http://swiftformat.info/rules).
+
+        # Default Rules (enabled by default)
+
+        """
         for rule in FormatRules.default {
             result += "\n* [\(rule.name)](#\(rule.name))"
         }
@@ -124,6 +130,8 @@ final class MetadataTests: XCTestCase {
     func testRuleExampleDiffsAreValid() throws {
         for rule in FormatRules.all {
             guard let examples = rule.examples else { continue }
+
+            XCTAssert(examples.contains("```diff"), "Rule examples must have at least one diff block")
 
             // Parse all diff code blocks in the examples and validate they don't have unbalanced tokens
             let codeBlocks: [MarkdownCodeBlock]
@@ -236,9 +244,10 @@ final class MetadataTests: XCTestCase {
                             Descriptors.closingParenPosition, Descriptors.callSiteClosingParenPosition,
                             Descriptors.linebreak, Descriptors.truncateBlankLines,
                             Descriptors.indent, Descriptors.tabWidth, Descriptors.smartTabs, Descriptors.maxWidth,
-                            Descriptors.assetLiteralWidth, Descriptors.wrapReturnType, Descriptors.wrapEffects,
-                            Descriptors.wrapConditions, Descriptors.wrapTypealiases, Descriptors.wrapTernaryOperators,
-                            Descriptors.wrapStringInterpolation, Descriptors.allowPartialWrapping,
+                            Descriptors.listWrapThreshold, Descriptors.assetLiteralWidth, Descriptors.wrapReturnType,
+                            Descriptors.wrapEffects, Descriptors.wrapConditions, Descriptors.wrapTypealiases,
+                            Descriptors.wrapTernaryOperators, Descriptors.wrapStringInterpolation,
+                            Descriptors.allowPartialWrapping,
                         ]
                     case .identifier("wrapStatementBody"):
                         referencedOptions += [Descriptors.indent, Descriptors.linebreak]
