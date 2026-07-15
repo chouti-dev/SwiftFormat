@@ -21,6 +21,9 @@ DerivedData
 .build
 .swiftpm
 
+# Products
+Products/
+
 /Snapshots/Private
 swiftformat.artifactbundle.zip
 
@@ -29,6 +32,3 @@ swiftformat.artifactbundle.zip
 
 # AppCode
 .idea
-
-# Products
-Products/

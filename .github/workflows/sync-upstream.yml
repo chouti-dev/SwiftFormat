@@ -23,8 +23,6 @@ jobs:
   sync:
     name: Sync upstream
     runs-on: macos-latest
-    if: >-
-      github.event_name == 'workflow_dispatch'
     steps:
       - name: Require release token
         run: |
