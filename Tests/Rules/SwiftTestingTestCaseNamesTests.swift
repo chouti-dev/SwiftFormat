@@ -105,6 +105,33 @@ final class SwiftTestingTestCaseNamesTests: XCTestCase {
         testFormatting(for: input, output, rule: .swiftTestingTestCaseNames)
     }
 
+    func testPreservesBackticksWhenRemovingTestPrefixFromRawIdentifier() {
+        let input = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test
+            func `testInit applies provided highlight state`() {
+                #expect(MyFeature.testInit().highlightState == .highlighted)
+            }
+        }
+        """
+
+        let output = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test
+            func `init applies provided highlight state`() {
+                #expect(MyFeature.testInit().highlightState == .highlighted)
+            }
+        }
+        """
+
+        testFormatting(for: input, [output], rules: [.swiftTestingTestCaseNames, .redundantBackticks],
+                       options: FormatOptions(swiftVersion: "6.2"))
+    }
+
     func testDoesntUpdateNameToIdentifierRequiringBackTicks() {
         let input = """
         import Testing
@@ -1273,6 +1300,96 @@ final class SwiftTestingTestCaseNamesTests: XCTestCase {
         struct MyFeatureTests {
             @Test
             func `my URL is valid`() {
+                #expect(true)
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: .swiftTestingTestCaseNames,
+                       options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testConvertsBacktickedNameWithTestPrefixAndUnderscores() {
+        let input = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test func `test_depart_withNilNavigationProxy_completesWithoutCrash`() {
+                #expect(true)
+            }
+        }
+        """
+
+        let output = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test func `depart with nil navigation proxy completes without crash`() {
+                #expect(true)
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: .swiftTestingTestCaseNames,
+                       options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testConvertsBacktickedNameWithUnderscoresButNoTestPrefix() {
+        let input = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test func `feature_works_well`() {
+                #expect(true)
+            }
+        }
+        """
+
+        let output = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test func `feature works well`() {
+                #expect(true)
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: .swiftTestingTestCaseNames,
+                       options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testPreservesBacktickedNameWithDoubleUnderscores() {
+        let input = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test func `feature__works`() {
+                #expect(true)
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .swiftTestingTestCaseNames,
+                       options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testConvertsBacktickedNameWithTestPrefixOnly() {
+        let input = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test func `testFeatureWorks`() {
+                #expect(true)
+            }
+        }
+        """
+
+        let output = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test func `feature works`() {
                 #expect(true)
             }
         }

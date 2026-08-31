@@ -10,6 +10,42 @@ import XCTest
 @testable import SwiftFormat
 
 final class PreferForLoopTests: XCTestCase {
+    func testConvertForEachWithExplicitReturnTypeToForLoop() {
+        let input = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        placeholderStrings.forEach { string -> Void in
+            print(string)
+        }
+
+        placeholderStrings.forEach { (string: String) -> Void in
+            print(string)
+        }
+        """
+
+        let output = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        for string in placeholderStrings {
+            print(string)
+        }
+
+        for string in placeholderStrings {
+            print(string)
+        }
+        """
+
+        testFormatting(for: input, output, rule: .preferForLoop)
+    }
+
+    func testIgnoreForEachWithEmptyArgumentList() {
+        let input = """
+        let placeholderStrings = ["foo", "bar", "baaz"]
+        placeholderStrings.forEach { () in
+            print("x")
+        }
+        """
+        testFormatting(for: input, rule: .preferForLoop)
+    }
+
     func testConvertSimpleForEachToForLoop() {
         let input = """
         let placeholderStrings = ["foo", "bar", "baaz"]
@@ -413,5 +449,44 @@ final class PreferForLoopTests: XCTestCase {
         """
 
         testFormatting(for: input, output, rule: .preferForLoop, exclude: [.wrapConditionalBodies, .blankLinesAfterGuardStatements])
+    }
+
+    func testDollarPrefixedElement() {
+        let input = """
+        @propertyWrapper
+        struct Wrapper<Value> {
+            let wrappedValue: Value
+
+            init(wrappedValue: Value) {
+                self.wrappedValue = wrappedValue
+            }
+
+            init(projectedValue: Wrapper<Value>) {
+                wrappedValue = projectedValue.wrappedValue
+            }
+
+            var projectedValue: Wrapper {
+                self
+            }
+        }
+
+        extension Wrapper: Sequence where Value: Sequence {
+            func makeIterator() -> LazyMapSequence<Value, Wrapper<Value.Element>>.Iterator {
+                wrappedValue.lazy
+                    .map { value in
+                        Wrapper<Value.Element>(wrappedValue: value)
+                    }
+                    .makeIterator()
+            }
+        }
+
+        func run() {
+            @Wrapper var sequence = [1, 2, 3]
+            $sequence.forEach { $element in
+                print($element)
+            }
+        }
+        """
+        testFormatting(for: input, rule: .preferForLoop)
     }
 }

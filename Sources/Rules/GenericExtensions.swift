@@ -67,7 +67,26 @@ public extension FormatRule {
             var knownGenericTypes: [(name: String, genericTypes: [String])] = [
                 (name: "Collection", genericTypes: ["Element"]),
                 (name: "Sequence", genericTypes: ["Element"]),
+                (name: "BidirectionalCollection", genericTypes: ["Element"]),
+                (name: "MutableCollection", genericTypes: ["Element"]),
+                (name: "RandomAccessCollection", genericTypes: ["Element"]),
+                (name: "RangeReplaceableCollection", genericTypes: ["Element"]),
+                (name: "AnyBidirectionalCollection", genericTypes: ["Element"]),
+                (name: "AnyCollection", genericTypes: ["Element"]),
+                (name: "AnyRandomAccessCollection", genericTypes: ["Element"]),
                 (name: "Array", genericTypes: ["Element"]),
+                (name: "ArraySlice", genericTypes: ["Element"]),
+                (name: "CollectionDifference", genericTypes: ["ChangeElement"]),
+                (name: "CollectionOfOne", genericTypes: ["Element"]),
+                (name: "ContiguousArray", genericTypes: ["Element"]),
+                (name: "DefaultIndices", genericTypes: ["Elements"]),
+                (name: "DiscontiguousSlice", genericTypes: ["Base"]),
+                (name: "EmptyCollection", genericTypes: ["Element"]),
+                (name: "EnumeratedSequence", genericTypes: ["Base"]),
+                (name: "FlattenSequence", genericTypes: ["Base"]),
+                (name: "KeyValuePairs", genericTypes: ["Key", "Value"]),
+                (name: "ClosedRange", genericTypes: ["Bound"]),
+                (name: "Range", genericTypes: ["Bound"]),
                 (name: "Set", genericTypes: ["Element"]),
                 (name: "Dictionary", genericTypes: ["Key", "Value"]),
                 (name: "Optional", genericTypes: ["Wrapped"]),
@@ -115,6 +134,20 @@ public extension FormatRule {
                formatter.token(at: newOpenBraceIndex) == .startOfScope("{")
             {
                 formatter.removeTokens(in: whereIndex ..< newOpenBraceIndex)
+            }
+            // Otherwise clean up any trailing comma left after removing constraints
+            else if let newOpenBraceIndex = formatter.index(of: .startOfScope("{"), after: whereIndex) {
+                var cleanupIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: newOpenBraceIndex) ?? whereIndex
+                if formatter.tokens[cleanupIndex] == .delimiter(",") {
+                    let removalStart = cleanupIndex
+                    // Also remove any space/linebreak between the comma and the opening brace
+                    if let nextNonSpace = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: cleanupIndex),
+                       nextNonSpace <= newOpenBraceIndex
+                    {
+                        cleanupIndex = nextNonSpace - 1
+                    }
+                    formatter.replaceTokens(in: removalStart ... cleanupIndex, with: [.space(" ")])
+                }
             }
 
             // Replace the extension typename with the fully-qualified generic angle bracket syntax

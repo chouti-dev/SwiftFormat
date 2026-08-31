@@ -124,6 +124,7 @@
 * [blankLinesAfterGuardStatements](#blankLinesAfterGuardStatements)
 * [blockComments](#blockComments)
 * [emptyExtensions](#emptyExtensions)
+* [ifExpressions](#ifExpressions)
 * [isEmpty](#isEmpty)
 * [markTypes](#markTypes)
 * [noExplicitOwnership](#noExplicitOwnership)
@@ -135,11 +136,13 @@
 * [preferFinalClasses](#preferFinalClasses)
 * [preferFirstWhere](#preferFirstWhere)
 * [preferFlatMap](#preferFlatMap)
+* [preferLazyMap](#preferLazyMap)
 * [preferMinOverSorted](#preferMinOverSorted)
 * [preferSwiftStringAPI](#preferSwiftStringAPI)
 * [preferSwiftTesting](#preferSwiftTesting)
 * [privateStateVariables](#privateStateVariables)
 * [propertyTypes](#propertyTypes)
+* [redundantExtendedLifetime](#redundantExtendedLifetime)
 * [redundantSendable](#redundantSendable)
 * [singlePropertyPerLine](#singlePropertyPerLine)
 * [sortSwitchCases](#sortSwitchCases)
@@ -1291,6 +1294,31 @@ Option | Description
 </details>
 <br/>
 
+## ifExpressions
+
+Prefer if expressions over ternary operators in functions and computed properties.
+
+Option | Description
+--- | ---
+`--single-line-ternary` | Single-line ternary handling: "convert" (default) or "preserve"
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  func foo(_ condition: Bool) -> String {
+-     condition ? "foo" : "bar"
++     if condition {
++         "foo"
++     } else {
++         "bar"
++     }
+  }
+```
+
+</details>
+<br/>
+
 ## indent
 
 Indent code in accordance with the scope level.
@@ -1445,6 +1473,18 @@ Use specified linebreak character for all linebreaks (CR, LF or CRLF).
 Option | Description
 --- | ---
 `--linebreaks` | Linebreak character to use: "cr", "crlf" or "lf" (default)
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- let foo = "bar"\r\n
++ let foo = "bar"\n
+  let baz = "qux"
+```
+
+</details>
+<br/>
 
 ## markTypes
 
@@ -2057,6 +2097,27 @@ Convert trivial `map { $0.foo }` closures to keyPath-based syntax.
 </details>
 <br/>
 
+## preferLazyMap
+
+Prefer `lazy.map` over `map` before single-pass operations like `min()`.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- let minY = vertices.map { $0.y }.min()
++ let minY = vertices.lazy.map { $0.y }.min()
+
+- let names = users.map { $0.name }.joined(separator: ", ")
++ let names = users.lazy.map { $0.name }.joined(separator: ", ")
+
+- let hasEmpty = rows.map { $0.title }.contains(where: { $0.isEmpty })
++ let hasEmpty = rows.lazy.map { $0.title }.contains(where: { $0.isEmpty })
+```
+
+</details>
+<br/>
+
 ## preferMinOverSorted
 
 Prefer `min()` over `sorted().first`.
@@ -2420,6 +2481,30 @@ a hand-written Equatable conformance:
 </details>
 <br/>
 
+## redundantExtendedLifetime
+
+Remove redundant withExtendedLifetime calls in tests.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  import Testing
+
+  struct MyFeatureTests {
+      @Test
+      func myFeature() {
+          let observer = Observer()
+          observer.start()
+          #expect(observer.isRunning)
+-         withExtendedLifetime(observer) {}
+      }
+  }
+```
+
+</details>
+<br/>
+
 ## redundantExtensionACL
 
 Remove redundant access control modifiers.
@@ -2674,6 +2759,10 @@ Remove redundant `@objc` annotations.
 
 Remove redundant identifiers in optional binding conditions.
 
+Option | Description
+--- | ---
+`--redundant-optional-binding` | Bindings to simplify: "same-name-only" (default) or "always"
+
 <details>
 <summary>Examples</summary>
 
@@ -2686,6 +2775,15 @@ Remove redundant identifiers in optional binding conditions.
 - guard let self = self else {
 + guard let self else {
       return
+  }
+```
+
+```diff
+  // With --redundant-optional-binding always
+- if let f = foo {
+-     print(f)
++ if let foo {
++     print(foo)
   }
 ```
 
@@ -3959,6 +4057,11 @@ With `--url-macro "#URL,URLFoundation"`:
 + let url = #URL("https://example.com")
 ```
 
+```diff
+- let url = try #require(URL(string: "https://example.com"))
++ let url = #URL("https://example.com")
+```
+
 </details>
 <br/>
 
@@ -4034,7 +4137,21 @@ Option | Description
 `--no-wrap-operators` | Comma-delimited list of operators that shouldn't be wrapped
 `--asset-literals` | Formatting of color/image literals: "actual-width" or "visual-width" (default)
 `--wrap-ternary` | Ternary expression wrapping: "default" (wrap if needed) or "before-operators"
-`--wrap-string-interpolation` | String interpolation wrapping: "default" (wrap if needed) or "preserve"
+`--wrap-string-interpolation` | Wrap string interpolation if it exceeds max width: "true" or "false" (default)
+
+<details>
+<summary>Examples</summary>
+
+`--max-width 40`
+
+```diff
+- let foo = bar(baz: 1, quux: 2) + bar(baz: 3, quux: 4)
++ let foo = bar(baz: 1, quux: 2) +
++     bar(baz: 3, quux: 4)
+```
+
+</details>
+<br/>
 
 ## wrapArguments
 
@@ -4051,7 +4168,7 @@ Option | Description
 `--wrap-conditions` | Conditional expression wrapping: "before-first", "after-first", "preserve" (default) or "disabled"
 `--wrap-type-aliases` | Typealias wrapping: "before-first", "after-first", "preserve" (default) or "disabled"
 `--wrap-effects` | Function effects (throws, async) wrapping: "preserve" (default), "if-multiline" or "never"
-`--wrap-string-interpolation` | String interpolation wrapping: "default" (wrap if needed) or "preserve"
+`--wrap-string-interpolation` | Wrap string interpolation if it exceeds max width: "true" or "false" (default)
 `--allow-partial-wrapping` | Allow partial argument wrapping: "true" (default) or "false"
 
 <details>
@@ -4431,6 +4548,20 @@ Wrap single-line property bodies onto multiple lines.
 ## wrapSingleLineComments
 
 Wrap single line `//` comments that exceed the specified `--max-width`.
+
+<details>
+<summary>Examples</summary>
+
+`--max-width 40`
+
+```diff
+- // This is a long comment that exceeds the maximum column width
++ // This is a long comment that exceeds
++ // the maximum column width
+```
+
+</details>
+<br/>
 
 ## wrapSwitchCases
 

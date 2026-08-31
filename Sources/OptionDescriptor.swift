@@ -731,8 +731,10 @@ struct _Descriptors {
     let wrapStringInterpolation = OptionDescriptor(
         argumentName: "wrap-string-interpolation",
         displayName: "Wrap String Interpolation",
-        help: "String interpolation wrapping: \"default\" (wrap if needed) or \"preserve\"",
-        keyPath: \.wrapStringInterpolation
+        help: "Wrap string interpolation if it exceeds max width:",
+        keyPath: \.wrapStringInterpolation,
+        trueValues: ["true", "default"], // "default" was previously the default value, but is now deprecated.
+        falseValues: ["false", "preserve"]
     )
     let closingParenPosition = OptionDescriptor(
         argumentName: "closing-paren",
@@ -1505,6 +1507,19 @@ struct _Descriptors {
         keyPath: \.guardLikeIfStatements,
         trueValues: ["convert"],
         falseValues: ["preserve"]
+    )
+
+    let redundantOptionalBinding = OptionDescriptor(
+        argumentName: "redundant-optional-binding",
+        displayName: "Redundant Optional Binding",
+        help: "Bindings to simplify: \"same-name-only\" (default) or \"always\"",
+        keyPath: \.redundantOptionalBinding
+    )
+    let singleLineTernary = OptionDescriptor(
+        argumentName: "single-line-ternary",
+        displayName: "Single Line Ternary",
+        help: "Single-line ternary handling: \"convert\" (default) or \"preserve\"",
+        keyPath: \.singleLineTernary
     )
 
     // MARK: - Internal

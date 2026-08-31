@@ -451,7 +451,7 @@ final class CommandLineTests: XCTestCase {
 
     func testRulesNotMarkedAsDisabled() {
         CLI.print = { message, _ in
-            XCTAssert(!message.contains("(disabled)") ||
+            XCTAssert(!message.contains("(disabled by default)") ||
                 FormatRules.disabledByDefault.contains(where: { message.contains($0.name) }))
         }
         XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--rules"), .ok)
@@ -463,6 +463,29 @@ final class CommandLineTests: XCTestCase {
         }
         XCTAssertEqual(CLI.run(in: projectDirectory.path,
                                with: "--disable all --enable wrap --rules"), .ok)
+    }
+
+    func testRulesAnnotations() throws {
+        var messages = [String]()
+        CLI.print = { message, _ in
+            messages.append(message)
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--rules"), .ok)
+        for name in FormatRules.all.map(\.name) {
+            let rule = try XCTUnwrap(FormatRules.byName[name])
+            let matchingMessage = messages.first(where: { $0.contains(name) })
+            XCTAssertNotNil(matchingMessage, "Rule \(name) should appear in --rules output")
+            if rule.isDeprecated {
+                XCTAssert(matchingMessage?.contains("(deprecated)") == true,
+                          "Rule \(name) should be marked (deprecated)")
+            } else if rule.disabledByDefault {
+                XCTAssert(matchingMessage?.contains("(disabled by default)") == true,
+                          "Rule \(name) should be marked (disabled by default)")
+            } else {
+                XCTAssert(matchingMessage?.contains("(enabled by default)") == true,
+                          "Rule \(name) should be marked (enabled by default)")
+            }
+        }
     }
 
     // MARK: quiet mode
@@ -566,6 +589,41 @@ final class CommandLineTests: XCTestCase {
             }
         }
         XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "stdin --lint --rules indent --header foo"), .ok)
+    }
+
+    func testWarnIfEnableUsedForDefaultRule() {
+        var warnings = [String]()
+        CLI.print = { message, type in
+            if type == .warning {
+                warnings.append(message)
+            }
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "stdin --lint --enable redundantSelf"), .ok)
+        XCTAssert(warnings.contains(where: { $0.contains("--enable redundantSelf is redundant") }))
+        XCTAssert(warnings.contains(where: { $0.contains("--rules") }))
+    }
+
+    func testNoWarnIfRulesUsedForDefaultRule() {
+        var warnings = [String]()
+        CLI.print = { message, type in
+            if type == .warning {
+                warnings.append(message)
+            }
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "stdin --lint --rules redundantSelf"), .ok)
+        XCTAssertEqual(warnings.count, 0)
+    }
+
+    func testWarnIfDisableUsedForOptInRule() {
+        var warnings = [String]()
+        CLI.print = { message, type in
+            if type == .warning {
+                warnings.append(message)
+            }
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "stdin --lint --disable isEmpty"), .ok)
+        XCTAssert(warnings.contains(where: { $0.contains("--disable isEmpty is redundant") }))
+        XCTAssert(warnings.contains(where: { $0.contains("--rules") }))
     }
 
     func testMultipleConfigFiles() throws {
@@ -1716,5 +1774,33 @@ final class CommandLineTests: XCTestCase {
                 XCTFail("RuleInfo for \(rule.name) threw error: \(error)")
             }
         }
+    }
+
+    func testRuleInfoShowsEnabledByDefault() throws {
+        var output = ""
+        CLI.print = { message, _ in output += message + "\n" }
+        // Find a rule that is enabled by default
+        let defaultRule = try XCTUnwrap(FormatRules.default.first)
+        try? printRuleInfo(for: defaultRule.name, as: .content)
+        XCTAssert(output.contains("(enabled by default)"), "Expected '(enabled by default)' in output for \(defaultRule.name)")
+    }
+
+    func testRuleInfoShowsOptIn() throws {
+        var output = ""
+        CLI.print = { message, _ in output += message + "\n" }
+        // Find an opt-in rule that is not deprecated
+        let optInRule = try XCTUnwrap(FormatRules.disabledByDefault.first { !$0.isDeprecated })
+        try? printRuleInfo(for: optInRule.name, as: .content)
+        XCTAssert(output.contains("(disabled by default)"), "Expected '(disabled by default)' in output for \(optInRule.name)")
+    }
+
+    func testRuleInfoShowsDeprecated() throws {
+        var output = ""
+        CLI.print = { message, _ in output += message + "\n" }
+        let deprecatedRule = try XCTUnwrap(FormatRules.deprecated.first)
+        try? printRuleInfo(for: deprecatedRule.name, as: .content)
+        XCTAssert(output.contains("(deprecated:"), "Expected '(deprecated:' in output for \(deprecatedRule.name)")
+        XCTAssertFalse(output.contains("(enabled by default)"))
+        XCTAssertFalse(output.contains("(disabled by default)"))
     }
 }

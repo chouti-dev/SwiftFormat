@@ -173,14 +173,6 @@ public enum TernaryOperatorWrapMode: String, CaseIterable {
     case beforeOperators = "before-operators"
 }
 
-public enum StringInterpolationWrapMode: String, CaseIterable {
-    /// Wraps string interpolation if necessary based on the max line length
-    case `default`
-    /// Preserve existing wrapping for string interpolations,
-    /// and don't insert line breaks.
-    case preserve
-}
-
 /// Whether or not to remove `-> Void` from closures
 public enum ClosureVoidReturn: String, CaseIterable {
     case remove
@@ -194,11 +186,27 @@ public enum SwiftTestingNameFormat: String, CaseIterable {
     case standardIdentifiers = "standard-identifiers"
 }
 
+/// Which optional binding conditions the `redundantOptionalBinding` rule should simplify
+public enum RedundantOptionalBindingMode: String, CaseIterable {
+    /// Only remove the redundant identifier when both names match, e.g. `if let foo = foo`
+    case sameNameOnly = "same-name-only"
+    /// Also rename the binding when the names differ, e.g. `if let foo = bar` → `if let bar`
+    case always
+}
+
 public enum TrailingCommas: String, CaseIterable {
     case never
     case always
     case collectionsOnly = "collections-only"
     case multiElementLists = "multi-element-lists"
+}
+
+/// How to handle single-line ternary expressions in the ifExpressions rule
+public enum SingleLineTernary: String, CaseIterable {
+    /// Preserve single-line ternaries as-is
+    case preserve
+    /// Convert single-line ternaries to single-line if expressions
+    case convert
 }
 
 /// Whether to insert, remove, or preserve spaces around operators
@@ -820,7 +828,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var wrapReturnType: WrapReturnType
     public var wrapConditions: WrapMode
     public var wrapTernaryOperators: TernaryOperatorWrapMode
-    public var wrapStringInterpolation: StringInterpolationWrapMode
+    public var wrapStringInterpolation: Bool
     public var uppercaseHex: Bool
     public var uppercaseExponent: Bool
     public var decimalGrouping: Grouping
@@ -926,6 +934,8 @@ public struct FormatOptions: CustomStringConvertible {
     public var suiteNameFormat: SwiftTestingNameFormat
     public var testCaseAccessControl: Visibility
     public var guardLikeIfStatements: Bool
+    public var redundantOptionalBinding: RedundantOptionalBindingMode
+    public var singleLineTernary: SingleLineTernary
 
     /// Deprecated
     public var indentComments: Bool
@@ -971,7 +981,7 @@ public struct FormatOptions: CustomStringConvertible {
                 wrapReturnType: WrapReturnType = .preserve,
                 wrapConditions: WrapMode = .preserve,
                 wrapTernaryOperators: TernaryOperatorWrapMode = .default,
-                wrapStringInterpolation: StringInterpolationWrapMode = .default,
+                wrapStringInterpolation: Bool = false,
                 uppercaseHex: Bool = true,
                 uppercaseExponent: Bool = false,
                 decimalGrouping: Grouping = .group(3, 6),
@@ -1077,6 +1087,8 @@ public struct FormatOptions: CustomStringConvertible {
                 suiteNameFormat: SwiftTestingNameFormat = .preserve,
                 testCaseAccessControl: Visibility = .internal,
                 guardLikeIfStatements: Bool = false,
+                redundantOptionalBinding: RedundantOptionalBindingMode = .sameNameOnly,
+                singleLineTernary: SingleLineTernary = .convert,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
@@ -1217,6 +1229,8 @@ public struct FormatOptions: CustomStringConvertible {
         self.suiteNameFormat = suiteNameFormat
         self.testCaseAccessControl = testCaseAccessControl
         self.guardLikeIfStatements = guardLikeIfStatements
+        self.redundantOptionalBinding = redundantOptionalBinding
+        self.singleLineTernary = singleLineTernary
         self.indentComments = indentComments
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers

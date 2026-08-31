@@ -151,9 +151,14 @@ func printRuleInfo(for name: String, as type: CLI.OutputType) throws {
     print(stripMarkdown(rule.help), as: type)
     if let message = rule.deprecationMessage {
         print("", as: type)
-        print("Note: \(rule.name) rule is deprecated. \(message)")
+        print("(deprecated: \(message))", as: type)
         print("")
         return
+    }
+    if rule.disabledByDefault {
+        print("(disabled by default)", as: type)
+    } else {
+        print("(enabled by default)", as: type)
     }
     if !rule.options.isEmpty {
         print("\nOptions:\n", as: type)
@@ -530,15 +535,14 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
         // Show rules
         if showRules {
             print("")
-            let rules = options.rules ?? defaultRules
             for name in Array(allRules).sorted() {
                 let annotation: String
-                if rules.contains(name) {
-                    annotation = ""
-                } else if FormatRules.byName[name]?.isDeprecated == true {
+                if FormatRules.byName[name]?.isDeprecated == true {
                     annotation = " (deprecated)"
+                } else if FormatRules.byName[name]?.disabledByDefault == true {
+                    annotation = " (disabled by default)"
                 } else {
-                    annotation = " (disabled)"
+                    annotation = " (enabled by default)"
                 }
                 print(" \(name)\(annotation)", as: .content)
             }
@@ -1185,7 +1189,7 @@ func processInput(_ inputURLs: [URL],
                 for swiftCodeBlock in swiftCodeBlocks.reversed() {
                     // Determine the options to use when formatting this block
                     var options = options
-                    if swiftCodeBlock.options?.contains("no-format") == true {
+                    if swiftCodeBlock.noFormat {
                         continue
                     } else if let args = swiftCodeBlock.options?.components(separatedBy: " "), !args.isEmpty {
                         let arguments = try preprocessArguments(args, commandLineArguments)
@@ -1403,6 +1407,7 @@ struct MarkdownCodeBlock {
     let range: Range<String.Index>
     let text: String
     let options: String?
+    let noFormat: Bool
     let lineStartIndex: Int
 }
 
@@ -1457,8 +1462,26 @@ func parseCodeBlocks(fromMarkdown markdown: String, language: String) throws -> 
                   lineIndex != partialBlock.lineStartIndex
             else { continue }
 
-            let options = String(partialBlock.textAfterTicks.dropFirst(language.count))
+            var options = String(partialBlock.textAfterTicks.dropFirst(language.count))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Check for no-format in the inline options
+            var noFormat = options.contains("no-format")
+            if noFormat {
+                options = options.replacingOccurrences(of: "no-format", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+            // Check for <!-- no-format --> comment on the line before the opening fence
+            let openFenceLineIndex = partialBlock.lineStartIndex - 1
+            if !noFormat, openFenceLineIndex > 0 {
+                let previousLineRange = lines[openFenceLineIndex - 1]
+                let previousLine = markdown[previousLineRange]
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if previousLine == "<!-- no-format -->" {
+                    noFormat = true
+                }
+            }
 
             let codeEnd = lines[lineIndex - 1].upperBound
             let range = lines[partialBlock.lineStartIndex].lowerBound ..< codeEnd
@@ -1470,6 +1493,7 @@ func parseCodeBlocks(fromMarkdown markdown: String, language: String) throws -> 
                 range: range,
                 text: codeText,
                 options: options.isEmpty ? nil : options,
+                noFormat: noFormat,
                 lineStartIndex: partialBlock.lineStartIndex
             ))
         }

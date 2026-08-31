@@ -426,6 +426,13 @@ public extension Token {
         hasType(of: .number("", .integer))
     }
 
+    /// Whether this is one of the literals the tokenizer represents as an identifier rather than a
+    /// keyword: `true`, `false`, or `nil`. Worth checking wherever an identifier is being treated as
+    /// a name that refers to something, since these refer to nothing.
+    var isLiteralIdentifier: Bool {
+        self == .identifier("true") || self == .identifier("false") || self == .identifier("nil")
+    }
+
     var isError: Bool {
         hasType(of: .error(""))
     }
@@ -1964,7 +1971,7 @@ public func tokenize(_ source: String) -> [Token] {
                 switch token {
                 case let .operator(string, _):
                     switch string {
-                    case ".", "==", "?", "!", "&", "->", "~":
+                    case ".", "==", "?", "!", "&", "->", "~", "::":
                         if index(of: .nonSpaceOrCommentOrLinebreak, before: count - 1) == scopeIndex {
                             // These are allowed in a generic, but not as the first character
                             fallthrough

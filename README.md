@@ -34,7 +34,7 @@ Additional placeholders:
 
 ![](EditorExtension/Application/Assets.xcassets/AppIcon.appiconset/icon_256x256.png)
 
-[![Rules Documentation](https://img.shields.io/badge/Rules_documentation-swiftformat%2einfo%2Frules-blue.svg)](http://swiftformat.info/rules)
+[![Rules Documentation](https://img.shields.io/badge/Rules_documentation-swiftformat%2einfo%2Frules-blue.svg)](https://swiftformat.info/rules)
 [![Build](https://github.com/nicklockwood/SwiftFormat/actions/workflows/build.yml/badge.svg)](https://github.com/nicklockwood/SwiftFormat/actions/workflows/build.yml)
 [![Codecov](https://codecov.io/gh/nicklockwood/SwiftFormat/graphs/badge.svg)](https://codecov.io/gh/nicklockwood/SwiftFormat)
 [![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fnicklockwood%2FSwiftFormat%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/nicklockwood/swiftformat)
@@ -113,7 +113,7 @@ Command-line tool
 
 **Installation:**
 
-You can install the `swiftformat` command-line tool on macOS or Linux using [Homebrew](http://brew.sh/). Assuming you already have Homebrew installed, just type:
+You can install the `swiftformat` command-line tool on macOS or Linux using [Homebrew](https://brew.sh/). Assuming you already have Homebrew installed, just type:
 
 ```bash
 $ brew install swiftformat
@@ -282,7 +282,7 @@ Xcode source editor extension
 
 **Installation:**
 
-Like the command-line tool, you can install the SwiftFormat for Xcode extension application via [Homebrew](http://brew.sh/). Assuming you already have Homebrew installed, type:
+Like the command-line tool, you can install the SwiftFormat for Xcode extension application via [Homebrew](https://brew.sh/). Assuming you already have Homebrew installed, type:
 
 ```bash
 $ brew install --cask swiftformat-for-xcode
@@ -334,7 +334,7 @@ let package = Package(
     name: "BuildTools",
     platforms: [.macOS(.v10_11)],
     dependencies: [
-        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.62.1"),
+        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.63.0"),
     ],
     targets: [.target(name: "BuildTools", path: "")]
 )
@@ -368,7 +368,7 @@ You can also use `swift run -c release --package-path BuildTools swiftformat "$S
 1. Add the `swiftformat` binary to your project directory via [CocoaPods](https://cocoapods.org/), by adding the following line to your Podfile then running `pod install`:
 
     ```ruby
-    pod 'SwiftFormat/CLI', '~> 0.62.1'
+    pod 'SwiftFormat/CLI', '~> 0.63.0'
     ```
 
 **NOTE:** This will only install the pre-built command-line app, not the source code for the SwiftFormat framework.
@@ -436,7 +436,7 @@ You can use `SwiftFormat` as a SwiftPM command plugin.
 ```swift
 dependencies: [
     // ...
-    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.62.1"),
+    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.63.0"),
 ]
 ```
 
@@ -569,9 +569,9 @@ jobs:
 On CI using Danger
 -------------------
 
-To setup SwiftFormat to be used by your continuous integration system using [Danger](http://danger.systems/ruby/), do the following:
+To setup SwiftFormat to be used by your continuous integration system using [Danger](https://danger.systems/ruby/), do the following:
 
-1. Follow the [`instructions`](http://danger.systems/guides/getting_started.html) to setup Danger.
+1. Follow the [`instructions`](https://danger.systems/guides/getting_started.html) to setup Danger.
 2. Add the [`danger-swiftformat`](https://github.com/garriguv/danger-ruby-swiftformat) plugin to your `Gemfile`.
 3. Add the following to your `Dangerfile`:
 
@@ -628,11 +628,11 @@ Prerelease Builds
 
 ***Prerelease builds are subject to breaking changes.***
 
-New rules, options, and fixes are merged to the [`develop`](https://github.com/nicklockwood/SwiftFormat/commits/develop/) branch before being incorporated into an official release. You may want to use a prerelease version of SwiftFormat that includes the latest unreleased changes. See the [prerelease rules documentation](http://swiftformat.info/rules/prerelease) for a list of rules and changes not yet in a tagged release.
+New rules, options, and fixes are merged to the [`develop`](https://github.com/nicklockwood/SwiftFormat/commits/develop/) branch before being incorporated into an official release. You may want to use a prerelease version of SwiftFormat that includes the latest unreleased changes. See the [prerelease rules documentation](https://swiftformat.info/rules/prerelease) for a list of rules and changes not yet in a tagged release.
 
 **Homebrew:**
 
-The [Homebrew](http://brew.sh/) `--HEAD` option downloads, builds, and installs the latest changes from the `develop` branch. 
+The [Homebrew](https://brew.sh/) `--HEAD` option downloads, builds, and installs the latest changes from the `develop` branch. 
 
 You can install a prerelease build via Homebrew by running:
 
@@ -659,7 +659,7 @@ The options available in SwiftFormat can be displayed using the `--options` comm
 
 Rules are configured by adding `--[option_name] [value]` to your command-line arguments, or by creating a `.swiftformat` [config file](#config-file) and placing it in your project directory.
 
-A given option may affect multiple rules. Use `--rule-info [rule_name]` command for details about which options affect a given rule, or see the [rules documentation](http://swiftformat.info/rules).
+A given option may affect multiple rules. Use `--rule-info [rule_name]` command for details about which options affect a given rule, or see the [rules documentation](https://swiftformat.info/rules).
 
 You can configure options for specific files or code ranges by using `swiftformat:options` directive in comments inside your Swift file. To temporarily set one or more options inside a source file, use:
 
@@ -680,9 +680,9 @@ doTheThing(); print("Did the thing")
 Rules
 -----
 
-SwiftFormat includes over 50 rules, and new ones are added all the time. An up-to-date list can be found at [swiftformat.info/rules](http://swiftformat.info/rules) along with documentation for how they are used.
+SwiftFormat includes over 50 rules, and new ones are added all the time. An up-to-date list can be found at [swiftformat.info/rules](https://swiftformat.info/rules) along with documentation for how they are used.
 
-The list of available rules can be displayed within the command-line app using the `--rules` argument. Rules can be either enabled or disabled. Most are enabled by default. Disabled rules are marked with "(disabled)" when displayed using `--rules`.
+The list of available rules can be displayed within the command-line app using the `--rules` argument. Rules can be either enabled or disabled. Most are enabled by default. Rules are marked with "(enabled by default)", "(disabled by default)", or "(deprecated)" when displayed using `--rules`.
 
 You can use the `--rule-info [rule_name]` command to get information about a specific rule. Pass a comma-delimited list of rule names to get information for multiple rules at once, or use `--rule-info` with no argument for info on all rules.
 
@@ -1039,10 +1039,22 @@ SwiftFormat's tokenizer is more permissive than the Swift compiler and typically
 
 **Code block options:**
 
-You can specify options for options for individual code blocks by adding them after the opening delimiter. For example, you can use `no-format` to prevent a code block from being parsed or formatted:
+You can use `no-format` to prevent a code block from being parsed or formatted. This can be specified inline after the opening delimiter:
 
 ````md
 ```swift no-format
+func example()
+{
+    doSomething()
+}
+```
+````
+
+Or as an HTML comment on the line before the code block (useful for markdown renderers that don't support the inline syntax):
+
+````md
+<!-- no-format -->
+```swift
 func example()
 {
     doSomething()
@@ -1203,31 +1215,37 @@ SwiftFormat is not a commercially-funded product, it's a labor of love given fre
 Credits
 ------------
 
-* [Cal Stephens](https://github.com/calda) - Numerous new formatting rules, options and bug fixes
-* [Tony Arnold](https://github.com/tonyarnold) - SwiftFormat for Xcode
+* [Cal Stephens](https://github.com/calda) - Numerous new formatting rules, options, fixes, and the SwiftFormat website
+* [Facundo Menzella](https://github.com/facumenzella) - Several new formatting rules and options
+* [Manny Lopez](https://github.com/mannylopez) - Several new formatting rules
+* [Miguel Jimenez](https://github.com/miguel-jimenez-0529) - Several new SwiftUI-related formatting rules
+* [Jon Parise](https://github.com/jparise) - Several new formatting rules
 * [Vincent Bernier](https://github.com/vinceburn) - SwiftFormat for Xcode settings UI
+* [Tristan Labelle](https://github.com/tristanlabelle) - Windows installer improvements
+* [Eric Horacek](https://github.com/erichoracek) - Several new formatting rules and improvements
+* [Anthony Miller](https://github.com/AnthonyMDev) - Improvements to wrap/indent logic
+* [Wolfgang Lutz](https://github.com/Lutzifer) - AppleScript integration instructions
+* [Saleem Abdulrasool](https://github.com/compnerd) - Windows build workflow
+* [Hampus Tågerud](https://github.com/hampustagerud) - Git integration for fileHeader rule
 * [Vikram Kriplaney](https://github.com/markiv) - SwiftFormat for Xcode icon and search feature
+* [Benedek Kozma](https://github.com/cyberbeni) - Lint-only rules option
+* [Tony Arnold](https://github.com/tonyarnold) - SwiftFormat for Xcode
+* [Shingo Takagi](https://github.com/zizi4n5) - Several brace-related bug fixes
+* [Alejandro Martínez](https://github.com/alexito4) - `redundantInit` rule
+* [Ali Akhtarzada](https://github.com/aliak00) - Several path-related CLI enhancements
+* [Yonas Kolb](https://github.com/yonaskolb) - Swift Package Manager integration
+* [Balázs Kilvády](https://github.com/balitm) - Xcode lint warning integration
+* [Arthur Semenyutin](https://github.com/vox-humana) - Docker image
 * [Hyperphonic](https://github.com/hyperphonic0) - Xcode 12 compatibility for SwiftFormat
 * [Maxime Marinel](https://github.com/bourvill) - Git pre-commit hook script
 * [Romain Pouclet](https://github.com/palleas) - Homebrew formula
 * [Aerobounce](https://github.com/aerobounce) - Homebrew cask and Sublime Text plugin
-* [Facundo Menzella](https://github.com/facumenzella) - Several new formatting rules and options
-* [Ali Akhtarzada](https://github.com/aliak00) - Several path-related CLI enhancements
-* [Yonas Kolb](https://github.com/yonaskolb) - Swift Package Manager integration
-* [Wolfgang Lutz](https://github.com/Lutzifer) - AppleScript integration instructions
-* [Balázs Kilvády](https://github.com/balitm) - Xcode lint warning integration
-* [Anthony Miller](https://github.com/AnthonyMDev) - Improvements to wrap/indent logic
-* [Shingo Takagi](https://github.com/zizi4n5) - Several brace-related bug fixes
-* [Benedek Kozma](https://github.com/cyberbeni) - Lint-only rules option
 * [Juri Pakaste](https://github.com/juri) - Filelist feature
 * [Jim Puls](https://github.com/puls) - Big Sur icon update
-* [Daniele Formichelli](https://github.com/danyf90) - JSON reporter
 * [Jonas Boberg](https://github.com/bobergj) - Github actions log reporter
 * [Mahdi Bchatnia](https://github.com/inket) - Linux build workflow
-* [Saleem Abdulrasool](https://github.com/compnerd) - Windows build workflow
-* [Arthur Semenyutin](https://github.com/vox-humana) - Docker image
 * [Marco Eidinger](https://github.com/MarcoEidinger) - Swift Package Manager plugin
-* [Hampus Tågerud](https://github.com/hampustagerud) - Git integration for fileHeader rule
+* [Daniele Formichelli](https://github.com/danyf90) - JSON reporter
 * [Nick Lockwood](https://github.com/nicklockwood) - Everything else
 
-([Full list of contributors](https://github.com/nicklockwood/SwiftFormat/graphs/contributors))
+([Full list of contributors](https://github.com/nicklockwood/SwiftFormat/graphs/contributors?all=1))

@@ -65,12 +65,16 @@ extension Formatter {
             case "await":
                 return options.swiftVersion >= "5.5" || options.swiftVersion == .undefined
             default:
+                if token(at: index - 1)?.isOperator("::") == true {
+                    return false
+                }
                 return !keywordOrAttribute.isMacroOrAttribute
             }
         case let .identifier(name):
             switch name {
             case "as", "is", "try": // not treated as keywords inside macro
                 return token(at: index - 1)?.isOperator(".") != true
+                    && token(at: index - 1)?.isOperator("::") != true
             case "unsafe":
                 return options.swiftVersion >= "6.2" || options.swiftVersion == .undefined
             default:
@@ -1247,7 +1251,7 @@ extension Formatter {
             i = startOfScope
 
             if tokens[startOfScope].isStringDelimiter {
-                if options.wrapStringInterpolation == .preserve {
+                if !options.wrapStringInterpolation {
                     return true
                 } else if !tokens[startOfScope].isMultilineStringDelimiter {
                     // Single line strings can never have line break
@@ -1547,7 +1551,7 @@ extension Formatter {
     func startOfBody(atStartOfScope startOfScopeIndex: Int) -> Int {
         // If this is a closure that has an `in` clause, the body scope starts after that
         if isStartOfClosure(at: startOfScopeIndex),
-           let inKeywordIndex = parseClosureArgumentList(at: startOfScopeIndex)?.inKeywordIndex
+           let inKeywordIndex = parseClosureArguments(at: startOfScopeIndex)?.inKeywordIndex
         {
             return inKeywordIndex
         } else {
@@ -2096,6 +2100,22 @@ extension Formatter {
             updateDeclarationName(forDeclarationAt: funcKeywordIndex, to: newMethodName)
         }
 
+        // Handle backticked names like `testFeature`, `test_feature_works`
+        // where the "test" prefix is not followed by a space
+        if methodName.hasPrefix("`test"), methodName.hasSuffix("`"),
+           methodName != "`test`",
+           !methodName.lowercased().hasPrefix("`test ")
+        {
+            var newMethodName = String(methodName.dropFirst("`test".count).dropLast())
+            // Strip leading underscores
+            while newMethodName.hasPrefix("_") {
+                newMethodName = String(newMethodName.dropFirst())
+            }
+            guard !newMethodName.isEmpty else { return }
+            newMethodName = newMethodName.first!.lowercased() + newMethodName.dropFirst()
+            updateDeclarationName(forDeclarationAt: funcKeywordIndex, to: newMethodName)
+        }
+
         // Handle names like ``func `test feature`()``, ``func `Test Feature`()``
         if methodName.lowercased().hasPrefix("`test "), methodName.lowercased() != "`test `" {
             var newMethodName = String(methodName.dropFirst("`test ".count))
@@ -2133,6 +2153,12 @@ extension Formatter {
               !tokens.contains(.identifier(unescapedName)),
               !swiftKeywords.union(["Any", "Self", "self", "super", "nil", "true", "false"]).contains(unescapedName)
         else { return }
+
+        // Escape the new name in backticks if required, e.g. raw identifiers containing spaces
+        var newName = newName
+        if !newName.hasPrefix("`"), backticksRequired(forName: newName, at: nameIndex) {
+            newName = "`\(newName)`"
+        }
 
         replaceToken(at: nameIndex, with: .identifier(newName))
     }
@@ -3401,7 +3427,7 @@ extension Formatter {
     }
 }
 
-extension RandomAccessCollection where Element == Token, Index == Int {
+extension RandomAccessCollection<Token> where Index == Int {
     /// The number of trailing newlines in this array of tokens,
     /// taking into account any spaces that may be between the linebreaks.
     func numberOfLeadingLinebreaks() -> Int {

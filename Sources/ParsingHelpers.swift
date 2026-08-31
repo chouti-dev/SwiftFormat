@@ -595,6 +595,28 @@ extension Formatter {
     /// leading prefix `!` then bounds the receiver on the left (the returned index is the receiver
     /// root just after the `!`) instead of causing a `nil` bail; the caller can find the `!` itself
     /// with `index(of:.nonSpaceOrCommentOrLinebreak, before:)`.
+    /// Whether the receiver of the member call whose dot is at `dotIndex` is reached through `lazy`,
+    /// making it a lazy sequence rather than an eager collection.
+    ///
+    /// `lazy` need not be adjacent to the call in question — `xs.lazy.filter { ... }.map { ... }` is
+    /// every bit as lazy as `xs.lazy.map { ... }` — so the receiver chain is checked as well. That
+    /// walk gives up on a receiver it can't read to the end of, notably one using optional chaining,
+    /// so a `false` result means "no `lazy` found", not "definitely eager".
+    func memberCallReceiverIsLazy(endingAt dotIndex: Int) -> Bool {
+        guard tokens[dotIndex] == .operator(".", .infix) else { return false }
+
+        // Check the immediately preceding token first, and without consulting the receiver walk.
+        // `.lazy` directly before the call is the shape a rule inserting it produces, so recognising
+        // that shape unconditionally is what lets such a rule reach a fixed point — including on the
+        // receivers the walk below refuses to read.
+        if last(.nonSpaceOrCommentOrLinebreak, before: dotIndex) == .identifier("lazy") {
+            return true
+        }
+
+        guard let startIndex = startOfMemberCallReceiver(endingAt: dotIndex) else { return false }
+        return tokens[startIndex ... dotIndex].contains(.identifier("lazy"))
+    }
+
     func startOfMemberCallReceiver(endingAt dotIndex: Int, stoppingAtLeadingNegation: Bool = false) -> Int? {
         var start = dotIndex
         while let prev = index(of: .nonSpaceOrCommentOrLinebreak, before: start) {
@@ -1364,7 +1386,7 @@ extension Formatter {
             else {
                 return false
             }
-            if prevToken.isIdentifier, !["true", "false", "nil"].contains(prevToken.string) {
+            if prevToken.isIdentifier, !prevToken.isLiteralIdentifier {
                 return false
             }
             if [.endOfScope(")"), .endOfScope("]")].contains(prevToken),
@@ -1539,8 +1561,11 @@ extension Formatter {
             return false
         }
 
-        let unescaped = token.unescaped()
+        return backticksRequired(forName: token.unescaped(), at: i, ignoreLeadingDot: ignoreLeadingDot)
+    }
 
+    /// Detect if the given unescaped identifier name would require backtick escaping at the given index
+    func backticksRequired(forName unescaped: String, at i: Int, ignoreLeadingDot: Bool = false) -> Bool {
         // This identifier may be a raw identifier like ``func `function name with spaces`()``.
         // Validate that the escaped identifier is a valid standard identifier.
         var scalarView = UnicodeScalarView(unescaped.unicodeScalars)
@@ -1594,7 +1619,7 @@ extension Formatter {
             if unescaped == "init" {
                 return true
             }
-            if options.swiftVersion >= "5" || self.token(at: prevIndex - 1)?.isOperator("\\") != true {
+            if options.swiftVersion >= "5" || token(at: prevIndex - 1)?.isOperator("\\") != true {
                 return ignoreLeadingDot
             }
             return true
@@ -3085,82 +3110,6 @@ extension Formatter {
         for importToRemove in importsToRemoveByFileOrder.reversed() {
             removeTokens(in: importToRemove.range)
         }
-    }
-
-    /// Parses the arguments of the closure whose open brace is at the given index.
-    /// Returns `nil` if this is an anonymous closure, or if there was an issue parsing the closure arguments.
-    ///  - `{ foo in ... }` returns `argumentNames: ["foo"]`
-    ///  - `{ foo, bar in ... }` returns `argumentNames: ["foo", "bar"]`
-    ///  - `{ (foo: Foo, bar: Bar) in ... }` returns `argumentNames: ["foo", "bar"]`
-    func parseClosureArgumentList(at closureOpenBraceIndex: Int) -> (argumentNames: [String], inKeywordIndex: Int)? {
-        var argumentNames = [String]()
-        let inKeywordIndex: Int
-
-        // Check if this is a closure `{ value in ... }` clause
-        if let indexAfterOpenBrace = index(of: .nonSpaceOrCommentOrLinebreak, after: closureOpenBraceIndex),
-           tokens[indexAfterOpenBrace].isIdentifier
-        {
-            // Parse a list of argument names like `foo, bar, baaz` until the `in` keyword
-            var currentArgumentListIndex = indexAfterOpenBrace
-            while tokens[currentArgumentListIndex].isIdentifier {
-                argumentNames.append(tokens[currentArgumentListIndex].string)
-
-                guard let nextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: currentArgumentListIndex) else {
-                    return nil
-                }
-
-                // Skip over any commas
-                if tokens[nextIndex] == .delimiter(",") {
-                    currentArgumentListIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: nextIndex) ?? nextIndex
-                } else {
-                    currentArgumentListIndex = nextIndex
-                }
-            }
-
-            // Finally we expect there to be an `in` keyword
-            guard tokens[currentArgumentListIndex] == .keyword("in") else {
-                return nil
-            }
-
-            inKeywordIndex = currentArgumentListIndex
-        }
-
-        // Check if this is a closure `{ (value: ValueType) in ... }` clause
-        else if let indexAfterOpenBrace = index(of: .nonSpaceOrCommentOrLinebreak, after: closureOpenBraceIndex),
-                tokens[indexAfterOpenBrace] == .startOfScope("("),
-                let endOfArgumentsScopeIndex = endOfScope(at: indexAfterOpenBrace),
-                let firstTokenInArgumentsList = index(of: .nonSpaceOrCommentOrLinebreak, after: indexAfterOpenBrace),
-                let indexAfterArguments = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfArgumentsScopeIndex),
-                tokens[indexAfterArguments] == .keyword("in")
-        {
-            inKeywordIndex = indexAfterArguments
-
-            // This can be a completely empty argument list, like `{ () in ... }`.
-            if firstTokenInArgumentsList == endOfArgumentsScopeIndex {
-                return (argumentNames: [], inKeywordIndex: inKeywordIndex)
-            }
-
-            // Parse the comma-separated list of arguments
-            var currentArgIndex = firstTokenInArgumentsList
-            while tokens[currentArgIndex].isIdentifierOrKeyword {
-                argumentNames.append(tokens[currentArgIndex].string)
-
-                guard let nextComma = index(of: .delimiter(","), in: currentArgIndex ..< endOfArgumentsScopeIndex),
-                      let nextArgLabel = index(of: .identifierOrKeyword, in: nextComma ..< endOfArgumentsScopeIndex)
-                else {
-                    break
-                }
-
-                currentArgIndex = nextArgLabel
-            }
-        }
-
-        // Otherwise this is an anonymous closure
-        else {
-            return nil
-        }
-
-        return (argumentNames: argumentNames, inKeywordIndex: inKeywordIndex)
     }
 
     /// A fully parsed closure arguments list
