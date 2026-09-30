@@ -48,10 +48,10 @@ public extension FormatRule {
             isIfdefDirective(formatter.tokens[formatter.startOfLine(at: index, excludingIndent: true)])
         }
 
-        /// In .noIndent mode, conditional compilation directives are transparent
-        /// to indent computation: code is indented as if the directives were absent.
-        /// Returns the last code token index at or before `index`, looking back past
-        /// any lines that consist of a conditional compilation directive.
+        // In .noIndent mode, conditional compilation directives are transparent
+        // to indent computation: code is indented as if the directives were absent.
+        // Returns the last code token index at or before `index`, looking back past
+        // any lines that consist of a conditional compilation directive.
         func lastNonIfdefIndex(from index: Int) -> Int {
             var index = index
             while index > -1, startsWithIfdefDirective(lineContaining: index) {
@@ -66,8 +66,8 @@ public extension FormatRule {
             return index
         }
 
-        /// Returns the next code token index at or after `index`, skipping past
-        /// conditional compilation directive lines (used in .noIndent mode)
+        // Returns the next code token index at or after `index`, skipping past
+        // conditional compilation directive lines (used in .noIndent mode)
         func nextNonIfdefIndex(from index: Int?) -> Int? {
             var index = index
             while let i = index, isIfdefDirective(formatter.tokens[i]) {
@@ -124,6 +124,13 @@ public extension FormatRule {
                     indentCount = indentCounts.last! + 1
                 }
                 var indent = indentStack[indentStack.count - indentCount]
+                if indentCount > 1, formatter.options.indentCase,
+                   scopeStack.count > 1, scopeStack[scopeStack.count - 2] == .endOfScope("case"),
+                   !formatter.isInIfdef(at: i, scopeStack: scopeStack)
+                {
+                    // Scope opened on the same line as `case`, so align with the indented case
+                    indent += formatter.options.indent
+                }
 
                 switch string {
                 case "/*":
@@ -366,6 +373,11 @@ public extension FormatRule {
                         for _ in 0 ..< indentCount {
                             indentStack.append(indentStack.last ?? "")
                             stringBodyIndentStack.append(stringBodyIndentStack.last ?? "")
+                        }
+                        if formatter.options.indentCase, scopeStack.last == .endOfScope("case"),
+                           !formatter.isInIfdef(at: i, scopeStack: scopeStack)
+                        {
+                            indentStack[indentStack.count - 1] += formatter.options.indent
                         }
                     }
 
@@ -701,7 +713,8 @@ public extension FormatRule {
                         } else if !formatter.options.xcodeIndentation || !formatter.isWrappedDeclaration(at: i) {
                             indent += formatter.linewrapIndent(at: i)
                         }
-                    } else if !formatter.options.xcodeIndentation || !formatter.isWrappedDeclaration(at: i),
+                    } else if !formatter.isWrappedFunctionName(at: i),
+                              !formatter.options.xcodeIndentation || !formatter.isWrappedDeclaration(at: i),
                               !formatter.isInClosureArguments(at: i)
                               || (lineIndex - 1) == scopeStartLineIndexes.last
                     {
@@ -979,6 +992,15 @@ extension Formatter {
             }
         }
         return false
+    }
+
+    /// Whether or not the line wrap at the given index separates a function's
+    /// `func` keyword from the function name that follows it. The name is part of
+    /// the declaration's introducer rather than a wrapped continuation of it, so it
+    /// shouldn't be given a line wrap indent (which would indent the signature
+    /// more deeply than the function body).
+    func isWrappedFunctionName(at i: Int) -> Bool {
+        last(.nonSpaceOrCommentOrLinebreak, before: i) == .keyword("func")
     }
 
     func isWrappedDeclaration(at i: Int) -> Bool {

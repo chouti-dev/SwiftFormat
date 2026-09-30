@@ -1398,4 +1398,90 @@ final class SwiftTestingTestCaseNamesTests: XCTestCase {
         testFormatting(for: input, output, rule: .swiftTestingTestCaseNames,
                        options: FormatOptions(swiftVersion: "6.2"))
     }
+
+    func testConvertsMiddlePluralizedAcronymToRawIdentifier() {
+        let input = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test
+            func test_lavaURLs_includesHeroAndAccessoryRowIcons() {
+                #expect(true)
+            }
+        }
+        """
+
+        let output = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test
+            func `lava URLs includes hero and accessory row icons`() {
+                #expect(true)
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: .swiftTestingTestCaseNames,
+                       options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testConvertsTrailingPluralizedAcronymToRawIdentifier() {
+        let input = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test
+            func testURLs() {
+                #expect(true)
+            }
+        }
+        """
+
+        let output = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test
+            func `URLs`() {
+                #expect(true)
+            }
+        }
+        """
+
+        testFormatting(for: input, output, rule: .swiftTestingTestCaseNames,
+                       options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testPreservesBacktickedInitNameWithUnnamedArgumentLabels() {
+        let input = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test
+            func `init(_:count:modifier:)`() {
+                #expect(true)
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .swiftTestingTestCaseNames,
+                       options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testPreservesBacktickedSubscriptNameWithUnnamedArgumentLabels() {
+        let input = """
+        import Testing
+
+        struct MyFeatureTests {
+            @Test
+            func `subscript(_:)`() {
+                #expect(true)
+            }
+        }
+        """
+
+        testFormatting(for: input, rule: .swiftTestingTestCaseNames,
+                       options: FormatOptions(swiftVersion: "6.2"))
+    }
 }

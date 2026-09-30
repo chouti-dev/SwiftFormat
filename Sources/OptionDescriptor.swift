@@ -1197,6 +1197,12 @@ struct _Descriptors {
         help: "List of patterns to sort alphabetically without `:sort` mark",
         keyPath: \.alphabeticallySortedDeclarationPatterns
     )
+    let locale = OptionDescriptor(
+        argumentName: "locale",
+        displayName: "Sorting Locale",
+        help: "Locale for sorting: \"en_US\" (default), \"system\", or any valid locale identifier",
+        keyPath: \.locale
+    )
     let funcAttributes = OptionDescriptor(
         argumentName: "func-attributes",
         displayName: "Function Attributes",
@@ -1507,6 +1513,13 @@ struct _Descriptors {
         keyPath: \.guardLikeIfStatements,
         trueValues: ["convert"],
         falseValues: ["preserve"]
+    )
+
+    let booleanGuardsInTests = OptionDescriptor(
+        argumentName: "boolean-guards-in-tests",
+        displayName: "Boolean Guards In Tests",
+        help: "Boolean guards: \"preserve-xctest\" (default), \"preserve\" or \"convert\"",
+        keyPath: \.booleanGuardsInTests
     )
 
     let redundantOptionalBinding = OptionDescriptor(

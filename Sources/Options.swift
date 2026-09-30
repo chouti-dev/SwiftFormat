@@ -194,6 +194,17 @@ public enum RedundantOptionalBindingMode: String, CaseIterable {
     case always
 }
 
+/// How the noGuardInTests rule handles guards with boolean conditions
+public enum BooleanGuardsInTests: String, CaseIterable {
+    /// Convert boolean guards in every test framework, the behaviour before this option existed
+    case convert
+    /// Preserve boolean guards in every test framework
+    case preserve
+    /// Preserve boolean guards under XCTest, where `XCTAssert` does not halt the test,
+    /// and convert them under Swift Testing, where `try #require` throws and so keeps the early exit
+    case preserveXCTest = "preserve-xctest"
+}
+
 public enum TrailingCommas: String, CaseIterable {
     case never
     case always
@@ -654,6 +665,52 @@ public enum FormatTimeZone: Equatable, RawRepresentable, CustomStringConvertible
     }
 }
 
+/// Locale to use when sorting
+public enum FormatLocale: Equatable, RawRepresentable, CustomStringConvertible {
+    case system
+    case identifier(String)
+
+    public init?(rawValue: String) {
+        if rawValue.lowercased() == Self.system.rawValue {
+            self = .system
+        } else {
+            let normalizedIdentifier = rawValue.lowercased().replacingOccurrences(of: "-", with: "_")
+            guard let identifier = Locale.availableIdentifiers.first(where: {
+                $0.lowercased().replacingOccurrences(of: "-", with: "_") == normalizedIdentifier
+            }) else {
+                return nil
+            }
+            self = .identifier(identifier)
+        }
+    }
+
+    public var rawValue: String {
+        switch self {
+        case .system:
+            return "system"
+        case let .identifier(identifier):
+            return identifier
+        }
+    }
+
+    func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        switch self {
+        case .system:
+            return lhs.localizedStandardCompare(rhs)
+        case let .identifier(identifier):
+            return lhs.compare(
+                rhs,
+                options: [.caseInsensitive, .numeric, .widthInsensitive, .forcedOrdering],
+                locale: Locale(identifier: identifier)
+            )
+        }
+    }
+
+    public var description: String {
+        rawValue
+    }
+}
+
 /// When initializing an optional value type,
 /// is it necessary to explicitly declare a default value
 public enum NilInitType: String, CaseIterable {
@@ -892,6 +949,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var customTypeMarks: Set<String>
     public var blankLineAfterSubgroups: Bool
     public var alphabeticallySortedDeclarationPatterns: Set<String>
+    public var locale: FormatLocale
     public var swiftUIPropertiesSortMode: SwiftUIPropertiesSortMode
     public var yodaSwap: YodaMode
     public var extensionACLPlacement: ExtensionACLPlacement
@@ -934,6 +992,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var suiteNameFormat: SwiftTestingNameFormat
     public var testCaseAccessControl: Visibility
     public var guardLikeIfStatements: Bool
+    public var booleanGuardsInTests: BooleanGuardsInTests
     public var redundantOptionalBinding: RedundantOptionalBindingMode
     public var singleLineTernary: SingleLineTernary
 
@@ -1045,6 +1104,7 @@ public struct FormatOptions: CustomStringConvertible {
                 customTypeMarks: Set<String> = [],
                 blankLineAfterSubgroups: Bool = true,
                 alphabeticallySortedDeclarationPatterns: Set<String> = [],
+                locale: FormatLocale = .identifier("en_US"),
                 swiftUIPropertiesSortMode: SwiftUIPropertiesSortMode = .none,
                 yodaSwap: YodaMode = .always,
                 extensionACLPlacement: ExtensionACLPlacement = .onExtension,
@@ -1087,6 +1147,7 @@ public struct FormatOptions: CustomStringConvertible {
                 suiteNameFormat: SwiftTestingNameFormat = .preserve,
                 testCaseAccessControl: Visibility = .internal,
                 guardLikeIfStatements: Bool = false,
+                booleanGuardsInTests: BooleanGuardsInTests = .preserveXCTest,
                 redundantOptionalBinding: RedundantOptionalBindingMode = .sameNameOnly,
                 singleLineTernary: SingleLineTernary = .convert,
                 // Doesn't really belong here, but hard to put elsewhere
@@ -1187,6 +1248,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.customTypeMarks = customTypeMarks
         self.blankLineAfterSubgroups = blankLineAfterSubgroups
         self.alphabeticallySortedDeclarationPatterns = alphabeticallySortedDeclarationPatterns
+        self.locale = locale
         self.swiftUIPropertiesSortMode = swiftUIPropertiesSortMode
         self.yodaSwap = yodaSwap
         self.extensionACLPlacement = extensionACLPlacement
@@ -1229,6 +1291,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.suiteNameFormat = suiteNameFormat
         self.testCaseAccessControl = testCaseAccessControl
         self.guardLikeIfStatements = guardLikeIfStatements
+        self.booleanGuardsInTests = booleanGuardsInTests
         self.redundantOptionalBinding = redundantOptionalBinding
         self.singleLineTernary = singleLineTernary
         self.indentComments = indentComments

@@ -1545,7 +1545,7 @@ Option | Description
 ```
 
 **NOTE:** If the `--modifier-order` option isn't set, the default order will be:
-`override`, `private`, `fileprivate`, `internal`, `package`, `public`, `open`, `private(set)`, `fileprivate(set)`, `internal(set)`, `package(set)`, `public(set)`, `open(set)`, `final`, `dynamic`, `optional`, `required`, `convenience`, `indirect`, `isolated`, `nonisolated`, `nonisolated(unsafe)`, `lazy`, `weak`, `unowned`, `unowned(safe)`, `unowned(unsafe)`, `static`, `class`, `borrowing`, `consuming`, `mutating`, `nonmutating`, `prefix`, `infix`, `postfix`, `async`
+`override`, `private`, `fileprivate`, `internal`, `package`, `public`, `open`, `private(set)`, `fileprivate(set)`, `internal(set)`, `package(set)`, `public(set)`, `open(set)`, `final`, `dynamic`, `optional`, `required`, `indirect`, `isolated`, `nonisolated`, `nonisolated(unsafe)`, `lazy`, `weak`, `unowned`, `unowned(safe)`, `unowned(unsafe)`, `static`, `class`, `borrowing`, `consuming`, `mutating`, `nonmutating`, `prefix`, `infix`, `postfix`, `async`, `convenience`
 
 </details>
 <br/>
@@ -1668,6 +1668,7 @@ Convert guard statements and trailing if statements in unit tests to
 Option | Description
 --- | ---
 `--guard-like-if-statements` | Convert guard-like trailing if statements in tests: "convert" or "preserve" (default)
+`--boolean-guards-in-tests` | Boolean guards: "preserve-xctest" (default), "preserve" or "convert"
 
 <details>
 <summary>Examples</summary>
@@ -3434,6 +3435,10 @@ Option | Description
 ## sortSwitchCases
 
 Sort switch cases alphabetically.
+
+Option | Description
+--- | ---
+`--locale` | Locale for sorting: "en_US" (default), "system", or any valid locale identifier
 
 <details>
 <summary>Examples</summary>
