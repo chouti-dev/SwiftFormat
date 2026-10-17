@@ -32,8 +32,12 @@
 import XCTest
 @testable import SwiftFormat
 
-private func createTmpFile(_ path: String, contents: String) throws -> URL {
-    let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(path)
+private func createTmpFile(
+    _ path: String,
+    contents: String,
+    in baseDirectory: URL = URL(fileURLWithPath: NSTemporaryDirectory())
+) throws -> URL {
+    let url = baseDirectory.appendingPathComponent(path)
     let directory = url.deletingLastPathComponent()
     if !FileManager.default.fileExists(atPath: directory.path) {
         try FileManager.default.createDirectory(
@@ -70,7 +74,40 @@ private func withTmpFiles(_ files: [String: String], fn: (URL) throws -> Void) t
     }
 }
 
+private func withTmpDirectory(_ files: [String: String], fn: (URL) throws -> Void) throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    for (path, contents) in files {
+        _ = try createTmpFile(path, contents: contents, in: directory)
+    }
+    try fn(directory)
+}
+
+private struct TestSnapshot: Decodable {
+    let version: Int
+    let files: [String: String]
+}
+
+private func readSnapshot(at url: URL) throws -> TestSnapshot {
+    try JSONDecoder().decode(TestSnapshot.self, from: Data(contentsOf: url))
+}
+
 final class CommandLineTests: XCTestCase {
+    private let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString)
+
+    private func createTestFile(_ path: String, contents: String) throws -> URL {
+        try createTmpFile(path, contents: contents, in: temporaryDirectory)
+    }
+
+    override func tearDownWithError() throws {
+        if FileManager.default.fileExists(atPath: temporaryDirectory.path) {
+            try FileManager.default.removeItem(at: temporaryDirectory)
+        }
+        try super.tearDownWithError()
+    }
+
     // MARK: stdin
 
     func testStdin() {
@@ -447,6 +484,367 @@ final class CommandLineTests: XCTestCase {
         XCTAssertNotEqual(computeHash(input), computeHash(output))
     }
 
+    func testCreatesSnapshotWithoutFormattingFiles() throws {
+        let firstInput = """
+        let foo=bar
+        """
+        let secondInput = """
+        let baz=quux
+        """
+        try withTmpDirectory([
+            "Sources/z.swift": secondInput,
+            "Sources/a.swift": firstInput,
+        ]) { directory in
+            let firstInputURL = directory.appendingPathComponent("Sources/a.swift")
+            let secondInputURL = directory.appendingPathComponent("Sources/z.swift")
+            let snapshotURL = directory.appendingPathComponent(".swiftformat-snapshot")
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(processArguments([
+                "", directory.path,
+                "--snapshot",
+                "--cache", "ignore",
+                "--rules", "spaceAroundOperators",
+            ], in: ""), .ok)
+
+            XCTAssertEqual(try String(contentsOf: firstInputURL), firstInput)
+            XCTAssertEqual(try String(contentsOf: secondInputURL), secondInput)
+            let snapshotJSON = try String(contentsOf: snapshotURL)
+            XCTAssertEqual(snapshotJSON, """
+            {
+              "files" : {
+                "Sources/a.swift" : "\(computeHash(firstInput))",
+                "Sources/z.swift" : "\(computeHash(secondInput))"
+              },
+              "version" : 1
+            }
+            """)
+            let snapshot = try readSnapshot(at: snapshotURL)
+            XCTAssertEqual(snapshot.version, 1)
+            XCTAssertEqual(snapshot.files, [
+                "Sources/a.swift": computeHash(firstInput),
+                "Sources/z.swift": computeHash(secondInput),
+            ])
+        }
+    }
+
+    func testDefaultSnapshotUsesCommonInputRoot() throws {
+        let sourceInput = """
+        let foo = bar
+        """
+        let testInput = """
+        let baz = quux
+        """
+        try withTmpDirectory([
+            "Sources/foo.swift": sourceInput,
+            "Tests/foo.swift": testInput,
+        ]) { directory in
+            let sourcesURL = directory.appendingPathComponent("Sources")
+            let testsURL = directory.appendingPathComponent("Tests")
+            let snapshotURL = directory.appendingPathComponent(".swiftformat-snapshot")
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(processArguments([
+                "", sourcesURL.path, testsURL.path,
+                "--snapshot",
+                "--cache", "ignore",
+            ], in: ""), .ok)
+            XCTAssertEqual(try readSnapshot(at: snapshotURL).files, [
+                "Sources/foo.swift": computeHash(sourceInput),
+                "Tests/foo.swift": computeHash(testInput),
+            ])
+        }
+    }
+
+    func testDefaultSnapshotForFileUsesContainingDirectory() throws {
+        let input = """
+        let foo = bar
+        """
+        try withTmpDirectory(["Sources/foo.swift": input]) { directory in
+            let inputURL = directory.appendingPathComponent("Sources/foo.swift")
+            let snapshotURL = directory.appendingPathComponent("Sources/.swiftformat-snapshot")
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(processArguments([
+                "", inputURL.path,
+                "--snapshot",
+                "--cache", "ignore",
+            ], in: ""), .ok)
+            XCTAssertEqual(try readSnapshot(at: snapshotURL).files, [
+                "foo.swift": computeHash(input),
+            ])
+        }
+    }
+
+    func testAutomaticallyDetectsAndLogsSnapshot() throws {
+        let input = """
+        let foo=bar
+        """
+        try withTmpDirectory([
+            "foo.swift": input,
+            ".swiftformat-snapshot": """
+            {"version":1,"files":{"foo.swift":"\(computeHash(input))"}}
+            """,
+        ]) { directory in
+            let inputURL = directory.appendingPathComponent("foo.swift")
+            let snapshotURL = directory.appendingPathComponent(".swiftformat-snapshot")
+            var messages = [String]()
+            CLI.print = { message, _ in messages.append(message) }
+
+            XCTAssertEqual(processArguments([
+                "", directory.path,
+                "--cache", "ignore",
+                "--rules", "spaceAroundOperators",
+            ], in: ""), .ok)
+            XCTAssertEqual(try String(contentsOf: inputURL), input)
+            XCTAssertTrue(messages.contains("Reading snapshot file at \(snapshotURL.path)"))
+        }
+    }
+
+    func testClosestSnapshotIsUsedWithoutBeingUpdated() throws {
+        let nestedInput = """
+        let nested=value
+        """
+        let nestedOutput = """
+        let nested = value
+        """
+        let rootSnapshot = """
+        {"version":1,"files":{"Nested/nested.swift":"root-value"}}
+        """
+        let nestedSnapshot = """
+        {"version":1,"files":{"nested.swift":"old-value"}}
+        """
+        try withTmpDirectory([
+            "Nested/nested.swift": nestedInput,
+            ".swiftformat-snapshot": rootSnapshot,
+            "Nested/.swiftformat-snapshot": nestedSnapshot,
+        ]) { directory in
+            let nestedInputURL = directory.appendingPathComponent("Nested/nested.swift")
+            let rootSnapshotURL = directory.appendingPathComponent(".swiftformat-snapshot")
+            let nestedSnapshotURL = directory.appendingPathComponent("Nested/.swiftformat-snapshot")
+            var messages = [String]()
+            CLI.print = { message, _ in messages.append(message) }
+
+            XCTAssertEqual(processArguments([
+                "", directory.path,
+                "--cache", "ignore",
+                "--rules", "spaceAroundOperators",
+            ], in: ""), .ok)
+            XCTAssertEqual(try String(contentsOf: nestedInputURL), nestedOutput)
+            XCTAssertEqual(try readSnapshot(at: rootSnapshotURL).files, [
+                "Nested/nested.swift": "root-value",
+            ])
+            XCTAssertEqual(try readSnapshot(at: nestedSnapshotURL).files, [
+                "nested.swift": "old-value",
+            ])
+            XCTAssertEqual(try String(contentsOf: rootSnapshotURL), rootSnapshot)
+            XCTAssertEqual(try String(contentsOf: nestedSnapshotURL), nestedSnapshot)
+            XCTAssertTrue(messages.contains("Reading snapshot file at \(rootSnapshotURL.path)"))
+            XCTAssertTrue(messages.contains("Reading snapshot file at \(nestedSnapshotURL.path)"))
+        }
+    }
+
+    func testInvalidAutomaticallyDetectedSnapshotPreventsFormatting() throws {
+        let rootInput = """
+        let root=value
+        """
+        let nestedInput = """
+        let nested=value
+        """
+        try withTmpDirectory([
+            "root.swift": rootInput,
+            "Nested/nested.swift": nestedInput,
+            "Nested/.swiftformat-snapshot": "not json",
+        ]) { directory in
+            let rootInputURL = directory.appendingPathComponent("root.swift")
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(processArguments([
+                "", directory.path,
+                "--cache", "ignore",
+                "--rules", "spaceAroundOperators",
+            ], in: ""), .error)
+            XCTAssertEqual(try String(contentsOf: rootInputURL), rootInput)
+        }
+    }
+
+    func testCreatesEmptySnapshotWhenThereAreNoEligibleFiles() throws {
+        try withTmpDirectory([:]) { directory in
+            let snapshotURL = directory.appendingPathComponent("snapshot.json")
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(processArguments([
+                "", directory.path,
+                "--snapshot", snapshotURL.path,
+                "--cache", "ignore",
+            ], in: ""), .ok)
+            XCTAssertEqual(try readSnapshot(at: snapshotURL).files, [:])
+        }
+    }
+
+    func testSnapshotFormatsChangedAndNewFilesWithoutUpdatingHashes() throws {
+        let original = """
+        let foo = bar
+        """
+        let changed = """
+        let foo=bar
+        """
+        let formatted = """
+        let foo = bar
+        """
+        let new = """
+        let baz=quux
+        """
+        let formattedNew = """
+        let baz = quux
+        """
+        try withTmpDirectory(["foo.swift": original]) { directory in
+            let inputURL = directory.appendingPathComponent("foo.swift")
+            let newInputURL = directory.appendingPathComponent("new.swift")
+            let snapshotURL = directory.appendingPathComponent("snapshot.json")
+            let arguments = [
+                "", directory.path,
+                "--snapshot", snapshotURL.path,
+                "--cache", "ignore",
+                "--rules", "spaceAroundOperators",
+            ]
+            CLI.print = { _, _ in }
+            XCTAssertEqual(processArguments(arguments, in: ""), .ok)
+
+            try changed.write(to: inputURL, atomically: true, encoding: .utf8)
+            try new.write(to: newInputURL, atomically: true, encoding: .utf8)
+            XCTAssertEqual(processArguments(arguments, in: ""), .ok)
+
+            XCTAssertEqual(try String(contentsOf: inputURL), formatted)
+            XCTAssertEqual(try String(contentsOf: newInputURL), formattedNew)
+            let snapshot = try readSnapshot(at: snapshotURL)
+            XCTAssertEqual(snapshot.files, [
+                "foo.swift": computeHash(original),
+            ])
+        }
+    }
+
+    func testSnapshotDoesNotRecordLintFailures() throws {
+        let original = """
+        let foo = bar
+        """
+        let changed = """
+        let foo=bar
+        """
+        try withTmpDirectory(["foo.swift": original]) { directory in
+            let inputURL = directory.appendingPathComponent("foo.swift")
+            let snapshotURL = directory.appendingPathComponent("snapshot.json")
+            let arguments = [
+                "", directory.path,
+                "--snapshot", snapshotURL.path,
+                "--cache", "ignore",
+                "--rules", "spaceAroundOperators",
+            ]
+            CLI.print = { _, _ in }
+            XCTAssertEqual(processArguments(arguments, in: ""), .ok)
+
+            try changed.write(to: inputURL, atomically: true, encoding: .utf8)
+            XCTAssertEqual(processArguments(arguments + ["--lint"], in: ""), .lintFailure)
+            XCTAssertEqual(try String(contentsOf: inputURL), changed)
+            XCTAssertEqual(try readSnapshot(at: snapshotURL).files, [
+                "foo.swift": computeHash(original),
+            ])
+        }
+    }
+
+    func testInvalidSnapshotPreventsFormatting() throws {
+        let input = """
+        let foo=bar
+        """
+        try withTmpDirectory([
+            "foo.swift": input,
+            "snapshot.json": "not json",
+        ]) { directory in
+            let inputURL = directory.appendingPathComponent("foo.swift")
+            let snapshotURL = directory.appendingPathComponent("snapshot.json")
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(processArguments([
+                "", directory.path,
+                "--snapshot", snapshotURL.path,
+                "--cache", "ignore",
+                "--rules", "spaceAroundOperators",
+            ], in: ""), .error)
+            XCTAssertEqual(try String(contentsOf: inputURL), input)
+        }
+    }
+
+    func testUnsupportedSnapshotVersionPreventsFormatting() throws {
+        let input = """
+        let foo=bar
+        """
+        try withTmpDirectory([
+            "foo.swift": input,
+            "snapshot.json": #"{"version":2,"files":{}}"#,
+        ]) { directory in
+            let inputURL = directory.appendingPathComponent("foo.swift")
+            let snapshotURL = directory.appendingPathComponent("snapshot.json")
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(processArguments([
+                "", directory.path,
+                "--snapshot", snapshotURL.path,
+                "--cache", "ignore",
+                "--rules", "spaceAroundOperators",
+            ], in: ""), .error)
+            XCTAssertEqual(try String(contentsOf: inputURL), input)
+        }
+    }
+
+    func testDryRunDoesNotUpdateSnapshot() throws {
+        let original = """
+        let foo = bar
+        """
+        let changed = """
+        let baz = quux
+        """
+        try withTmpDirectory(["foo.swift": original]) { directory in
+            let inputURL = directory.appendingPathComponent("foo.swift")
+            let snapshotURL = directory.appendingPathComponent("snapshot.json")
+            let arguments = [
+                "", directory.path,
+                "--snapshot", snapshotURL.path,
+                "--cache", "ignore",
+            ]
+            CLI.print = { _, _ in }
+            XCTAssertEqual(processArguments(arguments, in: ""), .ok)
+
+            try changed.write(to: inputURL, atomically: true, encoding: .utf8)
+            XCTAssertEqual(processArguments(arguments + ["--dry-run"], in: ""), .ok)
+            XCTAssertEqual(try readSnapshot(at: snapshotURL).files, [
+                "foo.swift": computeHash(original),
+            ])
+        }
+    }
+
+    func testSnapshotCannotBeCombinedWithOutputOrLineRange() throws {
+        let input = """
+        let foo = bar
+        """
+        try withTmpDirectory(["foo.swift": input]) { directory in
+            let inputURL = directory.appendingPathComponent("foo.swift")
+            let snapshotURL = directory.appendingPathComponent("snapshot.json")
+            let outputURL = directory.appendingPathComponent("output.swift")
+            CLI.print = { _, _ in }
+
+            XCTAssertEqual(processArguments([
+                "", inputURL.path,
+                "--snapshot", snapshotURL.path,
+                "--output", outputURL.path,
+            ], in: ""), .error)
+            XCTAssertEqual(processArguments([
+                "", inputURL.path,
+                "--snapshot", snapshotURL.path,
+                "--line-range", "1,1",
+            ], in: ""), .error)
+        }
+    }
+
     // MARK: rules
 
     func testRulesNotMarkedAsDisabled() {
@@ -509,6 +907,33 @@ final class CommandLineTests: XCTestCase {
             XCTAssertEqual(type, .error, message)
         }
         XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "foobar.swift --quiet"), .error)
+    }
+
+    // MARK: color
+
+    func testColorModeIsSetWhileRunning() {
+        var colorMode: CLI.ColorMode?
+        CLI.print = { _, _ in
+            colorMode = CLI.colorMode
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--color always --help"), .ok)
+        XCTAssertEqual(colorMode, .always)
+        XCTAssertEqual(CLI.colorMode, .auto)
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--color never --help"), .ok)
+        XCTAssertEqual(colorMode, .never)
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--help"), .ok)
+        XCTAssertEqual(colorMode, .auto)
+    }
+
+    func testInvalidColorModeIsAnError() {
+        var errors = [String]()
+        CLI.print = { message, type in
+            if type == .error {
+                errors.append(message)
+            }
+        }
+        XCTAssertEqual(CLI.run(in: projectDirectory.path, with: "--color sometimes --help"), .error)
+        XCTAssertEqual(errors, ["error: Unsupported --color value 'sometimes'. Valid options are \"auto\", \"always\" or \"never\"."])
     }
 
     // MARK: split input paths
@@ -723,8 +1148,10 @@ final class CommandLineTests: XCTestCase {
             DispatchQueue.concurrentPerform(iterations: 50) { _ in
                 var options = Options.default
                 do {
-                    try gatherOptions(&options, for: url, with: { message in
-                        logQueue.sync { logMessages.append(message) }
+                    try gatherOptions(&options, for: url, with: Logger { message, type in
+                        if type == .info {
+                            logQueue.sync { logMessages.append(message) }
+                        }
                     })
                 } catch {
                     logQueue.sync { errors.append(error) }
@@ -793,6 +1220,51 @@ final class CommandLineTests: XCTestCase {
         XCTAssertEqual(warnings, [])
     }
 
+    func testFilterMatchingFileNameAppliesPerFileWithinDirectory() throws {
+        CLI.print = { _, _ in }
+
+        let configURL = try createTestFile("Test/config.swiftformat", contents: """
+        --rules indent
+        --indent 1
+        """)
+
+        let testsConfigURL = try createTestFile("Test/tests.swiftformat", contents: """
+        --filter **Tests.swift
+        --indent 4
+        """)
+
+        let sourceFile = try createTestFile("Test/Foo/Foo.swift", contents: """
+        func foo() {
+        print("bar")
+        }
+        """)
+
+        let testFile = try createTestFile("Test/Foo/FooTests.swift", contents: """
+        func foo() {
+        print("bar")
+        }
+        """)
+
+        _ = processArguments([
+            "",
+            configURL.deletingLastPathComponent().path,
+            "--config", configURL.path,
+            "--config", testsConfigURL.path,
+        ], in: "")
+
+        XCTAssertEqual(try String(contentsOf: sourceFile, encoding: .utf8), """
+        func foo() {
+         print("bar")
+        }
+        """)
+
+        XCTAssertEqual(try String(contentsOf: testFile, encoding: .utf8), """
+        func foo() {
+            print("bar")
+        }
+        """)
+    }
+
     func testConfigFilesWithFilter() throws {
         var errors = [String]()
 
@@ -803,39 +1275,39 @@ final class CommandLineTests: XCTestCase {
             }
         }
 
-        let configURL = try createTmpFile("Test/config.swiftformat", contents: """
+        let configURL = try createTestFile("Test/config.swiftformat", contents: """
         --rules indent
         --rules braces
         --indent 1
         """)
 
-        let testsConfigURL = try createTmpFile("Test/tests.swiftformat", contents: """
+        let testsConfigURL = try createTestFile("Test/tests.swiftformat", contents: """
         --filter **/Tests/**
         --indent 2
         --enable linebreakAtEndOfFile
         """)
 
-        let toolsConfigURL = try createTmpFile("Test/tools.swiftformat", contents: """
+        let toolsConfigURL = try createTestFile("Test/tools.swiftformat", contents: """
         --filter **/Tools/**
         --indent 3
         --disable braces
         """)
 
-        let nonTestFile = try createTmpFile("Test/Foo/Sources/Foo.swift", contents: """
+        let nonTestFile = try createTestFile("Test/Foo/Sources/Foo.swift", contents: """
         func foo()
         {
         print("bar")
         }
         """)
 
-        let testFile = try createTmpFile("Test/Foo/Tests/FooTests.swift", contents: """
+        let testFile = try createTestFile("Test/Foo/Tests/FooTests.swift", contents: """
         func foo()
         {
         print("bar")
         }
         """)
 
-        let toolsFile = try createTmpFile("Test/Tools/MyTool/FooTool.swift", contents: """
+        let toolsFile = try createTestFile("Test/Tools/MyTool/FooTool.swift", contents: """
         func foo()
         {
         print("bar")
@@ -888,7 +1360,7 @@ final class CommandLineTests: XCTestCase {
             }
         }
 
-        let configURL = try createTmpFile("Test/config.swiftformat", contents: """
+        let configURL = try createTestFile("Test/config.swiftformat", contents: """
         --indent 1
 
         [Tests]
@@ -900,19 +1372,19 @@ final class CommandLineTests: XCTestCase {
         --indent 3
         """)
 
-        let nonTestFile = try createTmpFile("Test/Foo/Sources/Foo.swift", contents: """
+        let nonTestFile = try createTestFile("Test/Foo/Sources/Foo.swift", contents: """
         func foo() {
         print("bar")
         }
         """)
 
-        let testFile = try createTmpFile("Test/Foo/Tests/FooTests.swift", contents: """
+        let testFile = try createTestFile("Test/Foo/Tests/FooTests.swift", contents: """
         func foo() {
         print("bar")
         }
         """)
 
-        let toolsFile = try createTmpFile("Test/Tools/MyTool/FooTool.swift", contents: """
+        let toolsFile = try createTestFile("Test/Tools/MyTool/FooTool.swift", contents: """
         func foo() {
         print("bar")
         }
@@ -953,6 +1425,137 @@ final class CommandLineTests: XCTestCase {
         XCTAssertEqual(errors, [])
     }
 
+    func testConfigFileWithHeaderCreationDateFilter() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            print(message)
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        let configURL = try createTestFile("Test/config.swiftformat", contents: """
+        --swift-version 6.0
+
+        [New test files]
+        --filter **/Tests/**,header-creation-date-after:2026-08-31
+        --enable preferSwiftTesting
+        """)
+
+        let testCase = """
+        final class MyFeatureTests: XCTestCase {
+            func testMyFeatureHasNoBugs() {
+                let myFeature = MyFeature()
+                XCTAssertFalse(myFeature.hasBugs)
+            }
+        }
+        """
+
+        let newTestFile = try createTestFile("Test/Tests/NewTests.swift", contents: """
+        //  Created on 9/1/26.
+
+        import XCTest
+
+        \(testCase)
+        """)
+
+        let oldTestFile = try createTestFile("Test/Tests/OldTests.swift", contents: """
+        //  Created on 8/30/26.
+
+        import XCTest
+
+        \(testCase)
+        """)
+
+        let undatedTestFile = try createTestFile("Test/Tests/UndatedTests.swift", contents: """
+        import XCTest
+
+        \(testCase)
+        """)
+
+        _ = processArguments([
+            "",
+            configURL.deletingLastPathComponent().path,
+            "--config", configURL.path,
+        ], in: "")
+
+        // Created after 8/31/26, so is converted to Swift Testing
+        XCTAssertEqual(try String(contentsOf: newTestFile, encoding: .utf8), """
+        //  Created on 9/1/26.
+
+        import Foundation
+        import Testing
+
+        final class MyFeatureTests {
+            @Test func myFeatureHasNoBugs() {
+                let myFeature = MyFeature()
+                #expect(!myFeature.hasBugs)
+            }
+        }
+
+        """)
+
+        // Created before 8/31/26, so keeps using XCTest
+        XCTAssertEqual(try String(contentsOf: oldTestFile, encoding: .utf8), """
+        //  Created on 8/30/26.
+
+        import XCTest
+
+        \(testCase)
+
+        """)
+
+        // Has no creation date, so doesn't match the filter
+        XCTAssertEqual(try String(contentsOf: undatedTestFile, encoding: .utf8), """
+        import XCTest
+
+        \(testCase)
+
+        """)
+
+        for tempFile in [configURL, newTestFile, oldTestFile, undatedTestFile] {
+            try FileManager.default.removeItem(at: tempFile)
+        }
+
+        XCTAssertEqual(errors, [])
+    }
+
+    func testConfigFileWithInvalidHeaderCreationDateFilter() throws {
+        var errors = [String]()
+
+        CLI.print = { message, type in
+            print(message)
+            if type == .error {
+                errors.append(message)
+            }
+        }
+
+        let configURL = try createTestFile("Test/config.swiftformat", contents: """
+        --filter header-creation-date-after:tomorrowish
+        --indent 2
+        """)
+
+        let file = try createTestFile("Test/Foo/Foo.swift", contents: """
+        func foo() {}
+        """)
+
+        _ = processArguments([
+            "",
+            configURL.deletingLastPathComponent().path,
+            "--config", configURL.path,
+        ], in: "")
+
+        XCTAssert(
+            errors.contains(where: { $0.contains("Invalid date 'tomorrowish'") }),
+            "\(errors)"
+        )
+
+        for tempFile in [configURL, file] {
+            try FileManager.default.removeItem(at: tempFile)
+        }
+    }
+
     func testBaseConfigFileWithFilters() throws {
         var errors = [String]()
 
@@ -963,7 +1566,7 @@ final class CommandLineTests: XCTestCase {
             }
         }
 
-        let configURL = try createTmpFile("Test/config.swiftformat", contents: """
+        let configURL = try createTestFile("Test/config.swiftformat", contents: """
         --indent 1
 
         [Tests]
@@ -975,19 +1578,19 @@ final class CommandLineTests: XCTestCase {
         --indent 3
         """)
 
-        let nonTestFile = try createTmpFile("Test/Foo/Sources/Foo.swift", contents: """
+        let nonTestFile = try createTestFile("Test/Foo/Sources/Foo.swift", contents: """
         func foo() {
         print("bar")
         }
         """)
 
-        let testFile = try createTmpFile("Test/Foo/Tests/FooTests.swift", contents: """
+        let testFile = try createTestFile("Test/Foo/Tests/FooTests.swift", contents: """
         func foo() {
         print("bar")
         }
         """)
 
-        let toolsFile = try createTmpFile("Test/Tools/MyTool/FooTool.swift", contents: """
+        let toolsFile = try createTestFile("Test/Tools/MyTool/FooTool.swift", contents: """
         func foo() {
         print("bar")
         }
@@ -1057,7 +1660,7 @@ final class CommandLineTests: XCTestCase {
             }
         }
 
-        let configURL = try createTmpFile("Test/config.swiftformat", contents: """
+        let configURL = try createTestFile("Test/config.swiftformat", contents: """
         --indent 1
 
         [Tests]
@@ -1065,7 +1668,7 @@ final class CommandLineTests: XCTestCase {
         --indent 2
         """)
 
-        let testFile = try createTmpFile("Test/MyModule/Tests/Foo.swift", contents: """
+        let testFile = try createTestFile("Test/MyModule/Tests/Foo.swift", contents: """
         func foo()
         {
         print("bar")
@@ -1304,6 +1907,44 @@ final class CommandLineTests: XCTestCase {
                 buildVersionMsgs.isEmpty,
                 "Expected no swift-version messages from build directory excluded by root config, got: \(buildVersionMsgs)"
             )
+        }
+    }
+
+    func testBuildDirectoriesExcludedByDefault() throws {
+        try withTmpDirectory([
+            "Sources/Foo.swift": "let foo = 5;\n",
+            "Build/Foo.swift": "let foo = 5;\n",
+            ".build/Foo.swift": "let foo = 5;\n",
+            "DerivedData/Foo.swift": "let foo = 5;\n",
+            "Example/Build/Foo.swift": "let foo = 5;\n",
+        ]) { directory in
+            CLI.print = { _, _ in }
+            XCTAssertEqual(CLI.run(in: directory.path, with: ". --rules semicolons --cache ignore --quiet"), .ok)
+            XCTAssertEqual(try String(contentsOf: directory.appendingPathComponent("Sources/Foo.swift")), "let foo = 5\n")
+            for path in ["Build/Foo.swift", ".build/Foo.swift", "DerivedData/Foo.swift", "Example/Build/Foo.swift"] {
+                XCTAssertEqual(try String(contentsOf: directory.appendingPathComponent(path)), "let foo = 5;\n", path)
+            }
+        }
+    }
+
+    func testBuildDirectoryFormattedWhenUnexcluded() throws {
+        try withTmpDirectory([
+            ".swiftformat": "--unexclude Build\n",
+            "Build/Foo.swift": "let foo = 5;\n",
+        ]) { directory in
+            CLI.print = { _, _ in }
+            XCTAssertEqual(CLI.run(in: directory.path, with: ". --rules semicolons --cache ignore --quiet"), .ok)
+            XCTAssertEqual(try String(contentsOf: directory.appendingPathComponent("Build/Foo.swift")), "let foo = 5\n")
+        }
+    }
+
+    func testBuildDirectoryFormattedWhenPassedAsInput() throws {
+        try withTmpDirectory([
+            "Build/Foo.swift": "let foo = 5;\n",
+        ]) { directory in
+            CLI.print = { _, _ in }
+            XCTAssertEqual(CLI.run(in: directory.path, with: "Build --rules semicolons --cache ignore --quiet"), .ok)
+            XCTAssertEqual(try String(contentsOf: directory.appendingPathComponent("Build/Foo.swift")), "let foo = 5\n")
         }
     }
 
@@ -1606,7 +2247,7 @@ final class CommandLineTests: XCTestCase {
     }
 
     func testJSONReporterInferredFromURL() throws {
-        let outputURL = try createTmpFile("report.json", contents: "")
+        let outputURL = try createTestFile("report.json", contents: "")
         try withTmpFiles([
             "foo.swift": "func foo() {\n}\n",
         ]) { url in
@@ -1702,7 +2343,7 @@ final class CommandLineTests: XCTestCase {
     }
 
     func testXMLReporterInferredFromURL() throws {
-        let outputURL = try createTmpFile("report.xml", contents: "")
+        let outputURL = try createTestFile("report.xml", contents: "")
         try withTmpFiles([
             "foo.swift": "func foo() {\n}\n",
         ]) { url in
@@ -1746,7 +2387,7 @@ final class CommandLineTests: XCTestCase {
     }
 
     func testSARIFReporterInferredFromURL() throws {
-        let outputURL = try createTmpFile("report.sarif", contents: "")
+        let outputURL = try createTestFile("report.sarif", contents: "")
         try withTmpFiles([
             "foo.swift": "func foo() {\n}\n",
         ]) { url in

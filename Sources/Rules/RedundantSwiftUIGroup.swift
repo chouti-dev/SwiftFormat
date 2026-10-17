@@ -12,7 +12,7 @@ public extension FormatRule {
     /// Remove redundant SwiftUI Group wrapper views in favor of @ViewBuilder
     static let redundantSwiftUIGroup = FormatRule(
         help: "Remove redundant SwiftUI Group wrapper views in favor of @ViewBuilder.",
-        sharedOptions: ["linebreaks"]
+        sharedOptions: ["linebreaks", "prefer-content-builder"]
     ) { formatter in
         formatter.parseDeclarations().forEachRecursiveDeclaration { declaration in
             let bodyScope: ClosedRange<Int>?
@@ -75,7 +75,10 @@ public extension FormatRule {
             )
 
             if let addViewBuilderAt {
-                formatter.insertViewBuilderAttribute(at: addViewBuilderAt)
+                // @ContentBuilder requires the Swift 6.4 SDK (Xcode 27)
+                let preferContentBuilder = formatter.options.preferContentBuilder && formatter.options.swiftVersion >= "6.4"
+                let attribute = preferContentBuilder ? "@ContentBuilder" : "@ViewBuilder"
+                formatter.insertResultBuilderAttribute(attribute, at: addViewBuilderAt)
             }
         }
     } examples: {
@@ -93,7 +96,7 @@ public extension FormatRule {
 
         ```diff
           struct MyView: View {
-        +   @ViewBuilder
+        +   @ContentBuilder
             var content: some View {
         -     Group {
                 Text("foo")
@@ -237,21 +240,5 @@ extension Formatter {
 
         // Insert the body tokens (indent rule will fix indentation)
         insert(bodyTokens, at: groupStartIndex)
-    }
-
-    /// Inserts an `@ViewBuilder` attribute on its own line before the declaration at the given index
-    func insertViewBuilderAttribute(at index: Int) {
-        // Any existing indentation before the insertion point now indents `@ViewBuilder`,
-        // so the declaration that follows needs its own copy of the indentation.
-        let currentIndent = currentIndentForLine(at: index)
-
-        // Attributes are represented as `.keyword` tokens (e.g. `@objc`, `@main`). Inserting an
-        // `.identifier` instead causes other rules like `organizeDeclarations` to misparse the
-        // declaration and insert a spurious blank line after the attribute.
-        var tokensToInsert: [Token] = [.keyword("@ViewBuilder"), linebreakToken(for: index)]
-        if !currentIndent.isEmpty {
-            tokensToInsert.append(.space(currentIndent))
-        }
-        insert(tokensToInsert, at: index)
     }
 }

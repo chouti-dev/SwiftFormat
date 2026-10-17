@@ -1941,6 +1941,33 @@ final class RedundantMemberwiseInitTests: XCTestCase {
         testFormatting(for: input, output, rule: .redundantMemberwiseInit, options: options)
     }
 
+    func testRemoveInitWithContentBuilderClosureParameter() {
+        let input = """
+        struct MyView<Content: View>: View {
+            let content: Content
+
+            init(@ContentBuilder content: () -> Content) {
+                self.content = content()
+            }
+
+            var body: some View {
+                content
+            }
+        }
+        """
+        let output = """
+        struct MyView<Content: View>: View {
+            @ContentBuilder let content: Content
+
+            var body: some View {
+                content
+            }
+        }
+        """
+        let options = FormatOptions(swiftVersion: "6.4")
+        testFormatting(for: input, output, rule: .redundantMemberwiseInit, options: options)
+    }
+
     func testRemoveInitWithViewBuilderAndRegularParameters() {
         let input = """
         struct MyView<Content: View>: View {

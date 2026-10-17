@@ -32,6 +32,35 @@ private let changelogTitles: [Substring] = {
 }()
 
 final class MetadataTests: XCTestCase {
+    // MARK: rule order cycle check
+
+    func testRuleOrderingHasNoCycles() {
+        let dependencies = Dictionary(uniqueKeysWithValues: FormatRules.all.map {
+            ($0.name, $0.orderAfter.map(\.name))
+        })
+        XCTAssertNil(_FormatRules.orderingCycle(in: dependencies))
+    }
+
+    func testRuleOrderingAllowsSharedDependencies() {
+        XCTAssertNil(_FormatRules.orderingCycle(in: [
+            "a": ["b", "c"], "b": ["d"], "c": ["d"], "d": [],
+        ]))
+    }
+
+    func testRuleOrderingDetectsSelfDependency() {
+        XCTAssertEqual(_FormatRules.orderingCycle(in: ["a": ["a"]]), ["a", "a"])
+    }
+
+    func testRuleOrderingDetectsMutualDependency() {
+        XCTAssertEqual(_FormatRules.orderingCycle(in: ["a": ["b"], "b": ["a"]]), ["a", "b", "a"])
+    }
+
+    func testRuleOrderingDetectsIndirectCycle() {
+        XCTAssertEqual(_FormatRules.orderingCycle(in: [
+            "a": [], "b": ["c"], "c": ["d"], "d": ["e"], "e": ["c"],
+        ]), ["c", "d", "e", "c"])
+    }
+
     // MARK: generate Rules.md
 
     /// NOTE: if test fails, just run it again locally to update rules file
@@ -236,7 +265,10 @@ final class MetadataTests: XCTestCase {
                         ]
                     case .identifier("isCommentedCode"):
                         referencedOptions.append(Descriptors.indent)
-                    case .identifier("insertLinebreak"), .identifier("linebreakToken"):
+                    case .identifier("isInStringLiteralWithWrappingDisabled"):
+                        referencedOptions.append(Descriptors.wrapStringInterpolation)
+                    case .identifier("insertLinebreak"), .identifier("linebreakToken"),
+                         .identifier("insertResultBuilderAttribute"):
                         referencedOptions.append(Descriptors.linebreak)
                     case .identifier("wrapCollectionsAndArguments"):
                         referencedOptions += [
@@ -359,12 +391,6 @@ final class MetadataTests: XCTestCase {
         XCTAssertTrue(changelog.contains("[\(SwiftFormat.version)]"), "CHANGELOG.md does not mention latest release")
         XCTAssertTrue(changelog.contains("(https://github.com/nicklockwood/SwiftFormat/releases/tag/\(SwiftFormat.version))"),
                       "CHANGELOG.md does not include correct link for latest release")
-    }
-
-    func testLatestVersionInPodspec() throws {
-        let podspec = try String(contentsOf: podspecURL, encoding: .utf8)
-        XCTAssertTrue(podspec.contains("\"version\": \"\(SwiftFormat.version)\""), "Podspec version does not match latest release")
-        XCTAssertTrue(podspec.contains("\"tag\": \"\(SwiftFormat.version)\""), "Podspec tag does not match latest release")
     }
 
     func testVersionConstantUpdated() {

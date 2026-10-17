@@ -2557,6 +2557,29 @@ final class RedundantSelfTests: XCTestCase {
         testFormatting(for: input, output, rule: .redundantSelf, options: options)
     }
 
+    func testNoInsertSelfForSubscriptReadModify() {
+        let input = """
+        class Foo {
+            var values: [Int] = []
+            subscript(index: Int) -> Int {
+                _read { yield values[index] }
+                _modify { yield &values[index] }
+            }
+        }
+        """
+        let output = """
+        class Foo {
+            var values: [Int] = []
+            subscript(index: Int) -> Int {
+                _read { yield self.values[index] }
+                _modify { yield &self.values[index] }
+            }
+        }
+        """
+        let options = FormatOptions(explicitSelf: .insert)
+        testFormatting(for: input, output, rule: .redundantSelf, options: options)
+    }
+
     func testNoInsertSelfInIfCaseLet() {
         let input = """
         enum Foo {
@@ -3209,7 +3232,7 @@ final class RedundantSelfTests: XCTestCase {
     func testNoInsertSelfBeforeBinding() {
         let input = """
         struct MyView: View {
-            @Environment(ViewModel.self) var viewModel
+            @Environment(ViewModel.self) private var viewModel
 
             var body: some View {
                 @Bindable var viewModel = self.viewModel

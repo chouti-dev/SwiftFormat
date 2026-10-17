@@ -11,6 +11,59 @@ import Foundation
 // MARK: shared helper methods
 
 extension Formatter {
+    /// Whether renaming this declaration cannot affect a public or serialized API contract.
+    func declarationCanBeRenamed(
+        _ declaration: Declaration,
+        upTo maximumVisibility: Visibility?
+    ) -> Bool {
+        guard declaration.keyword != "extension",
+              !["case", "import", "operator", "precedencegroup"].contains(declaration.keyword),
+              maximumVisibility.map({ effectiveVisibility(of: declaration) <= $0 }) ?? true
+        else { return false }
+
+        let contractModifiers = [
+            "@IBAction", "@IBInspectable", "@IBOutlet", "@NSManaged", "@GKInspectable",
+            "@_cdecl", "@_silgen_name", "@inlinable", "@usableFromInline", "@objc",
+            "dynamic", "override",
+        ]
+        let modifiers = Set(declaration.modifiers)
+        guard contractModifiers.allSatisfy({ !modifiers.contains($0) }),
+              !declaration.parentDeclarations.contains(where: { parent in
+                  parent.keyword == "protocol" ||
+                      parent.name == "CodingKeys" ||
+                      parent.modifiers.contains("@objcMembers")
+              })
+        else { return false }
+
+        if declaration.isStoredProperty {
+            // A property wrapper can expose projected/backing names or persist the property.
+            guard declaration.attributes.isEmpty else { return false }
+
+            // Renaming a synthesized Codable field changes its serialized key.
+            if declaration.parentType?.conformances.contains(where: {
+                let name = $0.conformance.string.split(separator: ".").last.map(String.init)
+                return ["Codable", "Decodable", "Encodable"].contains(name)
+            }) == true {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    /// The declaration's visibility after accounting for enclosing types and extensions.
+    func effectiveVisibility(of declaration: Declaration) -> Visibility {
+        let inheritedVisibility: Visibility?
+        if declaration.visibility() == nil, declaration.parent?.keyword == "extension" {
+            inheritedVisibility = declaration.parent?.visibility()
+        } else {
+            inheritedVisibility = nil
+        }
+        let visibility = declaration.visibility() ?? inheritedVisibility ?? .internal
+        guard let parent = declaration.parent else { return visibility }
+        return min(visibility, effectiveVisibility(of: parent))
+    }
+
     /// should brace be wrapped according to `wrapMultilineStatementBraces` rule?
     func shouldWrapMultilineStatementBrace(at index: Int) -> Bool {
         assert(tokens[index] == .startOfScope("{"))
@@ -113,6 +166,7 @@ extension Formatter {
             $0 == .operator(".", .infix)
         }), !exclude.contains(selfKeyword),
         let nextIndex = index(of: .nonSpaceOrLinebreak, after: dotIndex),
+        isEnabled(at: nextIndex - 1),
         let token = token(at: nextIndex), token.isIdentifier,
         case let name = token.unescaped(), (include.map { $0.contains(name) } ?? true),
         !isSymbol(at: nextIndex, in: exclusionList),
@@ -207,7 +261,7 @@ extension Formatter {
         while let token = token(at: index) {
             outer: switch token {
             case let .identifier(name) where last(.nonSpace, before: index)?.isOperator == false:
-                if name == removeSelfKeyword, isEnabled, let nextIndex = self.index(
+                if name == removeSelfKeyword, isEnabled(at: index), let nextIndex = self.index(
                     of: .nonSpaceOrCommentOrLinebreak,
                     after: index, if: { $0 == .operator(".", .infix) }
                 ), case .identifier? = next(
@@ -261,14 +315,14 @@ extension Formatter {
                     if isStartOfStatement(at: nextIndex) {
                         names.formUnion(locals)
                     }
-                    let removeSelfKeyword = isEnabled && (
+                    let removeSelfKeyword = (
                         options.swiftVersion >= "5.4" || isConditionalStatement(at: nextIndex)
                     ) ? removeSelfKeyword : nil
                     let include = onlyLocal ? locals : nil
                     switch token {
                     case .keyword("is"), .keyword("as"), .keyword("try"), .keyword("await"):
                         break
-                    case .identifier(removeSelfKeyword ?? ""):
+                    case .identifier(removeSelfKeyword ?? "") where isEnabled(at: nextIndex):
                         _ = removeSelf(at: nextIndex, exclude: names, include: include)
                     case .startOfScope("<"), .startOfScope("["), .startOfScope("("),
                          .startOfScope where token.isStringDelimiter:
@@ -281,7 +335,7 @@ extension Formatter {
                                 switch tokens[i] {
                                 case .endOfScope("}"):
                                     i = self.index(of: .startOfScope("{"), before: i) ?? i
-                                case .identifier(removeSelfKeyword):
+                                case .identifier(removeSelfKeyword) where isEnabled(at: i):
                                     _ = removeSelf(at: i, exclude: names, include: include)
                                 default:
                                     break
@@ -1078,6 +1132,21 @@ extension Formatter {
         let maxWidth = options.maxWidth
         guard maxWidth > 0 else { return nil }
 
+        let endIndex = endOfLine(at: index)
+        var remainingWidth = maxWidth - lineLength
+        // Asset literals can extend beyond this line and need the full width calculation below.
+        if tokens[index ..< endIndex].allSatisfy({ token in
+            guard token != .keyword("#colorLiteral"), token != .keyword("#imageLiteral") else {
+                return false
+            }
+            let width = tokenLength(token)
+            guard width <= remainingWidth else { return false }
+            remainingWidth -= width
+            return true
+        }) {
+            return nil
+        }
+
         func addBreakPoint(at i: Int, relativePriority: Int) {
             guard stringLiteralDepth == 0, currentPriority + relativePriority >= lastBreakPointPriority,
                   !isInClosureArguments(at: i + 1),
@@ -1094,7 +1163,6 @@ extension Formatter {
         }
 
         var i = index
-        let endIndex = endOfLine(at: index)
         while i < endIndex {
             var token = tokens[i]
             switch token {
@@ -1246,21 +1314,43 @@ extension Formatter {
     /// Returns true if the token at the specified index is inside a single-line string literal (including inside an interpolation),
     /// which should never be wrapped, or in any string literal when string interpolation wrapping is disabled.
     func isInStringLiteralWithWrappingDisabled(at i: Int) -> Bool {
+        let enclosing = enclosingStringDelimiters
         var i = i
-        while let startOfScope = startOfScope(at: i) {
-            i = startOfScope
+        while i < enclosing.count, let delimiter = enclosing[i] {
+            i = delimiter
 
-            if tokens[startOfScope].isStringDelimiter {
-                if !options.wrapStringInterpolation {
-                    return true
-                } else if !tokens[startOfScope].isMultilineStringDelimiter {
-                    // Single line strings can never have line break
-                    return true
-                }
+            if !options.wrapStringInterpolation {
+                return true
+            } else if !tokens[i].isMultilineStringDelimiter {
+                // Single line strings can never have line break
+                return true
             }
         }
 
         return false
+    }
+
+    /// For each token, the index of the innermost enclosing string literal's opening
+    /// delimiter, or nil if the token isn't inside a string literal (or interpolation).
+    var enclosingStringDelimiters: [Int?] {
+        if let cached = derivedCaches.enclosingStringDelimiters, cached.mutationCount == mutationCount {
+            return cached.value
+        }
+        var result = [Int?](repeating: nil, count: tokens.count)
+        var stack = [Int]()
+        for (i, token) in tokens.enumerated() {
+            switch token {
+            case .startOfScope where token.isStringDelimiter:
+                result[i] = stack.last
+                stack.append(i)
+            case .endOfScope where token.isStringDelimiter:
+                result[i] = stack.popLast()
+            default:
+                result[i] = stack.last
+            }
+        }
+        derivedCaches.enclosingStringDelimiters = (mutationCount, result)
+        return result
     }
 
     func removeParen(at index: Int) {
@@ -2858,7 +2948,7 @@ extension Formatter {
                         ["static", "class"].contains(string)
                     })
                     if let name, classOrStatic || !staticSelf {
-                        processAccessors(["get", "set", "willSet", "didSet", "init", "_modify"], for: name,
+                        processAccessors({ $0.isPropertyAccessorKeyword }, for: name,
                                          at: &index, localNames: localNames, members: members,
                                          typeStack: &typeStack, closureStack: &closureStack,
                                          membersByType: &membersByType,
@@ -3021,7 +3111,7 @@ extension Formatter {
                 case .startOfScope:
                     index = endOfScope(at: index) ?? (tokens.count - 1)
                 case .identifier(selfKeyword):
-                    guard isEnabled, explicitSelf != .insert, !isTypeRoot, !usingDynamicLookup, !staticSelf || classOrStatic,
+                    guard isEnabled(at: index), explicitSelf != .insert, !isTypeRoot, !usingDynamicLookup, !staticSelf || classOrStatic,
                           let dotIndex = self.index(of: .nonSpaceOrLinebreak, after: index, if: {
                               $0 == .operator(".", .infix)
                           }),
@@ -3051,7 +3141,7 @@ extension Formatter {
                         fallthrough
                     }
                 case .keyword where token.isMacro, .identifier:
-                    guard isEnabled && !isTypeRoot else {
+                    guard isEnabled(at: index) && !isTypeRoot else {
                         break
                     }
                     if explicitSelf == .insert {
@@ -3145,7 +3235,7 @@ extension Formatter {
                 index += 1
             }
         }
-        func processAccessors(_ names: [String], for name: String, at index: inout Int,
+        func processAccessors(_ isAccessor: (Token) -> Bool, for name: String, at index: inout Int,
                               localNames: Set<String>, members: Set<String>,
                               typeStack: inout [(name: String, keyword: String)],
                               closureStack: inout [(allowsImplicitSelf: Bool, selfCapture: String?)],
@@ -3161,8 +3251,8 @@ extension Formatter {
                 switch $0 {
                 case .keyword where $0.isAttribute:
                     return true
-                case let .identifier(name), let .keyword(name):
-                    return names.contains(name)
+                case let token where token.isIdentifierOrKeyword:
+                    return isAccessor(token)
                 default:
                     return false
                 }
@@ -3195,7 +3285,7 @@ extension Formatter {
                         token = tokens[nextIndex]
                     }
                     switch token.string {
-                    case "get", "_modify":
+                    case "get", "_read", "_modify":
                         localNames.insert(name)
                     case "set", "init":
                         localNames.insert(name)
@@ -3317,7 +3407,7 @@ extension Formatter {
 
             if startToken == .keyword("subscript") {
                 index = bodyStartIndex
-                processAccessors(["get", "set"], for: "", at: &index, localNames: localNames,
+                processAccessors({ $0.isSubscriptAccessorKeyword }, for: "", at: &index, localNames: localNames,
                                  members: members, typeStack: &typeStack, closureStack: &closureStack, membersByType: &membersByType,
                                  classMembersByType: &classMembersByType,
                                  usingDynamicLookup: usingDynamicLookup,
@@ -3432,6 +3522,124 @@ extension Formatter {
         let indent = currentIndentForLine(at: openBrace) + options.indent
         insertLinebreak(at: insertionIndex)
         insertSpace(indent, at: insertionIndex + 1)
+    }
+
+    func makeSwiftUIDynamicPropertiesPrivate() {
+        parseDeclarations().forEachRecursiveDeclaration { declaration in
+            guard declaration.isStoredInstanceProperty,
+                  isViewType(declaration.parentType) || isViewModifierType(declaration.parentType),
+                  let propertyWrapper = declaration.swiftUIPropertyWrapper,
+                  propertyWrapper != "@Binding" ||
+                  declaration.parentType?.visibility() == .public ||
+                  declaration.parentType?.visibility() == .open
+            else { return }
+
+            let keywordIndex = declaration.keywordIndex
+
+            // Don't override any existing access control:
+            guard !modifiersForDeclaration(at: keywordIndex, contains: { _, modifier in
+                _FormatRules.aclModifiers.contains(modifier) || _FormatRules.aclSetterModifiers.contains(modifier)
+            }) else {
+                return
+            }
+
+            // Check for @Previewable - we won't modify @Previewable macros.
+            guard !modifiersForDeclaration(at: keywordIndex, contains: "@Previewable") else {
+                return
+            }
+
+            insert([.keyword("private"), .space(" ")], at: keywordIndex)
+        }
+    }
+
+    // MARK: - Content builders
+
+    /// Removes SwiftUI result builder attributes that Swift applies implicitly, or that aren't needed
+    func removeRedundantContentBuilderAttributes() {
+        // Collect all attributes to remove first (to avoid re-entrancy issues)
+        var attributeIndicesToRemove = [Int]()
+
+        parseDeclarations().forEachRecursiveDeclaration { declaration in
+            guard let viewBuilderIndex = indexOfViewBuilderAttribute(for: declaration)
+            else { return }
+
+            // Never remove @ViewBuilder from protocol members, as conforming types
+            // rely on the implicit result builder being added
+            if isInsideProtocol(at: declaration.keywordIndex) {
+                return
+            }
+
+            let bodyScope: ClosedRange<Int>?
+            let isBodyMember: Bool
+
+            // Parse the declaration to get body scope and check if it's a body member
+            if declaration.keyword == "var" || declaration.keyword == "let",
+               let property = declaration.parsePropertyDeclaration()
+            {
+                bodyScope = property.body?.scopeRange
+                // A var named "body" is only the protocol body if it's on a View
+                // (ViewModifier.body must be a function, not a property)
+                isBodyMember = property.identifier == "body" && isViewType(declaration.parentType)
+            } else if declaration.keyword == "func",
+                      let function = parseFunctionDeclaration(keywordIndex: declaration.keywordIndex)
+            {
+                bodyScope = function.bodyRange
+                // A func named "body" is only the protocol body if it's on a ViewModifier
+                // (View.body must be a property, not a function)
+                isBodyMember = function.name == "body" && isViewModifierType(declaration.parentType)
+            } else {
+                return
+            }
+
+            guard let bodyScope else { return }
+
+            // The attribute is redundant if:
+            // 1. It's the body protocol requirement of a View/ViewModifier, OR
+            // 2. The body contains only a single non-conditional expression
+            let isRedundant = isBodyMember
+                || scopeBodyIsSingleNonConditionalExpression(at: bodyScope.lowerBound)
+
+            if isRedundant {
+                attributeIndicesToRemove.append(viewBuilderIndex)
+            }
+        }
+
+        // Remove the attributes in reverse order to not invalidate indices
+        for attributeIndex in attributeIndicesToRemove.reversed() {
+            removeViewBuilderAttribute(at: attributeIndex)
+        }
+    }
+
+    /// Removes a @ViewBuilder attribute at the given index, including the trailing linebreak if on its own line
+    func removeViewBuilderAttribute(at attributeIndex: Int) {
+        var startIndex = attributeIndex
+        var endIndex = attributeIndex
+
+        // Check if there's a leading space (between another attribute and this one)
+        let hasLeadingSpace = attributeIndex > 0 && tokens[attributeIndex - 1].isSpace
+        let leadingSpaceIsAfterAttribute = hasLeadingSpace && attributeIndex > 1 && !tokens[attributeIndex - 2].isLinebreak
+
+        let nextNonSpaceIndex = index(of: .nonSpace, after: attributeIndex)
+        let hasTrailingLinebreak = nextNonSpaceIndex != nil && tokens[nextNonSpaceIndex!].isLinebreak
+        let hasTrailingSpace = attributeIndex + 1 < tokens.count && tokens[attributeIndex + 1].isSpace
+
+        if leadingSpaceIsAfterAttribute {
+            // Remove the space before @ViewBuilder (space between attributes)
+            startIndex = attributeIndex - 1
+            // Don't remove trailing linebreak - preserve the line structure
+            // Don't remove trailing space - it separates from the next token
+        } else if hasTrailingLinebreak, let nextIndex = nextNonSpaceIndex {
+            // @ViewBuilder is at the start of the line (possibly with indentation)
+            endIndex = nextIndex
+            // Also remove leading indentation
+            if hasLeadingSpace, attributeIndex > 1, tokens[attributeIndex - 2].isLinebreak {
+                startIndex = attributeIndex - 1
+            }
+        } else if hasTrailingSpace {
+            endIndex = attributeIndex + 1
+        }
+
+        removeTokens(in: startIndex ... endIndex)
     }
 }
 

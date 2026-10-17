@@ -453,7 +453,7 @@ final class WrapAttributesTests: XCTestCase {
 
     func testComplexAttributesException() {
         let input = """
-        @Environment(\\.myEnvironmentVar) var foo: Foo
+        @Environment(\\.myEnvironmentVar) private var foo: Foo
 
         @SomeCustomAttr(argument: true) var foo: Foo
 
@@ -461,7 +461,7 @@ final class WrapAttributesTests: XCTestCase {
         """
 
         let output = """
-        @Environment(\\.myEnvironmentVar) var foo: Foo
+        @Environment(\\.myEnvironmentVar) private var foo: Foo
 
         @SomeCustomAttr(argument: true) var foo: Foo
 
@@ -559,7 +559,7 @@ final class WrapAttributesTests: XCTestCase {
             }
 
             @Environment(\\.myEnvironmentVar)
-            var foo
+            private var foo
 
             @State
             private var myStoredFoo: String = "myStoredFoo" {
@@ -581,7 +581,7 @@ final class WrapAttributesTests: XCTestCase {
                 "myComputedFoo"
             }
 
-            @Environment(\\.myEnvironmentVar) var foo
+            @Environment(\\.myEnvironmentVar) private var foo
 
             @State private var myStoredFoo: String = "myStoredFoo" {
                 didSet {
@@ -611,14 +611,14 @@ final class WrapAttributesTests: XCTestCase {
         """
 
         let options = FormatOptions(varAttributes: .sameLine, storedVarAttributes: .sameLine, computedVarAttributes: .prevLine)
-        testFormatting(for: input, rule: .wrapAttributes, options: options, exclude: [.redundantViewBuilder])
+        testFormatting(for: input, rule: .wrapAttributes, options: options, exclude: [.contentBuilder])
     }
 
     func testWrapAttributesInSwiftUIView() {
         let input = """
         struct MyView: View {
             @State private var textContent: String
-            @Environment(\\.myEnvironmentVar) var environmentVar
+            @Environment(\\.myEnvironmentVar) private var environmentVar
 
             var body: some View {
                 childView
@@ -631,7 +631,27 @@ final class WrapAttributesTests: XCTestCase {
         """
 
         let options = FormatOptions(varAttributes: .sameLine, complexAttributes: .prevLine)
-        testFormatting(for: input, rule: .wrapAttributes, options: options, exclude: [.redundantViewBuilder])
+        testFormatting(for: input, rule: .wrapAttributes, options: options, exclude: [.contentBuilder])
+    }
+
+    func testWrapAttributesInSwiftUIViewWithContentBuilder() {
+        let input = """
+        struct MyView: View {
+            @State private var textContent: String
+            @Environment(\\.colorScheme) private var colorScheme
+
+            var body: some View {
+                childView
+            }
+
+            @ContentBuilder var childView: some View {
+                Text(verbatim: textContent)
+            }
+        }
+        """
+
+        let options = FormatOptions(varAttributes: .sameLine, complexAttributes: .prevLine)
+        testFormatting(for: input, rule: .wrapAttributes, options: options, exclude: [.contentBuilder])
     }
 
     func testInlineMainActorAttributeNotWrapped() {

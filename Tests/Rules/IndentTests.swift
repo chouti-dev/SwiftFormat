@@ -1122,7 +1122,8 @@ final class IndentTests: XCTestCase {
             if let foo = foo({
                 bar()
             }), bar == baz,
-            let quux == baz {
+               let quux == baz
+            {
                 baz()
             }
         }
@@ -3083,7 +3084,14 @@ final class IndentTests: XCTestCase {
             .baz
         else { return }
         """
-        testFormatting(for: input, rule: .indent,
+        let output = """
+        guard
+            let baz = foo
+                .bar
+                .baz
+        else { return }
+        """
+        testFormatting(for: input, output, rule: .indent,
                        exclude: [.wrapConditionalBodies])
     }
 
@@ -3118,7 +3126,17 @@ final class IndentTests: XCTestCase {
               yetAnotherBool
         else { return }
         """
-        testFormatting(for: input, rule: .indent,
+        let output = """
+        guard aBool,
+              anotherBool,
+              aTestArray
+                  .map { $0 * 2 }
+                  .filter { $0 == 4 }
+                  .isEmpty,
+              yetAnotherBool
+        else { return }
+        """
+        testFormatting(for: input, output, rule: .indent,
                        exclude: [.wrapConditionalBodies, .preferContains])
     }
 
@@ -3133,20 +3151,332 @@ final class IndentTests: XCTestCase {
             yetAnotherBool
         else { return }
         """
-        // TODO: fix indent for `yetAnotherBool`
         let output = """
         guard aBool,
               anotherBool,
               aTestArray
-                  .map { $0 * 2 }
-                  .filter { $0 == 4 }
-                  .isEmpty,
-                  yetAnotherBool
+                .map { $0 * 2 }
+                .filter { $0 == 4 }
+                .isEmpty,
+              yetAnotherBool
         else { return }
         """
         let options = FormatOptions(xcodeIndentation: true)
         testFormatting(for: input, output, rule: .indent,
                        options: options, exclude: [.wrapConditionalBodies, .blankLinesAfterGuardStatements, .preferContains])
+    }
+
+    func testClosureBeforeUnrelatedMultilineCondition() {
+        let input = """
+        processValues {
+            print($0)
+        }
+
+        if foo,
+           bar
+        {
+            run()
+        }
+        """
+        testFormatting(for: input, rule: .indent)
+    }
+
+    func testConditionalBodyBeforeMultilineCondition() {
+        let input = """
+        if foo {
+            run()
+        }
+
+        if bar,
+           baz
+        {
+            run()
+        }
+        """
+        testFormatting(for: input, rule: .indent)
+    }
+
+    func testClosureAtStartOfMultilineGuardConditions() {
+        let input = """
+        guard let endCommentIndex = formatter.tokens[index...].firstIndex(where: {
+            $0.isComment && $0.string.contains("swiftformat:sort:end")
+        }),
+              let sortRangeStart = formatter.index(of: .nonSpaceOrComment, after: index),
+              let firstRangeToken = formatter.index(of: .nonLinebreak, after: sortRangeStart),
+              sortRangeStart <= firstRangeToken
+        else { return }
+        """
+        let output = """
+        guard let endCommentIndex = formatter.tokens[index...].firstIndex(where: {
+                  $0.isComment && $0.string.contains("swiftformat:sort:end")
+              }),
+              let sortRangeStart = formatter.index(of: .nonSpaceOrComment, after: index),
+              let firstRangeToken = formatter.index(of: .nonLinebreak, after: sortRangeStart),
+              sortRangeStart <= firstRangeToken
+        else { return }
+        """
+        testFormatting(for: input, output, rule: .indent,
+                       exclude: [.wrapConditionalBodies])
+    }
+
+    func testClosureAtStartOfMultilineGuardConditionsWithXcodeIndentation() {
+        let input = """
+        guard let endCommentIndex = formatter.tokens[index...].firstIndex(where: {
+                  $0.isComment && $0.string.contains("swiftformat:sort:end")
+              }),
+              let sortRangeStart = formatter.index(of: .nonSpaceOrComment, after: index),
+              let firstRangeToken = formatter.index(of: .nonLinebreak, after: sortRangeStart),
+              sortRangeStart <= firstRangeToken
+        else { return }
+        """
+        let output = """
+        guard let endCommentIndex = formatter.tokens[index...].firstIndex(where: {
+            $0.isComment && $0.string.contains("swiftformat:sort:end")
+        }),
+              let sortRangeStart = formatter.index(of: .nonSpaceOrComment, after: index),
+              let firstRangeToken = formatter.index(of: .nonLinebreak, after: sortRangeStart),
+              sortRangeStart <= firstRangeToken
+        else { return }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, output, rule: .indent, options: options,
+                       exclude: [.wrapConditionalBodies])
+    }
+
+    func testClosureInSingleGuardConditionUsesStandardIndentation() {
+        let input = """
+        guard let endCommentIndex = formatter.tokens[index...].firstIndex(where: {
+                  $0.isComment && $0.string.contains("swiftformat:sort:end")
+              })
+        else { return }
+
+        guard let endCommentIndex = formatter.tokens[index...].firstIndex(where: {
+                  $0.isComment && $0.string.contains("swiftformat:sort:end")
+              }) else { return }
+        """
+        let output = """
+        guard let endCommentIndex = formatter.tokens[index...].firstIndex(where: {
+            $0.isComment && $0.string.contains("swiftformat:sort:end")
+        })
+        else { return }
+
+        guard let endCommentIndex = formatter.tokens[index...].firstIndex(where: {
+            $0.isComment && $0.string.contains("swiftformat:sort:end")
+        }) else { return }
+        """
+        testFormatting(for: input, output, rule: .indent,
+                       exclude: [.blankLinesAfterGuardStatements, .wrapConditionalBodies])
+    }
+
+    func testClosureBeforeNestedArgumentCommaInMultilineCondition() {
+        let input = """
+        guard let result = combine(values.first(where: {
+            $0.isMatch
+        }), fallback),
+              result.isValid
+        else { return }
+        """
+        let output = """
+        guard let result = combine(values.first(where: {
+                  $0.isMatch
+              }), fallback),
+              result.isValid
+        else { return }
+        """
+        testFormatting(for: input, output, rule: .indent,
+                       exclude: [.wrapConditionalBodies])
+    }
+
+    func testClosureBeforeCollectionCommaInMultilineCondition() {
+        let input = """
+        if [values.contains(where: {
+            $0.isMatch
+        }), fallback].contains(true),
+           isValid
+        {
+            performAction()
+        }
+        """
+        let output = """
+        if [values.contains(where: {
+               $0.isMatch
+           }), fallback].contains(true),
+           isValid
+        {
+            performAction()
+        }
+        """
+        testFormatting(for: input, output, rule: .indent)
+    }
+
+    func testClosureBeforeNestedArgumentCommaInSingleCondition() {
+        let input = """
+        guard let result = combine(values.first(where: {
+            $0.isMatch
+        }), fallback)
+        else { return }
+        """
+        testFormatting(for: input, rule: .indent,
+                       exclude: [.wrapConditionalBodies])
+    }
+
+    func testClosureAtStartOfMultilineIfAndWhileConditions() {
+        let input = """
+        if let match = values.first(where: {
+            $0.isMatch
+        }),
+           let result = match.result
+        {
+            use(result)
+        }
+
+        while let match = values.first(where: {
+            $0.isMatch
+        }),
+              match.shouldContinue
+        {
+            use(match)
+        }
+        """
+        let output = """
+        if let match = values.first(where: {
+               $0.isMatch
+           }),
+           let result = match.result
+        {
+            use(result)
+        }
+
+        while let match = values.first(where: {
+                  $0.isMatch
+              }),
+              match.shouldContinue
+        {
+            use(match)
+        }
+        """
+        testFormatting(for: input, output, rule: .indent,
+                       exclude: [.braces, .wrapMultilineStatementBraces])
+    }
+
+    func testIndentMethodChainsInMultilineConditions() {
+        let input = """
+        func someMethod() {
+            if let bar = foo.removingPercentEncoding,
+               let baz = bar
+               .uppercased()
+               .removingPercentEncoding,
+               let qux = baz
+               .lowercased()
+               .removingPercentEncoding
+            {}
+
+            guard let bar = foo.removingPercentEncoding,
+                  let baz = bar
+                  .uppercased()
+                  .removingPercentEncoding,
+                  let qux = baz
+                  .lowercased()
+                  .removingPercentEncoding
+            else { return }
+        }
+        """
+        let output = """
+        func someMethod() {
+            if let bar = foo.removingPercentEncoding,
+               let baz = bar
+                   .uppercased()
+                   .removingPercentEncoding,
+               let qux = baz
+                   .lowercased()
+                   .removingPercentEncoding
+            {}
+
+            guard let bar = foo.removingPercentEncoding,
+                  let baz = bar
+                      .uppercased()
+                      .removingPercentEncoding,
+                  let qux = baz
+                      .lowercased()
+                      .removingPercentEncoding
+            else { return }
+        }
+        """
+        testFormatting(for: input, output, rule: .indent,
+                       exclude: [.wrapMultilineStatementBraces, .wrapConditionalBodies])
+        let xcodeOutput = """
+        func someMethod() {
+            if let bar = foo.removingPercentEncoding,
+               let baz = bar
+                .uppercased()
+                .removingPercentEncoding,
+               let qux = baz
+                .lowercased()
+                .removingPercentEncoding
+            {}
+
+            guard let bar = foo.removingPercentEncoding,
+                  let baz = bar
+                    .uppercased()
+                    .removingPercentEncoding,
+                  let qux = baz
+                    .lowercased()
+                    .removingPercentEncoding
+            else { return }
+        }
+        """
+        let options = FormatOptions(xcodeIndentation: true)
+        testFormatting(for: input, xcodeOutput, rule: .indent, options: options,
+                       exclude: [.wrapMultilineStatementBraces, .wrapConditionalBodies])
+    }
+
+    func testIndentConditionAfterMethodChainInWrappedGuard() {
+        let input = """
+        guard
+          listingRequestState.didSucceed,
+          case let .listing(response) = listingRequestState.value?.node,
+          let averageRating = response.pdpPresentation?
+            .quality?
+            .ratingAverage,
+          let imageURL = response.imageURL
+        else {
+          return nil
+        }
+        """
+        let options = FormatOptions(indent: "  ")
+        testFormatting(for: input, rule: .indent, options: options)
+    }
+
+    func testIndentConditionAfterWrappedMemberInWrappedGuard() {
+        let input = """
+        guard
+            let store,
+            case let .configuration(config) = store.state.request.value?.presentation?
+                .formConfiguration,
+            let form = config.form
+        else {
+            return
+        }
+        """
+        testFormatting(for: input, rule: .indent)
+    }
+
+    func testIndentWrappedConditionsInIfExpressionAssignment() {
+        let input = """
+        let environment: Environment? =
+
+            // Comment
+            if
+                let preferredEnvironment = environment.preferredEnvironment,
+                environment.isLaunchedByPerfTest()
+            {
+                preferredEnvironment
+            } else {
+                nil
+            }
+        """
+        let options = FormatOptions(wrapConditions: .beforeFirst)
+        testFormatting(for: input, rule: .indent, options: options)
     }
 
     func testWrappedChainedFunctionsWithNestedScopeIndent() {
@@ -7399,6 +7729,32 @@ final class IndentTests: XCTestCase {
         """
 
         testFormatting(for: input, output, rule: .indent)
+    }
+
+    func testIndentConditionalAssignmentsNestedInClosure() {
+        let input = """
+        let result =
+            if let value = optionalValue {
+                values.map { other in
+                    let mapped =
+                        switch other {
+                        case 0:
+                            value
+                        default:
+                            other
+                        }
+
+                    consume(mapped)
+                    return mapped
+                }
+            } else {
+                []
+            }
+
+        consume(result)
+        """
+
+        testFormatting(for: input, rule: .indent)
     }
 
     func testIndentSwitchExpressionAssignmentWithComments() {

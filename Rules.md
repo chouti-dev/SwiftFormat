@@ -19,6 +19,7 @@
 * [consecutiveBlankLines](#consecutiveBlankLines)
 * [consecutiveSpaces](#consecutiveSpaces)
 * [consistentSwitchCaseSpacing](#consistentSwitchCaseSpacing)
+* [contentBuilder](#contentBuilder)
 * [docComments](#docComments)
 * [docCommentsBeforeModifiers](#docCommentsBeforeModifiers)
 * [duplicateImports](#duplicateImports)
@@ -27,6 +28,7 @@
 * [enumNamespaces](#enumNamespaces)
 * [environmentEntry](#environmentEntry)
 * [extensionAccessControl](#extensionAccessControl)
+* [extensionAttributes](#extensionAttributes)
 * [fileHeader](#fileHeader)
 * [fileMacro](#fileMacro)
 * [genericExtensions](#genericExtensions)
@@ -41,6 +43,7 @@
 * [linebreaks](#linebreaks)
 * [modifierOrder](#modifierOrder)
 * [modifiersOnSameLine](#modifiersOnSameLine)
+* [nestedIf](#nestedIf)
 * [noForceTryInTests](#noForceTryInTests)
 * [noForceUnwrapInTests](#noForceUnwrapInTests)
 * [numberFormatting](#numberFormatting)
@@ -52,6 +55,7 @@
 * [redundantBreak](#redundantBreak)
 * [redundantClosure](#redundantClosure)
 * [redundantEmptyView](#redundantEmptyView)
+* [redundantEnumerated](#redundantEnumerated)
 * [redundantEquatable](#redundantEquatable)
 * [redundantExtensionACL](#redundantExtensionACL)
 * [redundantFileprivate](#redundantFileprivate)
@@ -77,8 +81,8 @@
 * [redundantType](#redundantType)
 * [redundantTypedThrows](#redundantTypedThrows)
 * [redundantVariable](#redundantVariable)
-* [redundantViewBuilder](#redundantViewBuilder)
 * [redundantVoidReturnType](#redundantVoidReturnType)
+* [repeatedGuard](#repeatedGuard)
 * [semicolons](#semicolons)
 * [simplifyGenericConstraints](#simplifyGenericConstraints)
 * [sortDeclarations](#sortDeclarations)
@@ -123,7 +127,9 @@
 * [blankLineAfterSwitchCase](#blankLineAfterSwitchCase)
 * [blankLinesAfterGuardStatements](#blankLinesAfterGuardStatements)
 * [blockComments](#blockComments)
+* [commonTypos](#commonTypos)
 * [emptyExtensions](#emptyExtensions)
+* [forWhere](#forWhere)
 * [ifExpressions](#ifExpressions)
 * [isEmpty](#isEmpty)
 * [markTypes](#markTypes)
@@ -138,11 +144,13 @@
 * [preferFlatMap](#preferFlatMap)
 * [preferLazyMap](#preferLazyMap)
 * [preferMinOverSorted](#preferMinOverSorted)
+* [preferStructSwiftTestingSuites](#preferStructSwiftTestingSuites)
 * [preferSwiftStringAPI](#preferSwiftStringAPI)
 * [preferSwiftTesting](#preferSwiftTesting)
-* [privateStateVariables](#privateStateVariables)
+* [privateSwiftUIDynamicProperties](#privateSwiftUIDynamicProperties)
 * [propertyTypes](#propertyTypes)
 * [redundantExtendedLifetime](#redundantExtendedLifetime)
+* [redundantOverload](#redundantOverload)
 * [redundantSendable](#redundantSendable)
 * [singlePropertyPerLine](#singlePropertyPerLine)
 * [sortSwitchCases](#sortSwitchCases)
@@ -151,15 +159,20 @@
 * [urlMacro](#urlMacro)
 * [validateTestCases](#validateTestCases)
 * [wrapCaseBodies](#wrapCaseBodies)
+* [wrapClosureBodies](#wrapClosureBodies)
+* [wrapDoBodies](#wrapDoBodies)
 * [wrapEnumCases](#wrapEnumCases)
 * [wrapGuardStatementBodies](#wrapGuardStatementBodies)
 * [wrapMultilineConditionalAssignment](#wrapMultilineConditionalAssignment)
 * [wrapMultilineFunctionChains](#wrapMultilineFunctionChains)
+* [wrapSingleLineStrings](#wrapSingleLineStrings)
 * [wrapSwitchCases](#wrapSwitchCases)
 
 # Deprecated Rules (do not use)
 
+* [privateStateVariables](#privateStateVariables)
 * [redundantProperty](#redundantProperty)
+* [redundantViewBuilder](#redundantViewBuilder)
 * [sortedImports](#sortedImports)
 * [sortedSwitchCases](#sortedSwitchCases)
 * [specifiers](#specifiers)
@@ -176,6 +189,7 @@ Option | Description
 --- | ---
 `--acronyms` | Acronyms to auto-capitalize. Defaults to "ID,URL,UUID"
 `--preserve-acronyms` | List of symbols to be ignored by the acronyms rule
+`--acronym-visibility` | Capitalize acronyms at or below this visibility threshold: "public", "package", "internal" (default), "fileprivate" or "private"
 
 <details>
 <summary>Examples</summary>
@@ -293,11 +307,12 @@ Insert blank line after import statements.
 ## blankLineAfterSwitchCase
 
 Insert a blank line after switch cases (excluding the last case,
-which is followed by a closing brace).
+which is followed by a closing brace), or remove them with
+`--blank-line-after-switch-case never`.
 
 Option | Description
 --- | ---
-`--blank-line-after-switch-case` | Insert line After switch cases: "always" or "multiline-only" (default)
+`--blank-line-after-switch-case` | Insert line After switch cases: "always", "multiline-only" (default) or "never"
 
 <details>
 <summary>Examples</summary>
@@ -322,6 +337,19 @@ Option | Description
   case .engageWarpDrive:
       warpDrive.activate()
 +
+  case .handleIncomingEnergyBlast:
+      energyShields.engage()
+  }
+```
+
+`--blank-line-after-switch-case never`
+
+```diff
+  switch action {
+  case .engageWarpDrive:
+      navigationComputer.destination = targetedDestination
+      warpDrive.activate()
+-
   case .handleIncomingEnergyBlast:
       energyShields.engage()
   }
@@ -397,6 +425,7 @@ Remove or insert trailing blank line at the end of a scope.
 Option | Description
 --- | ---
 `--type-blank-lines` | Blank lines in type declarations: "remove" (default), "insert", "preserve", "consistent", "start-only" or "end-only"
+`--scope-blank-lines` | Blank lines in function bodies, closures, and statement blocks: "remove" (default) or "preserve"
 
 <details>
 <summary>Examples</summary>
@@ -457,6 +486,7 @@ Remove leading blank line at the start of a scope.
 Option | Description
 --- | ---
 `--type-blank-lines` | Blank lines in type declarations: "remove" (default), "insert", "preserve", "consistent", "start-only" or "end-only"
+`--scope-blank-lines` | Blank lines in function bodies, closures, and statement blocks: "remove" (default) or "preserve"
 
 <details>
 <summary>Examples</summary>
@@ -504,6 +534,18 @@ With `--type-blank-lines start-only`:
   struct Foo {
 +
       let bar: Bar
+  }
+```
+
+With `--type-blank-lines start-only` and `--scope-blank-lines preserve`:
+
+```diff
+  struct Foo {
++
+      func bar() {
+
+          baz()
+      }
   }
 ```
 
@@ -642,6 +684,29 @@ Option | Description
 </details>
 <br/>
 
+## commonTypos
+
+Correct common spelling mistakes in comments and identifiers.
+
+Option | Description
+--- | ---
+`--typo-visibility` | Correct typos at or below this visibility threshold: "public", "package", "internal", "fileprivate" (default) or "private"
+`--typos` | Comma-delimited list of typo=correction mappings
+`--ignore-typos` | Comma-delimited list of typos to ignore
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- // Retreive the cached value if it exists
+- private func retreiveCachedValue() -> Value? { ... }
++ // Retrieve the cached value if it exists
++ private func retrieveCachedValue() -> Value? { ... }
+```
+
+</details>
+<br/>
+
 ## conditionalAssignment
 
 Assign properties using if / switch expressions.
@@ -739,6 +804,10 @@ Replace consecutive spaces with a single space.
 
 Ensures consistent spacing among all of the cases in a switch statement.
 
+Option | Description
+--- | ---
+`--blank-line-after-switch-case` | Insert line After switch cases: "always", "multiline-only" (default) or "never"
+
 <details>
 <summary>Examples</summary>
 
@@ -770,6 +839,94 @@ Ensures consistent spacing among all of the cases in a switch statement.
 </details>
 <br/>
 
+## contentBuilder
+
+Use implicit or explicit SwiftUI result builder attributes like `@ContentBuilder`.
+
+Option | Description
+--- | ---
+`--content-builder` | SwiftUI result builder attributes: "implicit" (default) or "explicit"
+`--prefer-content-builder` | Replace legacy builders like @ViewBuilder with @ContentBuilder: "true" or "false" (default)
+
+<details>
+<summary>Examples</summary>
+
+With `--content-builder implicit` (default), removes result builder
+attributes that Swift applies implicitly, or that aren't needed:
+
+```diff
+  struct MyView: View {
+-   @ContentBuilder
+    var body: some View {
+      helper
+    }
+
+-   @ContentBuilder
+    var helper: some View {
+      VStack {
+        Text("baaz")
+        Text("quux")
+      }
+    }
+
+    // Not redundant - multiple top-level views
+    @ContentBuilder
+    var helper2: some View {
+      Text("foo")
+      Text("bar")
+    }
+  }
+```
+
+With `--content-builder explicit`, instead adds an explicit result builder
+attribute to declarations that return SwiftUI content:
+
+```diff
+  struct MyView: View {
++   @ContentBuilder
+    var body: some View {
+      content
+    }
+
++   @ContentBuilder
+    var content: some View {
+      if showDetail {
+        Text("foo")
+      }
+    }
+
+    // Not applied: an explicit `return` disables the result builder transform
+    var footer: some View {
+      return Text("bar")
+    }
+  }
+```
+
+With `--prefer-content-builder true`, replaces legacy result builders with the
+equivalent `@ContentBuilder`, which requires Swift 6.4 or later. This can be
+combined with either `--content-builder` mode:
+
+```diff
+  struct MyView: View {
+-   @ViewBuilder
++   @ContentBuilder
+    var content: some View {
+      Text("foo")
+      Text("bar")
+    }
+
+-   @ToolbarContentBuilder
++   @ContentBuilder
+    var toolbarItems: some ToolbarContent {
+      ToolbarItem { Button("Save") {} }
+      ToolbarItem { Button("Cancel") {} }
+    }
+  }
+```
+
+</details>
+<br/>
+
 ## docComments
 
 Use doc comments for API declarations, otherwise use regular comments.
@@ -777,6 +934,7 @@ Use doc comments for API declarations, otherwise use regular comments.
 Option | Description
 --- | ---
 `--doc-comments` | Doc comment placement: "preserve", "before-declarations" (default) or "before-non-local-declarations"
+`--excluded-declaration-types` | Declarations whose comments are left as-is, e.g. `case,var`
 
 <details>
 <summary>Examples</summary>
@@ -1030,6 +1188,33 @@ Option | Description
 </details>
 <br/>
 
+## extensionAttributes
+
+Hoist common member attributes onto the extension.
+
+Option | Description
+--- | ---
+`--type-attributes` | Placement for type @attributes: "prev-line", "same-line" or "preserve" (default)
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- extension Foo {
+-     @MainActor func bar() {}
+-     @MainActor func baz() {}
+- }
+
++ @MainActor
++ extension Foo {
++     func bar() {}
++     func baz() {}
++ }
+```
+
+</details>
+<br/>
+
 ## fileHeader
 
 Use specified source file header template for all files.
@@ -1150,6 +1335,42 @@ Option | Description
   // --filemacro #fileID
 - func foo(file: StaticString = #file) { ... }
 + func foo(file: StaticString = #fileID) { ... }
+```
+
+</details>
+<br/>
+
+## forWhere
+
+Prefer a `where` clause or nested `if` statement when filtering a `for` loop.
+
+Option | Description
+--- | ---
+`--for-where` | Use a where clause instead of a nested if to filter for loops: "always" (default) or "never"
+
+<details>
+<summary>Examples</summary>
+
+`--for-where always` (default)
+
+```diff
+- for child in visibleChildren {
+-     if !child.buildPreview(progress) {
++ for child in visibleChildren where !child.buildPreview(progress) {
+          return false
+-     }
+  }
+```
+
+`--for-where never`
+
+```diff
+- for child in visibleChildren where !child.buildPreview(progress) {
++ for child in visibleChildren {
++     if !child.buildPreview(progress) {
+          return false
++     }
+  }
 ```
 
 </details>
@@ -1572,6 +1793,25 @@ Ensure that all modifiers are on the same line as the declaration keyword.
 - func bar() {}
 
 + nonisolated func bar() {}
+```
+
+</details>
+<br/>
+
+## nestedIf
+
+Merge nested if statements into a single statement with comma-delimited conditions.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- if isValid {
+-     if isEnabled {
++ if isValid, isEnabled {
+          performAction()
+-     }
+  }
 ```
 
 </details>
@@ -2137,6 +2377,25 @@ Prefer `min()` over `sorted().first`.
 </details>
 <br/>
 
+## preferStructSwiftTestingSuites
+
+Use structs for Swift Testing suites where possible.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  import Testing
+
+- final class FeatureTests {
++ struct FeatureTests {
+      @Test func featureWorks() {}
+  }
+```
+
+</details>
+<br/>
+
 ## preferSwiftStringAPI
 
 Replace Objective-C bridged String methods with Swift equivalents.
@@ -2230,19 +2489,30 @@ Option | Description
 
 ## privateStateVariables
 
-Adds `private` access control to @State properties without existing access control modifiers.
+Adds `private` access control to SwiftUI state properties without existing access control modifiers.
+
+*Note: privateStateVariables rule is deprecated. Renamed to `privateSwiftUIDynamicProperties`.*
+
+## privateSwiftUIDynamicProperties
+
+Adds `private` access control to SwiftUI dynamic properties without existing access control modifiers.
 
 <details>
 <summary>Examples</summary>
 
 ```diff
-- @State var anInt: Int
-+ @State private var anInt: Int
+- @State var isEnabled = true
++ @State private var isEnabled = true
 ```
 
 ```diff
-- @StateObject var myInstance: MyObject
-+ @StateObject private var myInstance: MyObject
+- @AppStorage("isEnabled") var isEnabled = true
++ @AppStorage("isEnabled") private var isEnabled = true
+```
+
+```diff
+- @Environment(\.colorScheme) var colorScheme
++ @Environment(\.colorScheme) private var colorScheme
 ```
 
 </details>
@@ -2435,6 +2705,23 @@ Remove redundant `else { EmptyView() }` branches in SwiftUI result builders.
 </details>
 <br/>
 
+## redundantEnumerated
+
+Remove `.enumerated()` from for loops where the index is unused.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- for (_, element) in elements.enumerated() {
++ for element in elements {
+      print(element)
+  }
+```
+
+</details>
+<br/>
+
 ## redundantEquatable
 
 Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
@@ -2484,7 +2771,7 @@ a hand-written Equatable conformance:
 
 ## redundantExtendedLifetime
 
-Remove redundant withExtendedLifetime calls in tests.
+Remove redundant `withExtendedLifetime` calls and `_ = value` statements in tests.
 
 <details>
 <summary>Examples</summary>
@@ -2499,6 +2786,7 @@ Remove redundant withExtendedLifetime calls in tests.
           observer.start()
           #expect(observer.isRunning)
 -         withExtendedLifetime(observer) {}
+-         _ = observer
       }
   }
 ```
@@ -2659,10 +2947,10 @@ Option | Description
 
 ```diff
   struct MyView<Content: View>: View {
-+     @ViewBuilder let content: Content
++     @ContentBuilder let content: Content
 -     let content: Content
 -
--     init(@ViewBuilder content: () -> Content) {
+-     init(@ContentBuilder content: () -> Content) {
 -         self.content = content()
 -     }
 
@@ -2791,6 +3079,41 @@ Option | Description
 </details>
 <br/>
 
+## redundantOverload
+
+Replace forwarding overloads with default arguments.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+  struct Loader {
+-     func load(path: String, timeout: TimeInterval) { ... }
++     func load(path: String, timeout: TimeInterval = 30) { ... }
+-     func load(path: String) {
+-         load(path: path, timeout: 30)
+-     }
+  }
+```
+
+With `--swift-version 5.1` or later:
+
+```diff
+  enum Result<Value> {
+-     case success(value: Value, cached: Bool)
++     case success(value: Value, cached: Bool = false)
+  }
+
+  extension Result {
+-     static func success(value: Value) -> Self {
+-         .success(value: value, cached: false)
+-     }
+  }
+```
+
+</details>
+<br/>
+
 ## redundantParens
 
 Remove redundant parentheses.
@@ -2850,7 +3173,7 @@ Remove redundant pattern matching parameter syntax.
 
 Simplifies redundant variable definitions that are immediately returned.
 
-*Note: redundantProperty rule is deprecated. Use redundantVariable instead.*
+*Note: redundantProperty rule is deprecated. Renamed to `redundantVariable`.*
 
 ## redundantPublic
 
@@ -3060,7 +3383,7 @@ Remove redundant SwiftUI Group wrapper views in favor of @ViewBuilder.
 
 ```diff
   struct MyView: View {
-+   @ViewBuilder
++   @ContentBuilder
     var content: some View {
 -     Group {
         Text("foo")
@@ -3213,35 +3536,7 @@ Simplifies redundant variable definitions that are immediately returned.
 
 Remove redundant @ViewBuilder attribute when it's not needed.
 
-<details>
-<summary>Examples</summary>
-
-```diff
-  struct MyView: View {
--   @ViewBuilder
-    var body: some View {
-      helper
-    }
-
--   @ViewBuilder
-    var helper: some View {
-      VStack {
-        Text("baaz")
-        Text("quux")
-      }
-    }
-
-    // Not redundant - multiple top-level views
-    @ViewBuilder
-    var helper2: some View {
-      Text("foo")
-      Text("bar")
-    }
-  }
-```
-
-</details>
-<br/>
+*Note: redundantViewBuilder rule is deprecated. Use contentBuilder with `--content-builder implicit` instead.*
 
 ## redundantVoidReturnType
 
@@ -3262,6 +3557,22 @@ Option | Description
 + func foo() {
     // returns nothing
   }
+```
+
+</details>
+<br/>
+
+## repeatedGuard
+
+Merge consecutive guard statements that have identical bodies.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- guard isValid else { return }
+- guard isEnabled else { return }
++ guard isValid, isEnabled else { return }
 ```
 
 </details>
@@ -3399,6 +3710,14 @@ Option | Description
           Foo()
       }
   }
+
+  // swiftformat:sort
+  let featureFlags = [
+-     fooFeature,
+-     barFeature,
++     barFeature,
++     fooFeature,
+  ]
 ```
 
 </details>
@@ -3410,7 +3729,8 @@ Sort and group import statements.
 
 Option | Description
 --- | ---
-`--import-grouping` | Comma-delimited list of import sorting/grouping options: "alpha", "access-control", "length", "testable-first", "testable-last". Defaults to "access-control,alpha"
+`--import-grouping` | Comma-delimited list of import sorting/grouping options: "alpha", "access-control", "length", "testable-first", "testable-last", "attributes-last". Defaults to "access-control,alpha"
+`--hoist-imports` | Hoist file-scope imports to top of file
 
 <details>
 <summary>Examples</summary>
@@ -3480,13 +3800,13 @@ Sort protocol composition typealiases alphabetically.
 
 Sort import statements alphabetically.
 
-*Note: sortedImports rule is deprecated. Use sortImports instead.*
+*Note: sortedImports rule is deprecated. Renamed to `sortImports`.*
 
 ## sortedSwitchCases
 
 Sort switch cases alphabetically.
 
-*Note: sortedSwitchCases rule is deprecated. Use sortSwitchCases instead.*
+*Note: sortedSwitchCases rule is deprecated. Renamed to `sortSwitchCases`.*
 
 ## spaceAroundBraces
 
@@ -3699,7 +4019,7 @@ Remove space inside parentheses.
 
 Use consistent ordering for member modifiers.
 
-*Note: specifiers rule is deprecated. Use modifierOrder instead.*
+*Note: specifiers rule is deprecated. Renamed to `modifierOrder`.*
 
 ## strongOutlets
 
@@ -4309,11 +4629,56 @@ Wrap the bodies of inline switch cases onto a new line.
 </details>
 <br/>
 
+## wrapClosureBodies
+
+Wrap single-line closure bodies for configured functions onto multiple lines.
+
+Option | Description
+--- | ---
+`--wrap-closure-bodies` | Comma-delimited list of functions whose closure bodies should wrap, or "always". Defaults to "Task,Task.detached"
+
+<details>
+<summary>Examples</summary>
+
+The default `--wrap-closure-bodies Task,Task.detached` wraps Task closures.
+Supply a comma-delimited list of function names to select other closures,
+or use `--wrap-closure-bodies always` to wrap all closure bodies.
+Names match by dotted-component suffix, so `Task` also matches `Swift.Task`.
+
+```diff
+- Task { await someOperation() }
++ Task {
++     await someOperation()
++ }
+```
+
+</details>
+<br/>
+
 ## wrapConditionalBodies
 
 Wrap the bodies of inline conditional statements onto a new line.
 
 *Note: wrapConditionalBodies rule is deprecated. Use wrapIfStatementBodies, wrapGuardStatementBodies, or wrapIfExpressionBodies instead.*
+
+## wrapDoBodies
+
+Wrap the bodies of inline do and catch statements onto multiple lines.
+
+<details>
+<summary>Examples</summary>
+
+```diff
+- do { try performOperation() } catch { handleError(error) }
++ do {
++     try performOperation()
++ } catch {
++     handleError(error)
++ }
+```
+
+</details>
+<br/>
 
 ## wrapEnumCases
 
@@ -4322,6 +4687,7 @@ Rewrite comma-delimited enum cases to one case per line.
 Option | Description
 --- | ---
 `--wrap-enum-cases` | Enum case wrapping: "always" (default) or "with-values"
+`--wrap-single-line-enum-cases` | Wrap comma-delimited enum cases following the opening brace: "true" or "false" (default)
 
 <details>
 <summary>Examples</summary>
@@ -4335,6 +4701,17 @@ Option | Description
 +   case bar
 +   case baz
   }
+```
+
+With `--wrap-single-line-enum-cases true`:
+
+```diff
+- package enum Action { case delete, suspend, resume }
++ package enum Action {
++     case delete
++     case suspend
++     case resume
++ }
 ```
 
 </details>
@@ -4563,6 +4940,26 @@ Wrap single line `//` comments that exceed the specified `--max-width`.
 - // This is a long comment that exceeds the maximum column width
 + // This is a long comment that exceeds
 + // the maximum column width
+```
+
+</details>
+<br/>
+
+## wrapSingleLineStrings
+
+Wrap single-line string literals that exceed the specified `--max-width`.
+
+<details>
+<summary>Examples</summary>
+
+`--max-width 40 --indent-strings enabled`
+
+```diff
+- let message = "This is a long string that exceeds the maximum width"
++ let message = """
++     This is a long string that exceeds \
++     the maximum width
++     """
 ```
 
 </details>

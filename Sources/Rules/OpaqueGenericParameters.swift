@@ -22,7 +22,7 @@ public extension FormatRule {
             guard // Opaque generic parameter syntax is only supported in Swift 5.7+
                 formatter.options.swiftVersion >= "5.7",
                 // Apply this rule to any function-like declaration
-                [.keyword("func"), .keyword("init"), .keyword("subscript")].contains(keyword),
+                keyword.isFunctionDeclarationKeyword,
                 // Validate that this is a generic method using angle bracket syntax,
                 // and find the indices for all of the key tokens
                 let declaration = formatter.parseFunctionDeclaration(keywordIndex: keywordIndex),
@@ -231,10 +231,12 @@ public extension FormatRule {
                 if let matchingGenericType = genericsEligibleToRemove.first(where: { $0.name == formatter.tokens[index].string }),
                    var opaqueParameter = matchingGenericType.asOpaqueParameter(useSomeAny: formatter.options.useSomeAny)
                 {
-                    // If this instance of the type is followed by a `.` or `?` then we have to wrap the new type in parens
-                    // (e.g. changing `Foo.Type` to `some Any.Type` breaks the build, it needs to be `(some Any).Type`)
+                    // If this instance of the type is followed by a `.` then we have to wrap the new type in parens
+                    // (e.g. changing `Foo.Type` to `some Any.Type` breaks the build, it needs to be `(some Any).Type`).
+                    // Optional opaque and existential types support `some Foo?` and `any Foo?` in Swift 6.4+.
                     if let nextToken = formatter.next(.nonSpaceOrCommentOrLinebreak, after: index),
-                       [.operator(".", .infix), .operator("?", .postfix)].contains(nextToken)
+                       nextToken == .operator(".", .infix) ||
+                       (nextToken == .operator("?", .postfix) && formatter.options.swiftVersion < "6.4")
                     {
                         opaqueParameter.insert(.startOfScope("("), at: 0)
                         opaqueParameter.append(.endOfScope(")"))

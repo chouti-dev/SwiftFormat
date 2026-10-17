@@ -120,6 +120,45 @@ final class FormatterTests: XCTestCase {
         XCTAssertEqual(try format(input, rules: FormatRules.default).output, output)
     }
 
+    func testDisableRuleNamesCanBeCommaDelimitedAndCaseInsensitive() {
+        let input = "// swiftformat:disable indent,SPACEAROUNDOPERATORS\nlet foo=bar"
+        XCTAssertEqual(try format(input, rules: [.spaceAroundOperators]).output, input)
+    }
+
+    func testDeprecatedRuleNameDirectiveDisablesReplacement() {
+        let input = """
+        // swiftformat:disable sortedImports
+        import B
+        import A
+        """
+        XCTAssertEqual(try format(input, rules: [.sortImports]).output, input)
+    }
+
+    func testDeprecatedRuleNameDirectiveEnablesReplacement() {
+        let input = """
+        // swiftformat:disable all
+        // swiftformat:enable redundantProperty
+        func foo() -> Int {
+            let value = 1
+            return value
+        }
+        """
+        let output = """
+        // swiftformat:disable all
+        // swiftformat:enable redundantProperty
+        func foo() -> Int {
+            return 1
+        }
+        """
+        XCTAssertEqual(try format(input, rules: [.redundantVariable]).output, output)
+    }
+
+    func testDisableRuleNameMustBeACompleteWord() {
+        let input = "// swiftformat:disable spaceAroundOperators_suffix\nlet foo=bar"
+        let output = "// swiftformat:disable spaceAroundOperators_suffix\nlet foo = bar"
+        XCTAssertEqual(try format(input, rules: [.spaceAroundOperators]).output, output)
+    }
+
     func testDirectiveInMiddleOfComment() {
         let input = "//fixme: swiftformat:disable spaceAroundOperators - bug\nlet foo : Int=5;"
         let output = "// FIXME: swiftformat:disable spaceAroundOperators - bug\nlet foo : Int=5\n"
@@ -252,6 +291,74 @@ final class FormatterTests: XCTestCase {
         """
         """#
         XCTAssertEqual(try format(input, rules: [.spaceAroundOperators]).output, output)
+    }
+
+    func testDisableNextMultilineStringWithBlankLinesAndNestedInterpolation() {
+        let input = #"""
+        // swiftformat:disable:next numberFormatting
+        let string = """
+
+        \(value(123456, transform: { $0 + 678901 }))
+
+        \(123456)
+        """
+
+        let value = 123456
+        """#
+        let output = #"""
+        // swiftformat:disable:next numberFormatting
+        let string = """
+
+        \(value(123456, transform: { $0 + 678901 }))
+
+        \(123456)
+        """
+
+        let value = 123_456
+        """#
+        XCTAssertEqual(try format(input, rules: [.numberFormatting]).output, output)
+    }
+
+    func testDisableNextRawMultilineString() {
+        let input = ##"""
+        // swiftformat:disable:next numberFormatting
+        let string = #"""
+        \#(123456)
+        \#(678901)
+        """#
+        let value = 123456
+        """##
+        let output = ##"""
+        // swiftformat:disable:next numberFormatting
+        let string = #"""
+        \#(123456)
+        \#(678901)
+        """#
+        let value = 123_456
+        """##
+        XCTAssertEqual(try format(input, rules: [.numberFormatting]).output, output)
+    }
+
+    func testOptionsNextMultilineString() {
+        let input = #"""
+        // swiftformat:options:next --decimalgrouping none
+        let string = """
+        \(123456)
+
+        \(678901)
+        """
+        let value = 123456
+        """#
+        let output = #"""
+        // swiftformat:options:next --decimalgrouping none
+        let string = """
+        \(123456)
+
+        \(678901)
+        """
+        let value = 123_456
+        """#
+        XCTAssertEqual(try format(input, rules: [.numberFormatting]).output, output)
     }
 
     func testDisableThisInsideMultilineStringInterpolation() {
@@ -673,6 +780,108 @@ final class FormatterTests: XCTestCase {
         XCTAssertEqual(tokenRange(forLineRange: 3 ... 4, in: inputTokens), 14 ..< 26)
         XCTAssertEqual(tokenRange(forLineRange: 3 ... 4, in: outputTokens), 14 ..< 25)
         XCTAssertEqual(try format(input, lineRange: 3 ... 4).output, output)
+    }
+
+    func testRedundantSelfFormattingRange() {
+        let input = """
+        struct Formatting {
+            let a: Int
+            let b: Int
+
+            init() {
+                self.a = 0
+                self.b = 1
+            }
+        }
+        """
+        let output = """
+        struct Formatting {
+            let a: Int
+            let b: Int
+
+            init() {
+                a = 0
+                self.b = 1
+            }
+        }
+        """
+        XCTAssertEqual(try format(input, rules: [.redundantSelf], lineRange: 6 ... 6).output, output)
+    }
+
+    func testRedundantSelfFormattingRangeWithMultilineAccess() {
+        let input = """
+        struct S {
+            var a = 0
+            mutating func f() {
+                self
+                    .a = 1
+            }
+        }
+        """
+        let output = """
+        struct S {
+            var a = 0
+            mutating func f() {
+                a = 1
+            }
+        }
+        """
+        XCTAssertEqual(try format(input, rules: [.redundantSelf], lineRange: 4 ... 4).output, input)
+        XCTAssertEqual(try format(input, rules: [.redundantSelf], lineRange: 4 ... 5).output, output)
+        XCTAssertEqual(try format(input, rules: [.redundantSelf], lineRange: 5 ... 5).output, input)
+    }
+
+    func testRedundantStaticSelfFormattingRangeWithMultilineAccess() {
+        let input = """
+        struct S {
+            static var a = 0
+            static func f() {
+                Self
+                    .a = 1
+            }
+        }
+        """
+        let output = """
+        struct S {
+            static var a = 0
+            static func f() {
+                a = 1
+            }
+        }
+        """
+        XCTAssertEqual(try format(input, rules: [.redundantStaticSelf], lineRange: 4 ... 4).output, input)
+        XCTAssertEqual(try format(input, rules: [.redundantStaticSelf], lineRange: 4 ... 5).output, output)
+        XCTAssertEqual(try format(input, rules: [.redundantStaticSelf], lineRange: 5 ... 5).output, input)
+    }
+
+    func testRedundantSelfFormattingRangeInConditionalBinding() {
+        let input = """
+        struct Formatting {
+            var foo = 0
+            func f() {
+                if let y = Optional(self.foo) {
+                    print(y)
+                }
+                if let z = Optional(self.foo) {
+                    print(z)
+                }
+            }
+        }
+        """
+        let output = """
+        struct Formatting {
+            var foo = 0
+            func f() {
+                if let y = Optional(foo) {
+                    print(y)
+                }
+                if let z = Optional(self.foo) {
+                    print(z)
+                }
+            }
+        }
+        """
+        XCTAssertEqual(try format(input, rules: [.redundantSelf], lineRange: 4 ... 4).output, output)
     }
 
     // MARK: endOfScope

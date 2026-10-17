@@ -16,7 +16,7 @@ public extension FormatRule {
         help: "Indent code in accordance with the scope level.",
         orderAfter: [.trailingSpace, .wrap, .wrapArguments],
         options: ["indent", "tab-width", "smart-tabs", "indent-case", "ifdef", "xcode-indentation", "indent-strings", "indent-blank-lines"],
-        sharedOptions: ["allman", "wrap-conditions", "wrap-ternary"]
+        sharedOptions: ["allman", "wrap-ternary"]
     ) { formatter in
         var scopeStack: [Token] = []
         var scopeStartLineIndexes: [Int] = []
@@ -209,6 +209,11 @@ public extension FormatRule {
                         }
                         indent = prevIndent
                     }
+                    if !formatter.options.xcodeIndentation,
+                       let conditionIndent = formatter.indentForClosureInMultilineCondition(at: i)
+                    {
+                        indent = conditionIndent
+                    }
                     let stringIndent = formatter.stringBodyIndent(at: i)
                     stringBodyIndentStack[stringBodyIndentStack.count - 1] = stringIndent
                     indent += stringIndent + formatter.options.indent
@@ -332,7 +337,10 @@ public extension FormatRule {
                 // If this is the final `endOfScope` in a conditional assignment,
                 // we have to end the scope introduced by that assignment operator.
                 defer {
-                    if token == .endOfScope("}"), let startOfScope = formatter.startOfScope(at: i) {
+                    if token == .endOfScope("}"),
+                       scopeStack.last == .operator("=", .infix),
+                       let startOfScope = formatter.startOfScope(at: i)
+                    {
                         // Find the `=` before this start of scope, which isn't itself part of the conditional statement
                         var previousAssignmentIndex = formatter.index(of: .operator("=", .infix), before: startOfScope)
                         while let currentPreviousAssignmentIndex = previousAssignmentIndex,
@@ -343,10 +351,8 @@ public extension FormatRule {
                             previousAssignmentIndex = nextPreviousAssignmentIndex
                         }
 
-                        // Make sure the `=` actually created a new scope
-                        if scopeStack.last == .operator("=", .infix),
-                           // Parse the conditional branches following the `=` assignment operator
-                           let previousAssignmentIndex,
+                        // Parse the conditional branches following the `=` assignment operator
+                        if let previousAssignmentIndex,
                            let nextTokenAfterAssignment = formatter.index(of: .nonSpaceOrCommentOrLinebreak, after: previousAssignmentIndex),
                            let conditionalBranches = formatter.conditionalBranches(at: nextTokenAfterAssignment),
                            // If this is the very end of the conditional assignment following the `=`,
@@ -423,8 +429,16 @@ public extension FormatRule {
                         i += applyIndent(ifdefIndent, at: start)
                     } else {
                         var indent = indentStack.last ?? ""
-                        if token.isSwitchCaseOrDefault,
-                           formatter.options.indentCase, !formatter.isInIfdef(at: i, scopeStack: scopeStack)
+                        if token == .endOfScope("}"),
+                           !formatter.options.xcodeIndentation,
+                           let closureStartIndex = formatter.startOfScope(at: i),
+                           let conditionIndent = formatter.indentForClosureInMultilineCondition(
+                               at: closureStartIndex
+                           )
+                        {
+                            indent = conditionIndent
+                        } else if token.isSwitchCaseOrDefault,
+                                  formatter.options.indentCase, !formatter.isInIfdef(at: i, scopeStack: scopeStack)
                         {
                             indent += formatter.options.indent
                         }
@@ -579,10 +593,7 @@ public extension FormatRule {
                                 shouldIndentLeadingDotStatement = true
                             }
                         } else {
-                            shouldIndentLeadingDotStatement = (
-                                formatter.startOfConditionalStatement(at: i) != nil
-                                    && formatter.options.wrapConditions == .beforeFirst
-                            )
+                            shouldIndentLeadingDotStatement = formatter.startOfConditionalStatement(at: i) != nil
                         }
                         // In .noIndent mode, look back past directive lines so the
                         // check below sees the last code line, as if the directives
@@ -608,25 +619,27 @@ public extension FormatRule {
                                    } ?? false
                            )
                         {
-                            indent += formatter.options.indent
+                            if formatter.options.xcodeIndentation {
+                                let column = formatter.tokenLength(.space(indent))
+                                let indentWidth = max(1, formatter.tokenLength(.space(formatter.options.indent)))
+                                let spaces = indentWidth - column % indentWidth
+                                indent += formatter.spaceEquivalentToWidth(spaces)
+                            } else {
+                                indent += formatter.options.indent
+                            }
                             indentStack[indentStack.count - 1] = indent
                         }
 
                         // When inside conditionals, unindent after any commas (which separate conditions)
                         // that were indented by the block above
-                        if !formatter.options.xcodeIndentation,
-                           formatter.options.wrapConditions == .beforeFirst,
-                           formatter.isConditionalStatement(at: i),
-                           formatter.lastToken(before: i, where: {
-                               $0.is(.nonSpaceOrCommentOrLinebreak)
-                           }) == .delimiter(","),
-                           let conditionBeginIndex = formatter.index(before: i, where: {
-                               ["if", "guard", "while", "for"].contains($0.string)
-                           }),
-                           formatter.currentIndentForLine(at: conditionBeginIndex)
-                           .count < indent.count + formatter.options.indent.count
+                        if formatter.lastToken(before: i, where: {
+                            $0.is(.nonSpaceOrCommentOrLinebreak)
+                        }) == .delimiter(","),
+                            let conditionBeginIndex = formatter.startOfConditionalStatementContainingLinewrap(at: i),
+                            let conditionIndent = formatter.indentForConditions(after: conditionBeginIndex),
+                            conditionIndent.count < indent.count
                         {
-                            indent = formatter.currentIndentForLine(at: conditionBeginIndex) + formatter.options.indent
+                            indent = conditionIndent
                             indentStack[indentStack.count - 1] = indent
                         }
 
@@ -718,7 +731,22 @@ public extension FormatRule {
                               !formatter.isInClosureArguments(at: i)
                               || (lineIndex - 1) == scopeStartLineIndexes.last
                     {
-                        indent += formatter.linewrapIndent(at: i)
+                        if formatter.lastToken(before: i, where: {
+                            $0.is(.nonSpaceOrCommentOrLinebreak)
+                        }) == .delimiter(","),
+                            formatter.tokens[
+                                formatter.startOfLine(at: effectiveLastIndex, excludingIndent: true)
+                            ] == .endOfScope("}"),
+                            let conditionBeginIndex = formatter.index(before: i, where: {
+                                ["if", "guard", "while", "for"].contains($0.string)
+                            }),
+                            formatter.startOfScope(at: conditionBeginIndex) == formatter.startOfScope(at: i),
+                            let conditionIndent = formatter.indentForConditions(after: conditionBeginIndex)
+                        {
+                            indent = conditionIndent
+                        } else {
+                            indent += formatter.linewrapIndent(at: i)
+                        }
                     }
 
                     linewrapStack[linewrapStack.count - 1] = true
@@ -914,6 +942,78 @@ public extension FormatRule {
 }
 
 extension Formatter {
+    func startOfConditionalStatementContainingLinewrap(at index: Int) -> Int? {
+        if let startIndex = startOfConditionalStatement(at: index) {
+            return startIndex
+        }
+        guard let guardIndex = self.index(of: .keyword("guard"), before: index),
+              startOfScope(at: guardIndex) == startOfScope(at: index),
+              let elseIndex = self.index(of: .keyword("else"), after: index),
+              isGuardElse(at: elseIndex)
+        else {
+            return nil
+        }
+        return guardIndex
+    }
+
+    func indentForConditions(after keywordIndex: Int) -> String? {
+        guard let firstConditionIndex = index(
+            of: .nonSpaceOrCommentOrLinebreak,
+            after: keywordIndex
+        ) else {
+            return nil
+        }
+        if onSameLine(keywordIndex, firstConditionIndex) {
+            return spaceEquivalentToTokens(
+                from: startOfLine(at: keywordIndex),
+                upTo: firstConditionIndex
+            )
+        }
+        return currentIndentForLine(at: firstConditionIndex)
+    }
+
+    func indentForClosureInMultilineCondition(at closureStartIndex: Int) -> String? {
+        guard isStartOfClosure(at: closureStartIndex),
+              let closureEndIndex = endOfScope(at: closureStartIndex)
+        else {
+            return nil
+        }
+
+        var index = closureEndIndex
+        while let nextIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index) {
+            switch tokens[nextIndex] {
+            case .delimiter(","):
+                // Argument and collection commas do not separate conditions.
+                if let scope = currentScope(at: nextIndex),
+                   scope == .startOfScope("(") || scope == .startOfScope("[")
+                {
+                    break
+                }
+                // Only realign closures on the condition keyword's line. Wrapped closures
+                // already have their own indentation, and later statements are unrelated.
+                guard let conditionStartIndex = startOfConditionalStatement(at: nextIndex),
+                      conditionStartIndex < closureStartIndex,
+                      onSameLine(conditionStartIndex, closureStartIndex),
+                      startOfScope(at: nextIndex) == startOfScope(at: conditionStartIndex),
+                      let nextConditionIndex = self.index(
+                          of: .nonSpaceOrCommentOrLinebreak,
+                          after: nextIndex
+                      ),
+                      !onSameLine(nextIndex, nextConditionIndex)
+                else { return nil }
+                return indentForConditions(after: conditionStartIndex)
+            case .startOfScope("{"):
+                return nil
+            case .keyword("else"):
+                return nil
+            default:
+                break
+            }
+            index = nextIndex
+        }
+        return nil
+    }
+
     func inFunctionDeclarationWhereReturnTypeIsWrappedToStartOfLine(at i: Int) -> Bool {
         guard let returnOperatorIndex = startOfReturnType(at: i) else {
             return false
@@ -959,9 +1059,15 @@ extension Formatter {
         // an additional indentation to the lines at the same indention scope
         // after this line.
         let endOfLine = endOfLine(at: i)
-        switch token(at: endOfLine - 1) {
+        // Defer until the linebreak before the next line of code
+        guard let nextIndex = index(of: .nonSpace, after: endOfLine),
+              !tokens[nextIndex].isLinebreak, !tokens[nextIndex].isComment
+        else {
+            return false
+        }
+        switch last(.nonSpaceOrCommentOrLinebreak, before: endOfLine + 1) {
         case .keyword("return")?, .operator("=", .infix)?:
-            let endOfNextLine = self.endOfLine(at: endOfLine + 1)
+            let endOfNextLine = self.endOfLine(at: nextIndex)
             switch last(.nonSpaceOrCommentOrLinebreak, before: endOfNextLine) {
             case .operator(_, .infix)?, .delimiter(",")?:
                 return false
@@ -969,7 +1075,7 @@ extension Formatter {
                 return !options.xcodeIndentation
             default:
                 return lastIndex(of: .startOfScope,
-                                 in: i ..< endOfNextLine) == nil
+                                 in: nextIndex ..< endOfNextLine) == nil
             }
         default:
             return false

@@ -31,6 +31,12 @@
 
 import Foundation
 
+public enum UnknownOptionsMode: String, CaseIterable {
+    case error
+    case warn
+    case ignore
+}
+
 /// The indenting mode to use for #if/#endif statements
 public enum IndentMode: String, CaseIterable {
     case indent
@@ -212,12 +218,26 @@ public enum TrailingCommas: String, CaseIterable {
     case multiElementLists = "multi-element-lists"
 }
 
+/// Whether to use a where clause or nested if statement to filter a for loop
+public enum ForWhereMode: String, CaseIterable {
+    case always
+    case never
+}
+
 /// How to handle single-line ternary expressions in the ifExpressions rule
 public enum SingleLineTernary: String, CaseIterable {
     /// Preserve single-line ternaries as-is
     case preserve
     /// Convert single-line ternaries to single-line if expressions
     case convert
+}
+
+/// Whether the `@ContentBuilder` result builder attribute should be implicit or explicit
+public enum ContentBuilderMode: String, CaseIterable {
+    /// Remove result builder attributes that Swift applies implicitly, or that aren't needed
+    case implicit
+    /// Add an explicit result builder attribute to declarations that return SwiftUI content
+    case explicit
 }
 
 /// Whether to insert, remove, or preserve spaces around operators
@@ -231,6 +251,9 @@ public enum OperatorSpacingMode: String, CaseIterable {
 public struct Version: RawRepresentable, Comparable, ExpressibleByStringLiteral, CustomStringConvertible {
     public let rawValue: String
 
+    /// Dot-separated numeric components, or nil if any component is non-numeric.
+    private let components: [Int]?
+
     public static let undefined = Version(rawValue: "0")!
 
     public init(stringLiteral value: String) {
@@ -243,10 +266,15 @@ public struct Version: RawRepresentable, Comparable, ExpressibleByStringLiteral,
             return nil
         }
         self.rawValue = rawValue
+        let parts = rawValue.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
+        components = parts.allSatisfy { $0 != nil } ? parts.map { $0! } : nil
     }
 
     public static func < (lhs: Version, rhs: Version) -> Bool {
-        lhs.rawValue.compare(
+        if let lhs = lhs.components, let rhs = rhs.components {
+            return lhs.lexicographicallyPrecedes(rhs)
+        }
+        return lhs.rawValue.compare(
             rhs.rawValue,
             options: .numeric,
             locale: Locale(identifier: "en_US")
@@ -465,13 +493,16 @@ public enum Grouping: Equatable, RawRepresentable, CustomStringConvertible {
     }
 }
 
-/// Individual import sorting/grouping options, combined as a Set
+/// Individual import sorting/grouping options. The order of the options is
+/// significant when using more than one of the separate-group options,
+/// like `testable-last` and `attributes-last`.
 public enum ImportGrouping: String, CaseIterable, Hashable {
     case alpha
     case length
     case accessControl = "access-control"
     case testableFirst = "testable-first"
     case testableLast = "testable-last"
+    case attributesLast = "attributes-last"
 
     public init?(rawValue: String) {
         switch rawValue {
@@ -489,6 +520,8 @@ public enum ImportGrouping: String, CaseIterable, Hashable {
         case "testable-last",
              "testable-bottom":
             self = .testableLast
+        case "attributes-last":
+            self = .attributesLast
         default:
             return nil
         }
@@ -565,6 +598,12 @@ public enum TypeBlankLines: String, CaseIterable {
     case consistent
     case startOnly = "start-only"
     case endOnly = "end-only"
+}
+
+/// Whether to remove or preserve blank lines at the start / end of non-type scopes
+public enum ScopeBlankLines: String, CaseIterable {
+    case remove
+    case preserve
 }
 
 /// Treatment of semicolons
@@ -693,6 +732,15 @@ public enum FormatLocale: Equatable, RawRepresentable, CustomStringConvertible {
         }
     }
 
+    public var locale: Locale {
+        switch self {
+        case .system:
+            return Locale.current
+        case let .identifier(identifier):
+            return Locale(identifier: identifier)
+        }
+    }
+
     func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
         switch self {
         case .system:
@@ -773,6 +821,8 @@ public enum BlankLineAfterSwitchCase: String, CaseIterable {
     case always
     /// Add blank lines after multiline switch cases only
     case multilineOnly = "multiline-only"
+    /// Remove blank lines after switch cases
+    case never
 }
 
 public enum URLMacro: Equatable, RawRepresentable, CustomStringConvertible {
@@ -880,6 +930,7 @@ public struct FormatOptions: CustomStringConvertible {
     public var wrapCollections: WrapMode
     public var wrapTypealiases: WrapMode
     public var wrapEnumCases: WrapEnumCases
+    public var wrapSingleLineEnumCases: Bool
     public var closingParenPosition: ClosingParenPosition
     public var callSiteClosingParenPosition: ClosingParenPosition
     public var wrapReturnType: WrapReturnType
@@ -903,8 +954,10 @@ public struct FormatOptions: CustomStringConvertible {
     public var throwCapturing: Set<String>
     public var asyncCapturing: Set<String>
     public var experimentalRules: Bool
-    public var importGrouping: Set<ImportGrouping>
+    public var importGrouping: [ImportGrouping]
+    public var hoistImports: Bool
     public var trailingClosures: Set<String>
+    public var wrapClosureBodies: Set<String>
     public var neverTrailing: Set<String>
     public var xcodeIndentation: Bool
     public var tabWidth: Int
@@ -959,17 +1012,24 @@ public struct FormatOptions: CustomStringConvertible {
     public var emptyBracesSpacing: EmptyBracesSpacing
     public var acronyms: Set<String>
     public var preserveAcronyms: Set<String>
+    public var acronymVisibility: Visibility
+    public var typoVisibility: Visibility
+    public var typos: [String: String]
+    public var ignoredTypos: Set<String>
     public var indentBlankLines: Bool
     public var indentStrings: Bool
     public var closureVoidReturn: ClosureVoidReturn
     public var enumNamespaces: EnumNamespacesMode
     public var typeBlankLines: TypeBlankLines
+    public var scopeBlankLines: ScopeBlankLines
     public var genericTypes: String
     public var useSomeAny: Bool
     public var wrapEffects: WrapEffects
     public var preserveAnonymousForEach: Bool
     public var preserveSingleLineForEach: Bool
+    public var forWhere: ForWhereMode
     public var docComments: DocCommentMode
+    public var excludedDeclarationTypes: Set<String>
     public var conditionalAssignmentOnlyAfterNewProperties: Bool
     public var typeDelimiterSpacing: DelimiterSpacing
     public var initCoderNil: Bool
@@ -995,6 +1055,8 @@ public struct FormatOptions: CustomStringConvertible {
     public var booleanGuardsInTests: BooleanGuardsInTests
     public var redundantOptionalBinding: RedundantOptionalBindingMode
     public var singleLineTernary: SingleLineTernary
+    public var contentBuilder: ContentBuilderMode
+    public var preferContentBuilder: Bool
 
     /// Deprecated
     public var indentComments: Bool
@@ -1006,6 +1068,11 @@ public struct FormatOptions: CustomStringConvertible {
     public var languageMode: Version
     public var fileInfo: FileInfo
     public var markdownFiles: MarkdownFormattingMode
+    public var unknownOptions: UnknownOptionsMode
+    public var ignoreUnknownOptions: Bool {
+        unknownOptions != .error
+    }
+
     public var timeout: TimeInterval
 
     /// Enabled rules - this is a hack used to allow rules to vary their behavior
@@ -1035,6 +1102,7 @@ public struct FormatOptions: CustomStringConvertible {
                 wrapCollections: WrapMode = .preserve,
                 wrapTypealiases: WrapMode = .preserve,
                 wrapEnumCases: WrapEnumCases = .always,
+                wrapSingleLineEnumCases: Bool = false,
                 closingParenPosition: ClosingParenPosition = .balanced,
                 callSiteClosingParenPosition: ClosingParenPosition = .default,
                 wrapReturnType: WrapReturnType = .preserve,
@@ -1058,8 +1126,10 @@ public struct FormatOptions: CustomStringConvertible {
                 throwCapturing: Set<String> = [],
                 asyncCapturing: Set<String> = [],
                 experimentalRules: Bool = false,
-                importGrouping: Set<ImportGrouping> = [.accessControl, .alpha],
+                importGrouping: [ImportGrouping] = [.accessControl, .alpha],
+                hoistImports: Bool = true,
                 trailingClosures: Set<String> = [],
+                wrapClosureBodies: Set<String> = ["Task", "Task.detached"],
                 neverTrailing: Set<String> = [],
                 xcodeIndentation: Bool = false,
                 tabWidth: Int = 0,
@@ -1114,17 +1184,24 @@ public struct FormatOptions: CustomStringConvertible {
                 emptyBracesSpacing: EmptyBracesSpacing = .noSpace,
                 acronyms: Set<String> = ["ID", "URL", "UUID"],
                 preserveAcronyms: Set<String> = [],
+                acronymVisibility: Visibility = .internal,
+                typoVisibility: Visibility = .fileprivate,
+                typos: [String: String] = [:],
+                ignoredTypos: Set<String> = [],
                 indentBlankLines: Bool = false,
                 indentStrings: Bool = false,
                 closureVoidReturn: ClosureVoidReturn = .remove,
                 enumNamespaces: EnumNamespacesMode = .always,
                 typeBlankLines: TypeBlankLines = .remove,
+                scopeBlankLines: ScopeBlankLines = .remove,
                 genericTypes: String = "",
                 useSomeAny: Bool = true,
                 wrapEffects: WrapEffects = .preserve,
                 preserveAnonymousForEach: Bool = false,
                 preserveSingleLineForEach: Bool = true,
+                forWhere: ForWhereMode = .always,
                 docComments: DocCommentMode = .beforeDeclarations,
+                excludedDeclarationTypes: Set<String> = [],
                 conditionalAssignmentOnlyAfterNewProperties: Bool = true,
                 typeDelimiterSpacing: DelimiterSpacing = .spaceAfter,
                 initCoderNil: Bool = false,
@@ -1150,6 +1227,8 @@ public struct FormatOptions: CustomStringConvertible {
                 booleanGuardsInTests: BooleanGuardsInTests = .preserveXCTest,
                 redundantOptionalBinding: RedundantOptionalBindingMode = .sameNameOnly,
                 singleLineTernary: SingleLineTernary = .convert,
+                contentBuilder: ContentBuilderMode = .implicit,
+                preferContentBuilder: Bool = false,
                 // Doesn't really belong here, but hard to put elsewhere
                 fragment: Bool = false,
                 ignoreConflictMarkers: Bool = false,
@@ -1157,6 +1236,7 @@ public struct FormatOptions: CustomStringConvertible {
                 languageMode: Version? = nil,
                 fileInfo: FileInfo = FileInfo(),
                 markdownFiles: MarkdownFormattingMode = .ignore,
+                unknownOptions: UnknownOptionsMode = .error,
                 timeout: TimeInterval = 1)
     {
         self.lineAfterMarks = lineAfterMarks
@@ -1179,6 +1259,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.wrapCollections = wrapCollections
         self.wrapTypealiases = wrapTypealiases
         self.wrapEnumCases = wrapEnumCases
+        self.wrapSingleLineEnumCases = wrapSingleLineEnumCases
         self.closingParenPosition = closingParenPosition
         self.callSiteClosingParenPosition = callSiteClosingParenPosition
         self.wrapReturnType = wrapReturnType
@@ -1203,7 +1284,9 @@ public struct FormatOptions: CustomStringConvertible {
         self.asyncCapturing = asyncCapturing
         self.experimentalRules = experimentalRules
         self.importGrouping = importGrouping
+        self.hoistImports = hoistImports
         self.trailingClosures = trailingClosures
+        self.wrapClosureBodies = wrapClosureBodies
         self.neverTrailing = neverTrailing
         self.xcodeIndentation = xcodeIndentation
         self.tabWidth = tabWidth
@@ -1258,17 +1341,24 @@ public struct FormatOptions: CustomStringConvertible {
         self.emptyBracesSpacing = emptyBracesSpacing
         self.acronyms = acronyms
         self.preserveAcronyms = preserveAcronyms
+        self.acronymVisibility = acronymVisibility
+        self.typoVisibility = typoVisibility
+        self.typos = typos
+        self.ignoredTypos = ignoredTypos
         self.indentBlankLines = indentBlankLines
         self.indentStrings = indentStrings
         self.closureVoidReturn = closureVoidReturn
         self.enumNamespaces = enumNamespaces
         self.typeBlankLines = typeBlankLines
+        self.scopeBlankLines = scopeBlankLines
         self.genericTypes = genericTypes
         self.useSomeAny = useSomeAny
         self.wrapEffects = wrapEffects
         self.preserveAnonymousForEach = preserveAnonymousForEach
         self.preserveSingleLineForEach = preserveSingleLineForEach
+        self.forWhere = forWhere
         self.docComments = docComments
+        self.excludedDeclarationTypes = excludedDeclarationTypes
         self.conditionalAssignmentOnlyAfterNewProperties = conditionalAssignmentOnlyAfterNewProperties
         self.typeDelimiterSpacing = typeDelimiterSpacing
         self.initCoderNil = initCoderNil
@@ -1294,6 +1384,8 @@ public struct FormatOptions: CustomStringConvertible {
         self.booleanGuardsInTests = booleanGuardsInTests
         self.redundantOptionalBinding = redundantOptionalBinding
         self.singleLineTernary = singleLineTernary
+        self.contentBuilder = contentBuilder
+        self.preferContentBuilder = preferContentBuilder
         self.indentComments = indentComments
         self.fragment = fragment
         self.ignoreConflictMarkers = ignoreConflictMarkers
@@ -1301,6 +1393,7 @@ public struct FormatOptions: CustomStringConvertible {
         self.languageMode = languageMode ?? defaultLanguageMode(for: swiftVersion)
         self.fileInfo = fileInfo
         self.markdownFiles = markdownFiles
+        self.unknownOptions = unknownOptions
         self.timeout = timeout
     }
 
@@ -1331,8 +1424,11 @@ public struct FormatOptions: CustomStringConvertible {
                 value = array.joined(separator: ",")
             case let set as Set<String>:
                 value = set.sorted().joined(separator: ",")
-            case let set as Set<ImportGrouping>:
-                value = ImportGrouping.allCases.filter { set.contains($0) }.map(\.rawValue).joined(separator: ",")
+            case let dictionary as [String: String]:
+                value = dictionary.sorted(by: { $0.key < $1.key })
+                    .map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+            case let array as [ImportGrouping]:
+                value = array.map(\.rawValue).joined(separator: ",")
             default:
                 break
             }
@@ -1368,6 +1464,9 @@ public struct FileOptions {
 
     public static let `default` = FileOptions()
 
+    /// Names of build directories, which are excluded by default
+    static let buildDirectories: Set = [".build", "Build", "DerivedData"]
+
     public init(followSymlinks: Bool = false,
                 supportedFileExtensions: [String] = ["swift", "md"],
                 excludedGlobs: [Glob] = [],
@@ -1396,6 +1495,13 @@ public struct FileOptions {
         }
         return shouldSkip
     }
+
+    /// Returns true if the URL is a build directory that has not been unexcluded.
+    /// Only checked when enumerating directory contents, so build directories passed as inputs are still formatted.
+    func shouldSkipBuildDirectory(_ url: URL) -> Bool {
+        Self.buildDirectories.contains(url.lastPathComponent) &&
+            !unexcludedGlobs.contains(where: { $0.matches(url.standardizedFileURL.path) })
+    }
 }
 
 /// All options
@@ -1405,7 +1511,7 @@ public struct Options {
     public var rules: Set<String>?
     public var configURLs: [URL]?
     public var lint: Bool
-    public var filterOptions: [Glob: [String: String]]
+    public var filterOptions: [[ConfigFilter]: [String: String]]
 
     public static let `default` = Options(
         fileOptions: .default,
@@ -1420,7 +1526,7 @@ public struct Options {
                 rules: Set<String>? = nil,
                 configURLs: [URL]? = nil,
                 lint: Bool = false,
-                filterOptions: [Glob: [String: String]] = [:])
+                filterOptions: [[ConfigFilter]: [String: String]] = [:])
     {
         self.fileOptions = fileOptions
         self.formatOptions = formatOptions

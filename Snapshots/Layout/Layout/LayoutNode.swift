@@ -563,11 +563,9 @@ public final class LayoutNode: NSObject {
             errors.insert(LayoutError(SymbolError("Expression for center.x is redundant",
                                                   for: "center.x"), for: self))
         }
-        for key in ["center.y", "firstBaseline", "lastBaseline"] {
-            if hasExpression(key), !value(forSymbol: "top", dependsOn: key) {
-                errors.insert(LayoutError(SymbolError("Expression for \(key) is redundant",
-                                                      for: key), for: self))
-            }
+        for key in ["center.y", "firstBaseline", "lastBaseline"] where hasExpression(key) && !value(forSymbol: "top", dependsOn: key) {
+            errors.insert(LayoutError(SymbolError("Expression for \(key) is redundant",
+                                                  for: key), for: self))
         }
         return errors
     }
@@ -1658,7 +1656,7 @@ public final class LayoutNode: NSObject {
         for name in expressions.keys {
             if let expression = _layoutExpressions[name] ??
                 _viewControllerExpressions[name] ?? _viewExpressions[name],
-                symbols.contains(where: { expression.symbols.contains($0) })
+               symbols.contains(where: { expression.symbols.contains($0) })
             {
                 return true
             }
@@ -2602,10 +2600,8 @@ public final class LayoutNode: NSObject {
         }
         // TODO: less hacky solution
         if value(forSymbol: "width", dependsOn: "inferredSize.width") {
-            for symbol in _evaluating {
-                if value(forSymbol: "width", dependsOn: symbol) {
-                    return nil
-                }
+            for symbol in _evaluating where value(forSymbol: "width", dependsOn: symbol) {
+                return nil
             }
             let prevEvaluating = _evaluating
             _evaluating = ["__maxSize"]

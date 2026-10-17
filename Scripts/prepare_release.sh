@@ -44,24 +44,18 @@ fi
 
 # 2. Update version in README.md
 echo "Updating README.md..."
-sed -i '' "s/'~> [^\']*'/'~> $NEW_VERSION'/" README.md
 sed -i '' "s/\" ~> [^ \n]*/\" ~> $NEW_VERSION/" README.md
 sed -i '' "s/from: \"[^\"]*\"/from: \"$NEW_VERSION\"/" README.md
 
-# 3. Update version in SwiftFormat.podspec.json
-echo "Updating SwiftFormat.podspec.json..."
-sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" SwiftFormat.podspec.json
-sed -i '' "s/\"tag\": \"[^\"]*\"/\"tag\": \"$NEW_VERSION\"/" SwiftFormat.podspec.json
-
-# 4. Update version in Sources/SwiftFormat.swift
+# 3. Update version in Sources/SwiftFormat.swift
 echo "Updating Sources/SwiftFormat.swift..."
 sed -i '' "s/let swiftFormatVersion = \"[^\"]*\"/let swiftFormatVersion = \"$NEW_VERSION\"/" Sources/SwiftFormat.swift
 
-# 5. Update version in SwiftFormat.xcodeproj
+# 4. Update version in SwiftFormat.xcodeproj
 echo "Updating SwiftFormat.xcodeproj..."
 sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = $NEW_VERSION/" SwiftFormat.xcodeproj/project.pbxproj
 
-# 6. Run tests
+# 5. Run tests
 echo "Running tests..."
 if ! swift test -c release --parallel --num-workers 10; then
     echo "Error: Tests failed. Please fix the issues before proceeding."
@@ -70,31 +64,21 @@ fi
 
 echo "Tests passed successfully."
 
-# 7. Archive and export executable for distribution
-echo "Creating archive..."
-ARCHIVE_PATH="build/SwiftFormat.xcarchive"
-if ! xcodebuild -project SwiftFormat.xcodeproj -scheme "SwiftFormat (Command Line Tool)" -configuration Release -archivePath "$ARCHIVE_PATH" archive; then
-    echo "Error: Archive failed. Please fix the issues before proceeding."
+# 6. Pin formatting to the most recent release before the one being prepared.
+# Skip NEW_VERSION so rerunning release preparation keeps the same pin.
+FORMAT_VERSION=$(sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' CHANGELOG.md |
+    awk -v new_version="$NEW_VERSION" '$0 != new_version { print; exit }')
+if [ -z "$FORMAT_VERSION" ]; then
+    echo "Error: No previous release found in CHANGELOG.md for the formatter pin." >&2
     exit 1
 fi
+echo "Pinning formatter to $FORMAT_VERSION..."
+sed -i '' "s/^FORMAT_VERSION=.*/FORMAT_VERSION=$FORMAT_VERSION/" format.sh
 
-echo "Extracting executable from archive..."
-# Find the executable directly in the archive
-ARCHIVE_EXECUTABLE=$(find "$ARCHIVE_PATH" -name "swiftformat" -type f -perm +111 | head -1)
-
-if [ -z "$ARCHIVE_EXECUTABLE" ]; then
-    echo "Error: Could not find executable in archive"
-    exit 1
-fi
-
-echo "Replacing Command Line Tool executable with archived version..."
-cp "$ARCHIVE_EXECUTABLE" CommandLineTool/swiftformat
-
-# 8. Run format.sh to format the codebase with the new version
-echo "Formatting using new binary..."
+echo "Formatting..."
 bash format.sh
 
-# 9. Build again after formatting to ensure no issues were introduced
+# 7. Build again after formatting to ensure no issues were introduced
 echo "Building after formatting..."
 if ! swift build -c release; then
     echo "Error: Build failed after formatting. Please fix the issues before proceeding."
@@ -108,5 +92,4 @@ echo "Remaining steps to be completed manually:"
 echo "   - Fill out CHANGELOG.md"
 echo "   - Commit to develop and main branches"
 echo "   - Create release at https://github.com/nicklockwood/SwiftFormat/releases"
-echo "   - Update Cocoapod with 'pod trunk push --allow-warnings'"
 echo ""

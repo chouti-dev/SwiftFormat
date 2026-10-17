@@ -56,6 +56,19 @@ public extension CLI {
         Swift.readLine(strippingNewline: false)
     }
 
+    /// When output handlers should color messages, set with the `--color` argument
+    enum ColorMode: String, CaseIterable {
+        /// Color messages when the output is a terminal (the default)
+        case auto
+        /// Color messages even when the output is piped or captured
+        case always
+        /// Never color messages
+        case never
+    }
+
+    /// The `--color` mode of the current run
+    internal(set) static var colorMode = ColorMode.auto
+
     /// Run the CLI with the specified input arguments
     static func run(in directory: String, with args: [String] = CommandLine.arguments) -> ExitCode {
         processArguments(args, environment: ProcessInfo.processInfo.environment, in: directory)
@@ -206,16 +219,17 @@ func printHelp(as type: CLI.OutputType) {
     --output           Output path for formatted file(s) (defaults to input path)
     --exclude          Comma-delimited list of ignored paths (supports glob syntax)
     --unexclude        Paths to not exclude, even if excluded elsewhere in config
-    --filter           Filters a config file to only apply to paths matching a glob.
+    --filter           Filters a config file to a subset of files (glob or header date)
     --symlinks         How symlinks are handled: "follow" or "ignore" (default)
     --line-range       Range of lines to process within the input file (first, last)
     --fragment         \(stripMarkdown(Descriptors.fragment.help))
     --conflict-markers \(stripMarkdown(Descriptors.ignoreConflictMarkers.help))
     --swift-version    \(stripMarkdown(Descriptors.swiftVersion.help))
     --language-mode    \(stripMarkdown(Descriptors.languageMode.help))
-    --unknown-rules    How unknown rules are handled: "error" (default) or "ignore"
+    --unknown-options  \(stripMarkdown(Descriptors.unknownOptions.help))
     --min-version      The minimum SwiftFormat version to be used for these files
     --cache            Path to cache file, or "clear" or "ignore" the default cache
+    --snapshot         Path to snapshot file (defaults to .swiftformat-snapshot)
     --dry-run          Run in "dry" mode (without actually changing any files)
     --lint             Return an error for unformatted input, and list violations
     --report           Path to a file where --lint output should be written
@@ -224,6 +238,7 @@ func printHelp(as type: CLI.OutputType) {
     --strict           Emit errors for unformatted code when formatting
     --verbose          Display detailed formatting output and warnings/errors
     --quiet            Disables non-critical output messages and warnings
+    --color            Colored output: "auto" (default), "always" or "never"
     --output-tokens    Outputs an array of tokens instead of text when using stdin
     --markdown-files   \(stripMarkdown(Descriptors.markdownFiles.help))
 
@@ -278,8 +293,9 @@ private func serializeOptions(_ options: Options, to outputURL: URL?) throws {
 private func readConfigArg(
     _ name: String,
     with args: inout [String: String],
-    filterOptions: inout [Glob: [String: String]],
-    in directory: String
+    filterOptions: inout [[ConfigFilter]: [String: String]],
+    in directory: String,
+    logger: Logger? = nil
 ) throws -> URL? {
     guard let configPath = args[name] else {
         return nil
@@ -288,26 +304,29 @@ private func readConfigArg(
         throw FormatError.options("--\(name) argument expects a value")
     }
 
-    let (url, configs) = try processConfigFile(at: configPath, for: name, in: directory)
+    let (url, configs) = try processConfigFile(at: configPath, for: name, in: directory, logger: logger)
 
     var config = [String: String]()
 
     for configArgs in configs {
-        // If the config file has a `--filter` option, store it separately under that glob.
-        if let filterGlob = configArgs["filter"] {
-            for glob in expandGlobs(filterGlob, in: "/") {
-                filterOptions[glob] = configArgs
+        // If the config file has a `--filter` option, store it separately under those filters.
+        if let filterValue = configArgs["filter"] {
+            let filters = try ConfigFilter.parseList(filterValue, in: "/")
+            if !filters.isEmpty {
+                filterOptions[filters] = configArgs
             }
         } else {
-            config = try mergeArguments(configArgs, into: config)
+            config = try mergeArguments(configArgs, into: config, logger: logger)
         }
     }
 
-    args = try mergeArguments(args, into: config)
+    args = try mergeArguments(args, into: config, logger: logger)
     return url
 }
 
-private func processConfigFile(at path: String, for argumentName: String, in directory: String) throws -> (URL, [[String: String]]) {
+private func processConfigFile(at path: String, for argumentName: String, in directory: String,
+                               logger: Logger? = nil) throws -> (URL, [[String: String]])
+{
     let url = try parsePath(path, for: "--\(argumentName)", in: directory)
 
     if !FileManager.default.fileExists(atPath: url.path) {
@@ -321,7 +340,7 @@ private func processConfigFile(at path: String, for argumentName: String, in dir
         throw FormatError.reading("Failed to read config file at \(url.path), \(error)")
     }
 
-    var configs = try parseConfigFile(data)
+    var configs = try parseConfigFile(data, logger: logger)
 
     // Ensure exclude paths in config file are treated as relative to the file itself
     let configDirectory = url.deletingLastPathComponent().path
@@ -355,8 +374,9 @@ private func processConfigFile(at path: String, for argumentName: String, in dir
 private func readMultipleConfigArgs(
     _ name: String,
     with args: inout [String: String],
-    filterOptions: inout [Glob: [String: String]],
-    in directory: String
+    filterOptions: inout [[ConfigFilter]: [String: String]],
+    in directory: String,
+    logger: Logger? = nil
 ) throws -> [URL] {
     guard let configPaths = args[name] else {
         return []
@@ -373,18 +393,19 @@ private func readMultipleConfigArgs(
 
     // Process each config file in order (first as base, subsequent override)
     for (index, path) in paths.enumerated() {
-        let (url, configs) = try processConfigFile(at: path, for: name, in: directory)
+        let (url, configs) = try processConfigFile(at: path, for: name, in: directory, logger: logger)
         for config in configs {
             // For first config file, use it as base; for subsequent files, merge them in.
-            // If the config file has a `--filter` option, store it separately under that glob.
-            if let filterGlob = config["filter"] {
-                for glob in expandGlobs(filterGlob, in: "/") {
-                    filterOptions[glob] = config
+            // If the config file has a `--filter` option, store it separately under those filters.
+            if let filterValue = config["filter"] {
+                let filters = try ConfigFilter.parseList(filterValue, in: "/")
+                if !filters.isEmpty {
+                    filterOptions[filters] = config
                 }
             } else if index == 0 {
                 mergedConfig = config
             } else {
-                mergedConfig = try mergeArguments(config, into: mergedConfig)
+                mergedConfig = try mergeArguments(config, into: mergedConfig, logger: logger)
             }
         }
 
@@ -392,7 +413,7 @@ private func readMultipleConfigArgs(
     }
 
     // Merge final config into args
-    args = try mergeArguments(args, into: mergedConfig)
+    args = try mergeArguments(args, into: mergedConfig, logger: logger)
     return configURLs
 }
 
@@ -410,17 +431,32 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
     var strict = false
 
     quietMode = false
+    CLI.colorMode = .auto
     defer {
-        // Reset quiet mode on exit to prevent side-effects between unit tests
+        // Reset quiet and color modes on exit to prevent side-effects between unit tests
         quietMode = false
+        CLI.colorMode = .auto
     }
+    let logger = Logger(print: print)
 
     do {
         // Get arguments
-        var args = try preprocessArguments(args, commandLineArguments)
+        var args = try preprocessArguments(args, commandLineArguments, logger: logger)
 
         // Quiet mode
         quietMode = (args["quiet"] != nil)
+
+        // Color
+        if let value = args["color"] {
+            guard let mode = CLI.ColorMode(rawValue: value) else {
+                throw FormatError.invalidOption(
+                    value,
+                    for: "color",
+                    with: CLI.ColorMode.allCases.map(\.rawValue)
+                )
+            }
+            CLI.colorMode = mode
+        }
 
         // Verbose
         verbose = (args["verbose"] != nil)
@@ -516,8 +552,9 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
         } ?? false
 
         // Config files (support multiple)
-        var filterOptions = [Glob: [String: String]]()
-        let configURLs = try readMultipleConfigArgs("config", with: &args, filterOptions: &filterOptions, in: directory)
+        var filterOptions = [[ConfigFilter]: [String: String]]()
+        let configURLs = try readMultipleConfigArgs("config", with: &args, filterOptions: &filterOptions,
+                                                    in: directory, logger: logger)
 
         // FormatOption overrides
         var overrides = [String: String]()
@@ -526,10 +563,11 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
         }
 
         // Base config
-        _ = try readConfigArg("base-config", with: &args, filterOptions: &filterOptions, in: directory)
+        _ = try readConfigArg("base-config", with: &args, filterOptions: &filterOptions,
+                              in: directory, logger: logger)
 
         // Options
-        var options = try Options(args, filterOptions: filterOptions, in: directory)
+        var options = try Options(args, filterOptions: filterOptions, in: directory, logger: logger)
         options.configURLs = configURLs.isEmpty ? nil : configURLs
 
         // Show rules
@@ -664,6 +702,33 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
             return start ... end
         }
 
+        // Snapshot
+        let snapshotMode = try args["snapshot"].map { arg in
+            guard !useStdin, !inputURLs.isEmpty else {
+                throw FormatError.options("--snapshot requires one or more file inputs")
+            }
+            guard outputURL == nil else {
+                throw FormatError.options("--snapshot cannot be combined with --output")
+            }
+            guard lineRange == nil else {
+                throw FormatError.options("--snapshot cannot be combined with --line-range")
+            }
+            guard args["infer-options"] == nil else {
+                throw FormatError.options("--snapshot cannot be combined with --infer-options")
+            }
+            if arg.isEmpty {
+                return try SnapshotMode.discover(defaultURL: defaultSnapshotURL(for: inputURLs))
+            }
+            let snapshotURL = try parsePath(arg, for: "--snapshot", in: directory)
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: snapshotURL.path, isDirectory: &isDirectory),
+               isDirectory.boolValue
+            {
+                throw FormatError.options("--snapshot argument expects a file path")
+            }
+            return SnapshotMode.explicit(snapshotURL)
+        } ?? .discover(defaultURL: nil)
+
         // Infer options
         if args["infer-options"] != nil {
             guard configURLs.isEmpty else {
@@ -791,7 +856,7 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
                 } else {
                     printRunningMessage()
                     if let stdinURL = options.formatOptions?.fileInfo.filePath.map(URL.init(fileURLWithPath:)) {
-                        try gatherOptions(&options, for: stdinURL, with: { print($0, as: .info) })
+                        try gatherOptions(&options, for: stdinURL, with: logger)
                         if options.shouldSkipFile(stdinURL) {
                             print(input, as: .raw)
                             status = .finished(.ok)
@@ -809,11 +874,11 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
                                                        resourceValues: resourceValues)
 
                         options.formatOptions?.fileInfo = fileInfo
-                        try options.addFilterArguments(path: stdinURL.path)
+                        try options.addFilterArguments(path: stdinURL.path, source: input, logger: logger)
                     }
                     let outputTokens = try applyRules(
                         input, options: options, lineRange: lineRange,
-                        verbose: verbose, lint: lint, reporter: reporter
+                        verbose: verbose, lint: lint, reporter: reporter, logger: logger
                     )
                     let output = sourceCode(for: outputTokens)
                     if let outputURL, !useStdout {
@@ -906,7 +971,9 @@ func processArguments(_ args: [String], environment: [String: String] = [:], in 
                                                   lint: lint,
                                                   lenient: lenient,
                                                   cacheURL: cacheURL,
-                                                  reporter: reporter)
+                                                  snapshotMode: snapshotMode,
+                                                  reporter: reporter,
+                                                  logger: logger)
             errors += _errors
         })
 
@@ -1005,7 +1072,7 @@ func inferOptions(from inputURLs: [URL], options: FileOptions) -> (Int, FormatOp
     let errors = enumerateFiles(
         withInputURLs: inputURLs,
         options: baseOptions,
-        logger: { print($0, as: .info) }
+        logger: Logger(print: print)
     ) { inputURL, _, _ in
         guard let input = try? String(contentsOf: inputURL) else {
             throw FormatError.reading("Failed to read file \(inputURL.path)")
@@ -1030,7 +1097,7 @@ func computeHash(_ source: String) -> String {
 }
 
 func applyRules(_ source: String, tokens: [Token]? = nil, options: Options, lineRange: ClosedRange<Int>?,
-                verbose: Bool, lint: Bool, reporter: Reporter?) throws -> [Token]
+                verbose: Bool, lint: Bool, reporter: Reporter?, logger: Logger? = nil) throws -> [Token]
 {
     // Parse source
     var tokens = tokens ?? tokenize(source)
@@ -1051,7 +1118,8 @@ func applyRules(_ source: String, tokens: [Token]? = nil, options: Options, line
     (tokens, changes) = try applyRules(
         rules, to: tokens, with: formatOptions,
         trackChanges: lint || verbose || reporter != nil,
-        range: range
+        range: range,
+        logger: logger
     )
 
     // Display info
@@ -1085,8 +1153,57 @@ func processInput(_ inputURLs: [URL],
                   lint: Bool,
                   lenient _: Bool,
                   cacheURL: URL?,
-                  reporter: Reporter?) -> (OutputFlags, [Error])
+                  snapshotMode: SnapshotMode,
+                  reporter: Reporter?,
+                  logger: Logger? = nil) -> (OutputFlags, [Error])
 {
+    // Discover and load snapshots before formatting, so an invalid snapshot can't result in partial changes.
+    var snapshotURLByInputURL = [URL: URL]()
+    var snapshotStates = [URL: SnapshotState]()
+    let snapshotURLs: Set<URL>
+    switch snapshotMode {
+    case let .explicit(snapshotURL):
+        snapshotURLs = [snapshotURL.standardizedFileURL]
+    case let .discover(defaultURL):
+        var inputFileURLs = [URL]()
+        let discoveryErrors = enumerateFiles(
+            withInputURLs: inputURLs,
+            options: options,
+            concurrent: !verbose,
+            logger: logger
+        ) { inputURL, _, _ in
+            { inputFileURLs.append(inputURL.standardizedFileURL) }
+        }
+        guard discoveryErrors.isEmpty else {
+            return ((0, 0, 0, 0), discoveryErrors)
+        }
+        var discoveredSnapshotURLs = Set<URL>()
+        for inputURL in inputFileURLs {
+            let encounteredURLs = encounteredSnapshotURLs(for: inputURL)
+            discoveredSnapshotURLs.formUnion(encounteredURLs)
+            if let snapshotURL = encounteredURLs.first ?? defaultURL?.standardizedFileURL {
+                snapshotURLByInputURL[inputURL] = snapshotURL
+            }
+        }
+        snapshotURLs = discoveredSnapshotURLs.union(snapshotURLByInputURL.values)
+    }
+    if !snapshotURLs.isEmpty, outputURL != nil {
+        return ((0, 0, 0, 0), [FormatError.options("--snapshot cannot be combined with --output")])
+    }
+    if !snapshotURLs.isEmpty, lineRange != nil {
+        return ((0, 0, 0, 0), [FormatError.options("--snapshot cannot be combined with --line-range")])
+    }
+    do {
+        for snapshotURL in snapshotURLs.sorted(by: { $0.path < $1.path }) {
+            snapshotStates[snapshotURL] = try loadSnapshot(at: snapshotURL, dryrun: dryrun)
+            if !snapshotStates[snapshotURL]!.isCreating {
+                print("Reading snapshot file at \(snapshotURL.path)", as: .info)
+            }
+        }
+    } catch {
+        return ((0, 0, 0, 0), [error])
+    }
+
     // Load cache
     let cacheDirectory = cacheURL?.deletingLastPathComponent().absoluteURL
     var cache: [String: String]?
@@ -1127,28 +1244,86 @@ func processInput(_ inputURLs: [URL],
         }
         showedConfigurationWarnings = true
     }
+    // Options with overrides applied, keyed by directory. Files in the same directory share
+    // the same options apart from `fileInfo`, so the overrides only need to be merged once per directory.
+    var overriddenOptionsCache = [String: Options]()
+    let overriddenOptionsQueue = DispatchQueue(label: "swiftformat.overrides")
+    func applyOverrides(to options: Options, for inputURL: URL) throws -> Options {
+        guard !overrides.isEmpty else {
+            return options
+        }
+        let directory = inputURL.deletingLastPathComponent().path
+        var result = try overriddenOptionsQueue.sync { () throws -> Options in
+            try overriddenOptionsCache[directory] ?? {
+                var overridden = options
+                try overridden.addArguments(overrides, in: "", logger: logger) // No need for directory as overrides are formatOptions only
+                overriddenOptionsCache[directory] = overridden
+                return overridden
+            }()
+        }
+        result.formatOptions?.fileInfo = options.formatOptions?.fileInfo ?? .init()
+        return result
+    }
     // Format files
-    var errors = enumerateFiles(
-        withInputURLs: inputURLs,
-        outputURL: outputURL,
-        options: options,
-        concurrent: !verbose,
-        logger: { print($0, as: .info) },
-        skipped: skippedHandler
-    ) { inputURL, outputURL, options in
+    func fileHandler(
+        _ inputURL: URL,
+        _ outputURL: URL,
+        _ options: Options
+    ) throws -> () throws -> Void {
+        let inputURL = inputURL.standardizedFileURL
+        let snapshotURL: URL?
+        switch snapshotMode {
+        case let .explicit(url):
+            snapshotURL = url.standardizedFileURL
+        case .discover:
+            snapshotURL = snapshotURLByInputURL[inputURL]
+        }
+        if inputURL == snapshotURL {
+            return { outputFlags.filesSkipped += 1 }
+        }
         guard let input = try? String(contentsOf: inputURL) else {
             throw FormatError.reading("Failed to read file \(inputURL.path)")
         }
+        let inputSnapshotKey: String?
+        if let snapshotURL {
+            inputSnapshotKey = snapshotKey(
+                for: inputURL,
+                relativeTo: snapshotURL.deletingLastPathComponent()
+            )
+        } else {
+            inputSnapshotKey = nil
+        }
+        let inputHash = snapshotURL == nil ? nil : computeHash(input)
+        if let snapshotURL,
+           let inputSnapshotKey,
+           snapshotStates[snapshotURL]?.isCreating == true
+        {
+            return {
+                snapshotStates[snapshotURL]?.snapshot.files[inputSnapshotKey] = inputHash
+                outputFlags.filesSkipped += 1
+            }
+        }
+        if let snapshotURL,
+           let inputSnapshotKey,
+           snapshotStates[snapshotURL]?.snapshot.files[inputSnapshotKey] == inputHash
+        {
+            if verbose {
+                print("Skipping \(inputURL.path)", as: .info)
+                print("-- unchanged (snapshot)", as: .success)
+            }
+            return { outputFlags.filesSkipped += 1 }
+        }
         // Override options
-        var options = options
-        try options.addArguments(overrides, in: "") // No need for directory as overrides are formatOptions only
-        try options.addFilterArguments(path: inputURL.path)
+        var options = try applyOverrides(to: options, for: inputURL)
+        try options.addFilterArguments(path: inputURL.path, source: input, logger: logger)
         let formatOptions = options.formatOptions ?? .default
         let range = lineRange.map { "\($0.lowerBound),\($0.upperBound);" } ?? ""
         // Check cache
         let rules = options.rules ?? defaultRules
-        let configHash = computeHash("\(formatOptions)\(range)\(rules.sorted().joined(separator: ","))")
-        let cachePrefix = "\(version);\(configHash);"
+        let cachePrefix: String = cache == nil ? "" : {
+            let configHash = computeHash("\(formatOptions)\(range)\(rules.sorted().joined(separator: ","))")
+            return "\(version);\(configHash);"
+        }()
         let cacheKey: String = {
             var path = inputURL.absoluteURL.path
             if let cacheDirectory {
@@ -1192,8 +1367,13 @@ func processInput(_ inputURLs: [URL],
                     if swiftCodeBlock.noFormat {
                         continue
                     } else if let args = swiftCodeBlock.options?.components(separatedBy: " "), !args.isEmpty {
-                        let arguments = try preprocessArguments(args, commandLineArguments)
-                        try applyArguments(arguments, lint: lint, to: &options)
+                        let arguments = try preprocessArguments(
+                            args,
+                            commandLineArguments,
+                            unknownOptions: options.formatOptions?.unknownOptions ?? .error,
+                            logger: logger
+                        )
+                        try applyArguments(arguments, lint: lint, to: &options, logger: logger)
                     }
 
                     // Set fragment mode
@@ -1225,7 +1405,8 @@ func processInput(_ inputURLs: [URL],
                         if parsingError == nil {
                             outputTokens = try? applyRules(swiftCodeBlock.text, tokens: inputTokens,
                                                            options: options, lineRange: lineRange,
-                                                           verbose: verbose, lint: lint, reporter: reporter)
+                                                           verbose: verbose, lint: lint, reporter: reporter,
+                                                           logger: logger)
                         }
                     case .strict:
                         if let parsingError {
@@ -1234,7 +1415,8 @@ func processInput(_ inputURLs: [URL],
 
                         outputTokens = try applyRules(swiftCodeBlock.text, tokens: inputTokens,
                                                       options: options, lineRange: lineRange,
-                                                      verbose: verbose, lint: lint, reporter: reporter)
+                                                      verbose: verbose, lint: lint, reporter: reporter,
+                                                      logger: logger)
                     }
 
                     if let outputTokens {
@@ -1250,7 +1432,8 @@ func processInput(_ inputURLs: [URL],
             } else {
                 // Regular swift file
                 let outputTokens = try applyRules(input, options: options, lineRange: lineRange,
-                                                  verbose: verbose, lint: lint, reporter: reporter)
+                                                  verbose: verbose, lint: lint, reporter: reporter,
+                                                  logger: logger)
                 output = sourceCode(for: outputTokens)
                 if output != input {
                     sourceHash = nil
@@ -1335,6 +1518,15 @@ func processInput(_ inputURLs: [URL],
             }
         }
     }
+    var errors = enumerateFiles(
+        withInputURLs: inputURLs,
+        outputURL: outputURL,
+        options: options,
+        concurrent: !verbose,
+        logger: logger,
+        skipped: skippedHandler,
+        handler: fileHandler
+    )
     if verbose {
         var errorCount = errors.count
         errors = errors.filter { error in
@@ -1367,7 +1559,140 @@ func processInput(_ inputURLs: [URL],
             }
         }
     }
+    // Save newly created snapshots
+    for snapshotURL in snapshotStates.keys.sorted(by: { $0.path < $1.path }) {
+        guard let state = snapshotStates[snapshotURL],
+              state.isCreating, errors.isEmpty
+        else {
+            continue
+        }
+        let snapshotDirectory = snapshotURL.deletingLastPathComponent()
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let stripSlashes: Bool
+            if #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
+                stripSlashes = false
+                encoder.outputFormatting.insert(.withoutEscapingSlashes)
+            } else {
+                stripSlashes = true
+            }
+            var data = try encoder.encode(state.snapshot)
+            if stripSlashes, let string = String(data: data, encoding: .utf8) {
+                data = Data(string.replacingOccurrences(of: "\\/", with: "/").utf8)
+            }
+            try data.write(to: snapshotURL, options: .atomic)
+        } catch {
+            if FileManager.default.fileExists(atPath: snapshotDirectory.path) {
+                errors.append(FormatError.writing("Failed to write snapshot file at \(snapshotURL.path)"))
+            } else {
+                errors.append(FormatError.reading(
+                    "Specified snapshot file directory does not exist: \(snapshotDirectory.path)"
+                ))
+            }
+        }
+    }
     return (outputFlags, errors)
+}
+
+private struct Snapshot: Codable {
+    static let currentVersion = 1
+
+    var version = currentVersion
+    var files = [String: String]()
+}
+
+enum SnapshotMode {
+    case explicit(URL)
+    case discover(defaultURL: URL?)
+}
+
+private struct SnapshotState {
+    var snapshot: Snapshot
+    let isCreating: Bool
+}
+
+private func loadSnapshot(at url: URL, dryrun: Bool) throws -> SnapshotState {
+    let url = url.standardizedFileURL
+    var isDirectory: ObjCBool = false
+    let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+    guard !exists || !isDirectory.boolValue else {
+        throw FormatError.reading("Snapshot file at \(url.path) is a directory")
+    }
+    guard exists else {
+        if dryrun {
+            throw FormatError.options("--snapshot file cannot be created in --dry-run mode")
+        }
+        return SnapshotState(snapshot: Snapshot(), isCreating: true)
+    }
+    do {
+        let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: url))
+        guard snapshot.version == Snapshot.currentVersion else {
+            throw FormatError.reading("Unsupported snapshot version in file at \(url.path)")
+        }
+        return SnapshotState(snapshot: snapshot, isCreating: false)
+    } catch let error as FormatError {
+        throw error
+    } catch {
+        throw FormatError.reading("Failed to read or parse snapshot file at \(url.path)")
+    }
+}
+
+private func encounteredSnapshotURLs(for inputURL: URL) -> [URL] {
+    var result = [URL]()
+    var directory = inputURL.deletingLastPathComponent().standardizedFileURL
+    while true {
+        let candidate = directory.appendingPathComponent(".swiftformat-snapshot")
+        if FileManager.default.fileExists(atPath: candidate.path) {
+            result.append(candidate)
+        }
+        guard directory.pathComponents.count > 1 else {
+            return result
+        }
+        directory.deleteLastPathComponent()
+    }
+}
+
+private func defaultSnapshotURL(for inputURLs: [URL]) throws -> URL {
+    let inputRoots = inputURLs.map { inputURL -> URL in
+        let inputURL = inputURL.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: inputURL.path, isDirectory: &isDirectory),
+           isDirectory.boolValue
+        {
+            return inputURL
+        }
+        return inputURL.deletingLastPathComponent()
+    }
+    guard var commonRoot = inputRoots.first else {
+        throw FormatError.options("--snapshot requires one or more file inputs")
+    }
+    for inputRoot in inputRoots.dropFirst() {
+        while !inputRoot.pathComponents.starts(with: commonRoot.pathComponents) {
+            let parent = commonRoot.deletingLastPathComponent()
+            guard parent != commonRoot else {
+                throw FormatError.options(
+                    "--snapshot requires an explicit path when inputs do not share a project directory"
+                )
+            }
+            commonRoot = parent
+        }
+    }
+    guard commonRoot.pathComponents.count > 1 else {
+        throw FormatError.options(
+            "--snapshot requires an explicit path when inputs do not share a project directory"
+        )
+    }
+    return commonRoot.appendingPathComponent(".swiftformat-snapshot")
+}
+
+private func snapshotKey(for inputURL: URL, relativeTo directoryURL: URL) -> String {
+    let inputComponents = inputURL.standardizedFileURL.pathComponents
+    let directoryComponents = directoryURL.standardizedFileURL.pathComponents
+    guard inputComponents.starts(with: directoryComponents) else {
+        return inputURL.standardizedFileURL.path
+    }
+    return inputComponents.dropFirst(directoryComponents.count).joined(separator: "/")
 }
 
 /// The data format used with `--output-tokens`

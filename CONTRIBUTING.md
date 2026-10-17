@@ -57,6 +57,10 @@ Code should be commented, but not excessively. In general, comments should follo
 
 When making user-facing changes, please update the README.md file if applicable. There is no need to update CHANGELOG.md or bump the version number.
 
+The repository uses a pinned SwiftFormat release for formatting and linting. Run `./format.sh` to format or `./format.sh --lint` to check formatting. The first run downloads the binary from GitHub Releases into `.build/formatter`; subsequent runs use the cached copy. This requires `curl` and `unzip` and supports macOS and Linux.
+
+Release preparation automatically updates `FORMAT_VERSION` in `format.sh` to the most recent release in `CHANGELOG.md` other than the version being prepared. This keeps formatting pinned to an already published version while preparing the next release.
+
 ## Tests
 
 All significant code changes should be accompanied by a test.  
@@ -89,11 +93,45 @@ $ ./Scripts/test_rule.sh wrap
 
 If you contribute a new rule or option, it would be published in the following major version release. To start using the new rule or option right away in your own project, you could use a prerelease build of the `develop` branch. More information is available [here](https://github.com/nicklockwood/SwiftFormat#prerelease-builds).
 
+## Naming Rules
+
+Rule names use lower camel case and describe either a fixed transformation or a configurable formatting concern.
+
+* Use `redundant<Construct>` only for rules whose edits exclusively remove a semantically unnecessary construct.
+* Use `prefer<PreferredForm>` for rules that consistently replace one valid idiom with a preferred alternative. Add `Over<Alternative>` only when needed for clarity.
+  * Only use the `prefer` prefix when the inverse transformation is unlikely to be supported in the future. If both directions are plausible, use a neutral name even if the initial implementation only supports one direction. For example, use `ifExpressions` rather than `preferIfExpressions` to leave room for converting if expressions to ternary expressions later.
+* Use `no<Construct>` only for categorical prohibitions.
+* Use an imperative verb such as `sort`, `wrap`, `hoist`, `organize`, or `simplify` for a single-direction mechanical transformation.
+* If options can select opposing outputs, use a neutral subject or style dimension instead. Do not encode the default option value in the rule name.
+* Options may narrow a directional rule’s applicability, but must not reverse the meaning of its name. If a reverse mode is added later, rename the rule and retain the old name as a deprecated alias.
+
+## Renaming a Rule
+
+* Rename the rule file, `FormatRule` property, tests, and all references to use the new name.
+* Retain the old rule in a separate, correspondingly named file with `renamedTo` set to the replacement, and have both rules call the same `Formatter` helper. This makes command-line options, configuration, and inline enable/disable directives using the old name apply to the replacement. Preserve the original default-enabled status on the new rule.
+* Add tests confirming the old name is deprecated, resolves to the replacement, and both names produce the same output.
+* Run the rule tests and full test suite until they pass. Tests regenerate `RuleRegistry.generated.swift` and `Rules.md`; do not edit these files manually.
+* Use `deprecationMessage` without `renamedTo` when the old rule does not map directly to a single replacement, such as when its behavior was split across several rules or requires a particular option value.
+
 ## Renaming a Rule Option
 
 * Add a copy of the option in `OptionDescriptor.swift` under the `// MARK: - RENAMED` section
 * Add `.renamed(to: "newPropertyName")` to the renamed copy of the option
 * Rename the `propertyName` of the original option property to the new name
+
+## Review Checklist for New Rule Names
+
+Before accepting a new rule name, reviewers should ask:
+
+1. Does the name remain accurate for every supported option value?
+2. Does an option merely narrow applicability, or does it change the direction of the transformation?
+3. If the name begins with `redundant`, does every edit remove the named construct?
+4. If the name begins with `prefer`, does every edit move toward the named form?
+5. If the name begins with `prefer`, is the inverse transformation unlikely to be supported in the future?
+6. If the name begins with `no`, is the named construct categorically prohibited within the rule’s scope?
+7. If the name uses an imperative verb, does the rule always perform that operation rather than its inverse?
+8. Is the name independent of the current default option value?
+9. Does the name avoid unnecessary abbreviations and match Swift terminology where possible?
 
 ## Credits
 
@@ -111,11 +149,10 @@ This is relevant only to maintainers:
 Run `./Scripts/prepare_release.sh VERSION_NUMBER`. This script:
 
 * Updates version number in SwiftFormat.swift + 3 targets
-* Updates SwiftFormat.podspec.json
 * Creates a placeholder entry in CHANGELOG.md
 * Run tests and ensure they pass
-* Archives SwiftFormat (Command Line Tool)
-* Replaced binary in CommandLineTool directory
+* Pins the formatter to the previous release in CHANGELOG.md and formats the codebase
+* Builds the command-line tool from source
 
 Then complete the following steps manually:
 
@@ -123,4 +160,3 @@ Then complete the following steps manually:
 * Tag commit and push to main
 * Publish a new release
   * All binaries are built and uploaded to the release automatically
-* pod trunk push --allow-warnings

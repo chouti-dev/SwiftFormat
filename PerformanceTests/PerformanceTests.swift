@@ -111,12 +111,71 @@ final class PerformanceTests: XCTestCase {
         XCTAssertEqual(options?.indent.count, 4)
     }
 
+    func testWrapShortMemberExpressions() {
+        let body = (0 ..< 2000).map { "    consume(value\($0).member)" }.joined(separator: "\n")
+        let input = """
+        func process() {
+        \(body)
+        }
+        """
+        let tokens = tokenize(input)
+        let options = FormatOptions(maxWidth: 120)
+        var output = [Token]()
+        measure {
+            output = try! format(tokens, rules: [.wrap], options: options).tokens
+        }
+        XCTAssertEqual(output, tokens)
+    }
+
+    func testWrapLongExpressions() {
+        let body = String(repeating: "    value = first + second + third + fourth\n", count: 200)
+        let input = """
+        func process() {
+        \(body)}
+        """
+        let wrappedBody = String(repeating: "    value = first + second +\n        third + fourth\n", count: 200)
+        let expected = """
+        func process() {
+        \(wrappedBody)}
+        """
+        let tokens = tokenize(input)
+        let options = FormatOptions(maxWidth: 30)
+        var output = [Token]()
+        measure {
+            output = try! format(tokens, rules: [.wrap], options: options).tokens
+        }
+        XCTAssertEqual(sourceCode(for: output), expected)
+    }
+
     func testIndent() {
         let files = PerformanceTests.files
         let tokens = files.map { tokenize($0) }
         measure {
             _ = tokens.map { try! format($0, rules: [.indent]) }
         }
+    }
+
+    func testIndentManySiblingMethods() {
+        let methods = (0 ..< 1000).map { index in
+            """
+                func method\(index)() -> Int {
+                    return \(index)
+                }
+            """
+        }.joined(separator: "\n\n")
+        let input = """
+        struct Example {
+        \(methods)
+        }
+        """
+        let tokens = tokenize(input)
+        var output = [Token]()
+
+        measure {
+            output = try! format(tokens, rules: [.indent]).tokens
+        }
+
+        XCTAssertEqual(output, tokens)
     }
 
     func testWorstCaseIndent() {
@@ -151,6 +210,31 @@ final class PerformanceTests: XCTestCase {
         measure {
             _ = tokens.map { try! format($0, rules: [.numberFormatting]) }
         }
+    }
+
+    func testDirectiveWithMultilineString() {
+        let header = #"""
+        // swiftformat:disable:next numberFormatting
+        let text = """
+        value: \(123456)
+        """
+
+        """#
+        let declarations = (0 ..< 1000).map { index in
+            """
+            func value\(index)() -> Int {
+                return 123456
+            }
+
+            """
+        }.joined()
+        let tokens = tokenize(header + declarations)
+        let expected = tokenize(header + declarations.replacingOccurrences(of: "123456", with: "123_456"))
+        var output = [Token]()
+        measure {
+            output = try! format(tokens, rules: [.numberFormatting]).tokens
+        }
+        XCTAssertEqual(output, expected)
     }
 
     func testWorstCaseNumberFormatting() {

@@ -300,8 +300,9 @@ final class SortImportsTests: XCTestCase {
         func bar() {}
         import Bar
         """
+        let options = FormatOptions(hoistImports: false)
         testFormatting(for: input, rule: .sortImports,
-                       exclude: [.blankLineAfterImports])
+                       options: options, exclude: [.blankLineAfterImports])
     }
 
     func testNoDeleteCodeBetweenImports2() {
@@ -317,8 +318,9 @@ final class SortImportsTests: XCTestCase {
         foo = bar
         import Bar
         """
+        let options = FormatOptions(hoistImports: false)
         testFormatting(for: input, output, rule: .sortImports,
-                       exclude: [.blankLineAfterImports])
+                       options: options, exclude: [.blankLineAfterImports])
     }
 
     func testNoDeleteCodeBetweenImports3() {
@@ -333,7 +335,8 @@ final class SortImportsTests: XCTestCase {
 
         import A
         """
-        testFormatting(for: input, rule: .sortImports)
+        let options = FormatOptions(hoistImports: false)
+        testFormatting(for: input, rule: .sortImports, options: options)
     }
 
     func testSortContiguousImports() {
@@ -351,8 +354,9 @@ final class SortImportsTests: XCTestCase {
         import Baz
         import Quux
         """
+        let options = FormatOptions(hoistImports: false)
         testFormatting(for: input, output, rule: .sortImports,
-                       exclude: [.blankLineAfterImports])
+                       options: options, exclude: [.blankLineAfterImports])
     }
 
     func testNoMangleImportsPrecededByComment() {
@@ -668,5 +672,418 @@ final class SortImportsTests: XCTestCase {
         """
         let options = FormatOptions(importGrouping: [.length, .alpha])
         testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    // MARK: - Attributed imports
+
+    func testAttributedImportsSortedLast() {
+        let input = """
+        @_spi(Foo) import UIKit
+        import Baz
+        @_exported import Bar
+        """
+        let output = """
+        import Baz
+        @_exported import Bar
+        @_spi(Foo) import UIKit
+        """
+        let options = FormatOptions(importGrouping: [.alpha, .attributesLast])
+        testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    func testAttributedImportsSortedByAttributeThenModule() {
+        let input = """
+        @preconcurrency @testable import CModule
+        import Regular
+        @_spi(Foo) import BModule
+        @_spi(Foo) import AModule
+        """
+        let output = """
+        import Regular
+        @_spi(Foo) import AModule
+        @_spi(Foo) import BModule
+        @preconcurrency @testable import CModule
+        """
+        let options = FormatOptions(importGrouping: [.alpha, .attributesLast])
+        testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    func testTestableGroupedBeforeAttributedGroupWhenListedFirst() {
+        let input = """
+        @_spi(Foo) import SPIModule
+        @testable import TestableModule
+        import RegularModule
+        """
+        let output = """
+        import RegularModule
+        @testable import TestableModule
+        @_spi(Foo) import SPIModule
+        """
+        let options = FormatOptions(importGrouping: [.alpha, .testableLast, .attributesLast])
+        testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    func testAttributedGroupedBeforeTestableGroupWhenListedFirst() {
+        let input = """
+        @testable import TestableModule
+        @_spi(Foo) import SPIModule
+        import RegularModule
+        """
+        let output = """
+        import RegularModule
+        @_spi(Foo) import SPIModule
+        @testable import TestableModule
+        """
+        let options = FormatOptions(importGrouping: [.alpha, .attributesLast, .testableLast])
+        testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    func testTestableAndAttributedImportGroupedWithTestable() {
+        let input = """
+        @_exported import ExportedOnly
+        @testable @_spi(Foo) import Both
+        @testable import TestableOnly
+        import Regular
+        """
+        let output = """
+        import Regular
+        @testable @_spi(Foo) import Both
+        @testable import TestableOnly
+        @_exported import ExportedOnly
+        """
+        let options = FormatOptions(importGrouping: [.alpha, .testableLast, .attributesLast])
+        testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    func testTestableAndAttributedImportGroupedWithAttributes() {
+        let input = """
+        @testable import TestableOnly
+        @testable @_spi(Foo) import Both
+        @_exported import ExportedOnly
+        import Regular
+        """
+        let output = """
+        import Regular
+        @_exported import ExportedOnly
+        @testable import TestableOnly
+        @testable @_spi(Foo) import Both
+        """
+        let options = FormatOptions(importGrouping: [.alpha, .attributesLast, .testableLast])
+        testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    func testAttributesLastWithTestableFirst() {
+        let input = """
+        import RegularModule
+        @_spi(Foo) import SPIModule
+        @testable import TestableModule
+        """
+        let output = """
+        @testable import TestableModule
+        import RegularModule
+        @_spi(Foo) import SPIModule
+        """
+        let options = FormatOptions(importGrouping: [.alpha, .testableFirst, .attributesLast])
+        testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    // MARK: - hoistImports
+
+    func testHoistStrayImport() {
+        let input = """
+        import Foundation
+
+        struct Foo {}
+
+        import UIKit
+
+        """
+        let output = """
+        import Foundation
+        import UIKit
+
+        struct Foo {}
+
+        """
+        testFormatting(for: input, output, rule: .sortImports)
+    }
+
+    func testHoistStrayImportAndSort() {
+        let input = """
+        import Zebra
+
+        struct Foo {}
+
+        import Alpha
+
+        """
+        let output = """
+        import Alpha
+        import Zebra
+
+        struct Foo {}
+
+        """
+        testFormatting(for: input, output, rule: .sortImports)
+    }
+
+    func testMergeImportGroupsSeparatedByBlankLine() {
+        let input = """
+        import Zebra
+
+        import Alpha
+
+        """
+        let output = """
+        import Alpha
+        import Zebra
+
+        """
+        testFormatting(for: input, output, rule: .sortImports)
+    }
+
+    func testHoistMultipleStrayImports() {
+        let input = """
+        import Zebra
+
+        struct Foo {}
+
+        import Alpha
+
+        struct Bar {}
+
+        import Middle
+
+        """
+        let output = """
+        import Alpha
+        import Middle
+        import Zebra
+
+        struct Foo {}
+
+        struct Bar {}
+
+        """
+        testFormatting(for: input, output, rule: .sortImports)
+    }
+
+    func testDoNotHoistImportsInsideIfBlock() {
+        let input = """
+        import Foundation
+
+        #if os(iOS)
+            import UIKit
+        #endif
+
+        struct Foo {}
+        """
+        testFormatting(for: input, rule: .sortImports)
+    }
+
+    func testHoistStrayTestableImport() {
+        let input = """
+        import Testing
+
+        struct FooTests {}
+
+        @testable import MyModule
+
+        """
+        let output = """
+        @testable import MyModule
+        import Testing
+
+        struct FooTests {}
+
+        """
+        testFormatting(for: input, output, rule: .sortImports)
+    }
+
+    func testPreserveImportsOption() {
+        let input = """
+        import Foundation
+
+        struct Foo {}
+
+        import UIKit
+        """
+        let options = FormatOptions(hoistImports: false)
+        testFormatting(for: input, rule: .sortImports, options: options)
+    }
+
+    func testNoStrayImportsNoChange() {
+        let input = """
+        import Alpha
+        import Zebra
+
+        struct Foo {}
+        """
+        testFormatting(for: input, rule: .sortImports)
+    }
+
+    func testPreservesGroupsThatAreSortedIndependently() {
+        let input = """
+        import Bar
+        import Foo
+
+        @testable import Baaz
+        @testable import Quux
+        """
+        let options = FormatOptions(importGrouping: [.testableLast, .alpha])
+        testFormatting(for: input, rule: .sortImports, options: options, exclude: [.blankLinesBetweenImports])
+    }
+
+    func testSortsWithinGroupsWithoutMergingGroups() {
+        let input = """
+        import Foo
+        import Bar
+
+        @testable import Quux
+        @testable import Baaz
+        """
+        let output = """
+        import Bar
+        import Foo
+
+        @testable import Baaz
+        @testable import Quux
+        """
+        let options = FormatOptions(importGrouping: [.testableLast, .alpha])
+        testFormatting(for: input, output, rule: .sortImports, options: options, exclude: [.blankLinesBetweenImports])
+    }
+
+    func testMergesGroupsWhenSortOrderRequiresIt() {
+        let input = """
+        import Bar
+        import Foo
+
+        @testable import Baaz
+        @testable import Quux
+        """
+        let output = """
+        @testable import Baaz
+        import Bar
+        import Foo
+        @testable import Quux
+
+        """
+        let options = FormatOptions(importGrouping: [.alpha])
+        testFormatting(for: input, output, rule: .sortImports, options: options, exclude: [.blankLinesBetweenImports])
+    }
+
+    func testHoistsStrayImportEvenWhenGroupsAreSortedIndependently() {
+        let input = """
+        import Bar
+        import Foo
+
+        @testable import Baaz
+
+        struct Foo {}
+
+        @testable import Quux
+        """
+        let output = """
+        import Bar
+        import Foo
+        @testable import Baaz
+        @testable import Quux
+
+        struct Foo {}
+
+        """
+        let options = FormatOptions(importGrouping: [.testableLast, .alpha])
+        testFormatting(for: input, output, rule: .sortImports, options: options, exclude: [.blankLinesBetweenImports])
+    }
+
+    func testPreservesCodeBelowImportsWithParameterizedAttribute() {
+        let input = """
+        import Foundation
+        import Nimble
+        import Quick
+        @testable import ComposableCalendarCoreUI
+        @_spi(HorizonCalendar) import TimeFoundation
+
+        // MARK: - CalendarDayRangeLayoutCustomizerTests
+
+        /// Comprehensive tests for CalendarDayRangeLayoutCustomizer.
+        final class CalendarDayRangeLayoutCustomizerTests: QuickSpec {
+            override class func spec() {}
+        }
+        """
+        let output = """
+        import Foundation
+        import Nimble
+        import Quick
+        @_spi(HorizonCalendar) import TimeFoundation
+        @testable import ComposableCalendarCoreUI
+
+        // MARK: - CalendarDayRangeLayoutCustomizerTests
+
+        /// Comprehensive tests for CalendarDayRangeLayoutCustomizer.
+        final class CalendarDayRangeLayoutCustomizerTests: QuickSpec {
+            override class func spec() {}
+        }
+        """
+        let options = FormatOptions(importGrouping: [.testableLast, .alpha])
+        testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    func testMergesGroupsWithParameterizedAttributeAndPreservesFollowingBlankLine() {
+        let input = """
+        @testable import DLSFontsCoreUI
+        @_spi(DLS) import DLSFontsCoreUIInternal
+
+        import Foundation
+        import SwiftUI
+        import UIKit
+        import XCTest
+
+        final class TextStyleTests: XCTestCase {}
+        """
+        let output = """
+        @_spi(DLS) import DLSFontsCoreUIInternal
+        import Foundation
+        import SwiftUI
+        import UIKit
+        import XCTest
+        @testable import DLSFontsCoreUI
+
+        final class TextStyleTests: XCTestCase {}
+        """
+        let options = FormatOptions(importGrouping: [.testableLast, .alpha])
+        testFormatting(for: input, output, rule: .sortImports, options: options)
+    }
+
+    func testHoistsStrayImportWithoutBlankLineBelowImports() {
+        let input = """
+        import Foundation
+
+        struct Foo {}
+        import UIKit
+
+        struct Bar {}
+        """
+        let output = """
+        import Foundation
+        import UIKit
+
+        struct Foo {}
+
+        struct Bar {}
+        """
+        testFormatting(for: input, output, rule: .sortImports)
+    }
+
+    func testDoesntHoistStrayImportsInFragment() {
+        let input = """
+        import Foundation
+
+        struct Foo {}
+
+        import UIKit
+        """
+        let options = FormatOptions(fragment: true)
+        testFormatting(for: input, rule: .sortImports, options: options)
     }
 }

@@ -39,7 +39,8 @@ import Foundation
 /// transparently handles changes that affect the current token index.
 public final class Formatter: NSObject {
     private var enumerationIndex = -1
-    private var autoUpdatingReferences = [WeakAutoUpdatingReference]()
+    private var autoUpdatingReferences = [ObjectIdentifier: WeakAutoUpdatingReference]()
+    private let logger: Logger?
 
     /// Formatting range
     public var range: Range<Int>?
@@ -62,17 +63,54 @@ public final class Formatter: NSObject {
     /// The token array managed by the formatter (read-only)
     public private(set) var tokens: [Token]
 
+    /// Incremented on every change to `tokens`. Used to invalidate derived caches.
+    private(set) var mutationCount = 0
+
+    /// Derived data that is only valid for a specific `mutationCount`.
+    var derivedCaches = DerivedCaches()
+
+    struct DerivedCaches {
+        var declarations: (mutationCount: Int, value: [Declaration])?
+        var declarationsAreStale = false
+        var imports: (mutationCount: Int, value: [[ImportRange]])?
+        var enclosingStringDelimiters: (mutationCount: Int, value: [Int?])?
+    }
+
+    /// Whether `parseDeclarations()` would produce the same result for every rule.
+    /// Directives, a formatting range, or a rule disabled by a parsing error all exclude declarations.
+    var canCacheDeclarations: Bool {
+        directives.isEmpty && range == nil && !ruleDisabled
+    }
+
+    /// Marks the cached result of `parseDeclarations()` as stale, e.g. after a declaration's
+    /// range is edited directly. The cache is released lazily, since this can be called while
+    /// `autoUpdatingReferences` is being mutated and releasing declarations would re-enter it.
+    func invalidateDeclarationCache() {
+        derivedCaches.declarationsAreStale = true
+    }
+
+    /// Releases cached derived data. Cached declarations retain this formatter,
+    /// so this must be called once all rules have been applied.
+    func clearDerivedCaches() {
+        derivedCaches = DerivedCaches()
+    }
+
     /// Swiftformat directives found in the file
     private var directives: [Directive] = []
 
+    /// Whether the file contains any multiline string literals, which affect how directives apply.
+    private lazy var containsMultilineStringLiteral = tokens.contains(where: \.isMultilineStringDelimiter)
+
     /// Create a new formatter instance from a token array
     public init(_ tokens: [Token], options: FormatOptions = FormatOptions(),
-                trackChanges: Bool = false, range: Range<Int>? = nil)
+                trackChanges: Bool = false, range: Range<Int>? = nil,
+                logger: Logger? = nil)
     {
         self.tokens = tokens
         self.options = options
         self.trackChanges = trackChanges
         self.range = range
+        self.logger = logger
 
         // TODO: why is this an NSObject?
         super.init()
@@ -90,7 +128,12 @@ public final class Formatter: NSObject {
 
     /// Is current rule enabled
     var isEnabled: Bool {
-        if ruleDisabled || disabled || range?.contains(enumerationIndex) == false {
+        isEnabled(at: enumerationIndex)
+    }
+
+    /// Is current rule enabled at the specified token index
+    func isEnabled(at index: Int) -> Bool {
+        if ruleDisabled || disabled || range?.contains(index) == false {
             return false
         }
         return true
@@ -101,12 +144,31 @@ public final class Formatter: NSObject {
         var toggle: Bool
         var line: Int
         var index: Int // Index of token in the line
+
+        func applies(to rule: FormatRule?) -> Bool {
+            guard let rule else {
+                return false
+            }
+            switch type {
+            case let .enable(rules), let .disable(rules):
+                return rules.contains("all") || !rules.isDisjoint(with: FormatRules.directiveNames(for: rule))
+            case .options:
+                return false
+            }
+        }
     }
 
     private enum DirectiveType {
-        case enable(rules: String)
-        case disable(rules: String)
+        case enable(rules: Set<String>)
+        case disable(rules: Set<String>)
         case options(FormatOptions)
+    }
+
+    private func directiveRuleNames(in string: String) -> Set<String> {
+        let wordCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
+        return Set(string.components(separatedBy: wordCharacters.inverted)
+            .filter { !$0.isEmpty }
+            .map { $0.lowercased() })
     }
 
     private func processDirectives() {
@@ -161,13 +223,15 @@ public final class Formatter: NSObject {
                     do {
                         let args = try preprocessArguments(
                             parseArguments(args),
-                            formattingArguments + internalArguments
+                            formattingArguments + internalArguments,
+                            unknownOptions: cumulativeOptions.unknownOptions,
+                            logger: logger
                         )
                         if let arg = args["1"] {
                             throw FormatError.options("Unknown option \(arg)")
                         }
                         var options = Options(formatOptions: cumulativeOptions)
-                        try options.addArguments(args, in: "")
+                        try options.addArguments(args, in: "", logger: logger)
                         if toggle {
                             cumulativeOptions = options.formatOptions ?? cumulativeOptions
                             type = .options(cumulativeOptions)
@@ -178,9 +242,9 @@ public final class Formatter: NSObject {
                         return fatalError("\(error)", at: i)
                     }
                 case "disable":
-                    type = .disable(rules: args)
+                    type = .disable(rules: directiveRuleNames(in: args))
                 case "enable":
-                    type = .enable(rules: args)
+                    type = .enable(rules: directiveRuleNames(in: args))
                 case "sort":
                     // TODO: treat sort:next/previous/this as an error
                     // TODO: handle sort the same way as other directives
@@ -201,21 +265,6 @@ public final class Formatter: NSObject {
             return
         }
 
-        // TODO: replace with stricter format for rules (space and/or comma-delimited)
-        func containsRule(_ directive: DirectiveType) -> Bool {
-            guard let rule = currentRule else {
-                return false
-            }
-            switch directive {
-            case let .enable(rules: rules), let .disable(rules: rules):
-                return rules.range(of: "\\b(\(rule.name)|all)\\b", options: [
-                    .regularExpression, .caseInsensitive,
-                ]) != nil
-            case .options:
-                return false
-            }
-        }
-
         let physicalLine: Int
         if case let .linebreak(_, line) = tokens[index] {
             physicalLine = line + 1
@@ -233,13 +282,17 @@ public final class Formatter: NSObject {
             if case .options = directive.type {
                 return true
             }
-            return containsRule(directive.type)
+            return directive.applies(to: currentRule)
         }
 
         let enablementIndex: Int
         if tokens[index].isLinebreak,
            !hasApplicableLineDirective,
-           let startIndex = startOfScope(at: index),
+           containsMultilineStringLiteral,
+           // Stop at ordinary code instead of scanning the entire enclosing scope on every line.
+           let startIndex = self.index(before: index, where: {
+               !$0.isSpaceOrLinebreak && !$0.isStringBody && !$0.isEndOfScope
+           }),
            tokens[startIndex].isMultilineStringDelimiter
         {
             enablementIndex = startIndex
@@ -275,7 +328,7 @@ public final class Formatter: NSObject {
                 self.tempOptions = nil
             }
             switch directive.type {
-            case .enable where containsRule(directive.type):
+            case .enable where directive.applies(to: currentRule):
                 if directive.toggle {
                     disabledCount -= 1
                 } else if directive.line == line {
@@ -283,7 +336,7 @@ public final class Formatter: NSObject {
                 } else {
                     disabledNext = 0
                 }
-            case .disable where containsRule(directive.type):
+            case .disable where directive.applies(to: currentRule):
                 if directive.toggle {
                     disabledCount += 1
                 } else if directive.line == line {
@@ -426,6 +479,7 @@ public extension Formatter {
             trackChange(at: index.index, isMove: isMove)
         }
         tokens[index.index] = token
+        mutationCount += 1
     }
 
     /// Replaces the tokens in the specified range with new tokens
@@ -537,6 +591,7 @@ public extension Formatter {
         trackChange(at: index, isMove: isMove)
         updateRange(at: index, delta: -1)
         tokens.remove(at: index)
+        mutationCount += 1
         if enumerationIndex >= index {
             enumerationIndex -= 1
         }
@@ -607,6 +662,7 @@ public extension Formatter {
         trackChange(at: tokens.endIndex - 1)
         updateRange(at: tokens.endIndex - 1, delta: -1)
         tokens.removeLast()
+        mutationCount += 1
     }
 
     /// Inserts an array of tokens at the specified index
@@ -622,6 +678,7 @@ public extension Formatter {
         trackChange(at: index, isMove: isMove)
         updateRange(at: index, delta: tokens.count)
         self.tokens.insert(contentsOf: tokens, at: index)
+        mutationCount += 1
         if enumerationIndex >= index {
             enumerationIndex += tokens.count
         }
@@ -637,6 +694,7 @@ public extension Formatter {
         trackChange(at: index.index)
         updateRange(at: index.index, delta: 1)
         tokens.insert(token, at: index.index)
+        mutationCount += 1
         if enumerationIndex >= index.index {
             enumerationIndex += 1
         }
@@ -645,10 +703,18 @@ public extension Formatter {
     // MARK: enumeration
 
     internal func forEachToken(onlyWhereEnabled: Bool, _ body: (Int, Token) -> Void) {
+        forEachToken(in: nil, onlyWhereEnabled: onlyWhereEnabled, body)
+    }
+
+    /// Loops through each token in the given range, updating `isEnabled` as directives are encountered.
+    /// A nil range covers the whole token array, including tokens appended by `body`.
+    internal func forEachToken(in range: Range<Int>?, onlyWhereEnabled: Bool, _ body: (Int, Token) -> Void) {
         assert(enumerationIndex == -1, "forEachToken does not support re-entrancy")
-        enumerationIndex = 0
-        updateEnablement(at: 0)
-        while enumerationIndex < tokens.count {
+        enumerationIndex = max(0, range?.lowerBound ?? 0)
+        if enumerationIndex < tokens.count {
+            updateEnablement(at: enumerationIndex)
+        }
+        while enumerationIndex < tokens.count, enumerationIndex < range?.upperBound ?? .max {
             let token = tokens[enumerationIndex]
             switch token {
             case .startOfScope("//"), .startOfScope("/*"), .endOfScope("*/"), .linebreak:
@@ -963,12 +1029,12 @@ public extension Formatter {
     /// in this formatter. The registration is automatically cleared after the reference
     /// is deallocated.
     internal func registerAutoUpdatingReference(_ reference: AutoUpdatingReference) {
-        autoUpdatingReferences.append(WeakAutoUpdatingReference(reference: reference))
+        autoUpdatingReferences[ObjectIdentifier(reference)] = WeakAutoUpdatingReference(reference: reference)
     }
 
     /// Unregisters the given reference so it will no longer be notified of modifications.
     internal func unregisterAutoUpdatingReference(_ reference: AutoUpdatingReference) {
-        autoUpdatingReferences.removeAll(where: { $0.reference === reference })
+        autoUpdatingReferences[ObjectIdentifier(reference)] = nil
     }
 }
 
@@ -1139,15 +1205,15 @@ extension Array {
     }
 }
 
-extension [WeakAutoUpdatingReference] {
-    /// Updates the `range` value of the index references in this array
+extension [ObjectIdentifier: WeakAutoUpdatingReference] {
+    /// Updates the `range` value of the index references in this dictionary
     /// to account for the given addition or removal of tokens.
     mutating func updateRanges(at modifiedIndex: Int, delta: Int) {
-        for (tokenIndex, reference) in zip(indices, self).reversed() {
-            guard let reference = reference.reference else {
+        for (key, weakReference) in self {
+            guard let reference = weakReference.reference else {
                 // If we encounter a reference that no longer exists
                 // (the weak reference is nil), clean up the entry.
-                remove(at: tokenIndex)
+                self[key] = nil
                 continue
             }
 

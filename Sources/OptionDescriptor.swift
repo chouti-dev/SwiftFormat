@@ -547,6 +547,7 @@ extension _Descriptors {
             swiftVersion,
             languageMode,
             markdownFiles,
+            unknownOptions,
         ]
     }
 
@@ -679,6 +680,14 @@ struct _Descriptors {
         displayName: "Wrap Enum Cases",
         help: "Enum case wrapping:",
         keyPath: \.wrapEnumCases
+    )
+    let wrapSingleLineEnumCases = OptionDescriptor(
+        argumentName: "wrap-single-line-enum-cases",
+        displayName: "Wrap Single-line Enum Cases",
+        help: "Wrap comma-delimited enum cases following the opening brace:",
+        keyPath: \.wrapSingleLineEnumCases,
+        trueValues: ["true"],
+        falseValues: ["false"]
     )
     let wrapArguments = OptionDescriptor(
         argumentName: "wrap-arguments",
@@ -858,16 +867,23 @@ struct _Descriptors {
     let importGrouping = OptionDescriptor(
         argumentName: "import-grouping",
         displayName: "Import Grouping",
-        help: "Comma-delimited list of import sorting/grouping options: \"alpha\", \"access-control\", \"length\", \"testable-first\", \"testable-last\". Defaults to \"access-control,alpha\"",
+        help: "Comma-delimited list of import sorting/grouping options: \"alpha\", \"access-control\", \"length\", \"testable-first\", \"testable-last\", \"attributes-last\". Defaults to \"access-control,alpha\"",
         keyPath: \FormatOptions.importGrouping,
         type: .text,
         fromArgument: { arg in
-            Set(parseCommaDelimitedList(arg).compactMap { ImportGrouping(rawValue: $0) })
+            parseCommaDelimitedList(arg).compactMap { ImportGrouping(rawValue: $0) }
         },
         toArgument: { options in
-            let order = ImportGrouping.allCases
-            return order.filter { options.contains($0) }.map(\.rawValue).joined(separator: ",")
+            options.map(\.rawValue).joined(separator: ",")
         }
+    )
+    let hoistImports = OptionDescriptor(
+        argumentName: "hoist-imports",
+        displayName: "Hoist Imports",
+        help: "Hoist file-scope imports to top of file",
+        keyPath: \.hoistImports,
+        trueValues: ["hoist"],
+        falseValues: ["preserve"]
     )
     let trailingClosures = OptionDescriptor(
         argumentName: "trailing-closures",
@@ -880,6 +896,12 @@ struct _Descriptors {
         displayName: "Never Trailing Functions",
         help: "List of functions that should never use trailing closures",
         keyPath: \FormatOptions.neverTrailing
+    )
+    let wrapClosureBodies = OptionDescriptor(
+        argumentName: "wrap-closure-bodies",
+        displayName: "Wrap Closure Bodies",
+        help: "Comma-delimited list of functions whose closure bodies should wrap, or \"always\". Defaults to \"Task,Task.detached\"",
+        keyPath: \FormatOptions.wrapClosureBodies
     )
     let xcodeIndentation = OptionDescriptor(
         argumentName: "xcode-indentation",
@@ -1283,6 +1305,76 @@ struct _Descriptors {
         help: "List of symbols to be ignored by the acronyms rule",
         keyPath: \.preserveAcronyms
     )
+    let acronymVisibility = OptionDescriptor(
+        argumentName: "acronym-visibility",
+        displayName: "Acronym Visibility",
+        help: "Capitalize acronyms at or below this visibility threshold:",
+        keyPath: \.acronymVisibility,
+        options: [
+            "public": .public,
+            "package": .package,
+            "internal": .internal,
+            "fileprivate": .fileprivate,
+            "private": .private,
+        ]
+    )
+    let typoVisibility = OptionDescriptor(
+        argumentName: "typo-visibility",
+        displayName: "Typo Visibility",
+        help: "Correct typos at or below this visibility threshold:",
+        keyPath: \.typoVisibility,
+        options: [
+            "public": .public,
+            "package": .package,
+            "internal": .internal,
+            "fileprivate": .fileprivate,
+            "private": .private,
+        ]
+    )
+    let typos = OptionDescriptor(
+        argumentName: "typos",
+        displayName: "Custom Typos",
+        help: "Comma-delimited list of typo=correction mappings",
+        keyPath: \.typos,
+        type: .array,
+        fromArgument: { argument in
+            var typos = [String: String]()
+            for mapping in parseCommaDelimitedList(argument) {
+                let pair = mapping.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+                guard pair.count == 2,
+                      !pair[0].isEmpty,
+                      !pair[1].isEmpty,
+                      pair[0].allSatisfy(\.isLetter),
+                      pair[1].allSatisfy(\.isLetter)
+                else {
+                    throw FormatError.options("--typos expects <typo>=<correction> mappings")
+                }
+
+                let typo = pair[0].lowercased()
+                let correction = String(pair[1])
+                guard typos[typo] == nil else {
+                    throw FormatError.options("Duplicate typo '\(pair[0])'")
+                }
+                if let builtInCorrection = commonTypoCorrections[typo],
+                   builtInCorrection != correction.lowercased()
+                {
+                    throw FormatError.options("Custom correction for '\(pair[0])' conflicts with the built-in correction '\(builtInCorrection)'")
+                }
+                typos[typo] = correction
+            }
+            return typos
+        },
+        toArgument: {
+            $0.sorted(by: { $0.key < $1.key })
+                .map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+        }
+    )
+    let ignoredTypos = OptionDescriptor(
+        argumentName: "ignore-typos",
+        displayName: "Ignored Typos",
+        help: "Comma-delimited list of typos to ignore",
+        keyPath: \.ignoredTypos
+    )
     let indentBlankLines = OptionDescriptor(
         argumentName: "indent-blank-lines",
         displayName: "Indent Blank Lines",
@@ -1317,6 +1409,12 @@ struct _Descriptors {
         help: "Blank lines in type declarations:",
         keyPath: \.typeBlankLines
     )
+    let scopeBlankLines = OptionDescriptor(
+        argumentName: "scope-blank-lines",
+        displayName: "Scope blank lines",
+        help: "Blank lines in function bodies, closures, and statement blocks:",
+        keyPath: \.scopeBlankLines
+    )
     let genericTypes = OptionDescriptor(
         argumentName: "generic-types",
         displayName: "Additional generic types",
@@ -1347,12 +1445,33 @@ struct _Descriptors {
         trueValues: ["ignore", "preserve"],
         falseValues: ["convert"]
     )
+    let forWhere = OptionDescriptor(
+        argumentName: "for-where",
+        displayName: "For loop where clauses",
+        help: "Use a where clause instead of a nested if to filter for loops:",
+        keyPath: \.forWhere
+    )
     let docComments = OptionDescriptor(
         argumentName: "doc-comments",
         displayName: "Doc comments",
         help: "Doc comment placement:",
         keyPath: \.docComments,
         altOptions: ["declarations": .beforeDeclarations, "preserve": .preserve]
+    )
+    let excludedDeclarationTypes = OptionDescriptor(
+        argumentName: "excluded-declaration-types",
+        displayName: "Excluded Declaration Types",
+        help: "Declarations whose comments are left as-is, e.g. `case,var`",
+        keyPath: \.excludedDeclarationTypes,
+        validate: { type in
+            guard Token.declarationTypeKeywords.contains(type) else {
+                throw FormatError.invalidOption(
+                    type,
+                    for: "excluded-declaration-types",
+                    with: Token.declarationTypeKeywords.sorted()
+                )
+            }
+        }
     )
     let conditionalAssignmentOnlyAfterNewProperties = OptionDescriptor(
         argumentName: "conditional-assignment",
@@ -1534,6 +1653,20 @@ struct _Descriptors {
         help: "Single-line ternary handling: \"convert\" (default) or \"preserve\"",
         keyPath: \.singleLineTernary
     )
+    let contentBuilder = OptionDescriptor(
+        argumentName: "content-builder",
+        displayName: "Content Builder",
+        help: "SwiftUI result builder attributes:",
+        keyPath: \.contentBuilder
+    )
+    let preferContentBuilder = OptionDescriptor(
+        argumentName: "prefer-content-builder",
+        displayName: "Prefer Content Builder",
+        help: "Replace legacy builders like @ViewBuilder with @ContentBuilder:",
+        keyPath: \.preferContentBuilder,
+        trueValues: ["true", "enabled"],
+        falseValues: ["false", "disabled"]
+    )
 
     // MARK: - Internal
 
@@ -1571,6 +1704,12 @@ struct _Descriptors {
         help: "Swift in markdown files:",
         keyPath: \.markdownFiles,
         altOptions: ["format-lenient": .lenient, "format-strict": .strict]
+    )
+    let unknownOptions = OptionDescriptor(
+        argumentName: "unknown-options",
+        displayName: "Unknown Options",
+        help: "Unknown rules or options:",
+        keyPath: \.unknownOptions
     )
 
     // MARK: - DEPRECATED
@@ -1632,6 +1771,13 @@ struct _Descriptors {
     )
 
     // MARK: - RENAMED
+
+    let legacyUnknownRules = OptionDescriptor(
+        argumentName: "unknown-rules",
+        displayName: "Unknown Rules",
+        help: "deprecated",
+        keyPath: \.unknownOptions
+    ).renamed(to: "unknown-options")
 
     let empty = OptionDescriptor(
         argumentName: "empty",

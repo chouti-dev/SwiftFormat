@@ -249,6 +249,38 @@ final class RedundantSwiftUIGroupTests: XCTestCase {
         testFormatting(for: input, [output], rules: [.redundantSwiftUIGroup, .indent])
     }
 
+    func testRemoveGroupInHelperPropertyWithContentBuilder() {
+        let input = """
+        struct MyView: View {
+            var body: some View {
+                content
+            }
+
+            @ContentBuilder
+            var content: some View {
+                Group {
+                    Text("foo")
+                    Text("bar")
+                }
+            }
+        }
+        """
+        let output = """
+        struct MyView: View {
+            var body: some View {
+                content
+            }
+
+            @ContentBuilder
+            var content: some View {
+                Text("foo")
+                Text("bar")
+            }
+        }
+        """
+        testFormatting(for: input, [output], rules: [.redundantSwiftUIGroup, .indent])
+    }
+
     func testAddViewBuilderWhenRemovingGroupFromHelper() {
         // Without @ViewBuilder, we need to add it when removing Group with multiple views
         let input = """
@@ -279,6 +311,70 @@ final class RedundantSwiftUIGroupTests: XCTestCase {
         }
         """
         testFormatting(for: input, [output], rules: [.redundantSwiftUIGroup, .indent])
+    }
+
+    func testAddContentBuilderWhenRemovingGroupFromHelper() {
+        let input = """
+        struct MyView: View {
+            var body: some View {
+                content
+            }
+
+            var content: some View {
+                Group {
+                    Text("foo")
+                    Text("bar")
+                }
+            }
+        }
+        """
+        let output = """
+        struct MyView: View {
+            var body: some View {
+                content
+            }
+
+            @ContentBuilder
+            var content: some View {
+                Text("foo")
+                Text("bar")
+            }
+        }
+        """
+        let options = FormatOptions(preferContentBuilder: true, swiftVersion: "6.4")
+        testFormatting(for: input, [output], rules: [.redundantSwiftUIGroup, .indent], options: options)
+    }
+
+    func testAddViewBuilderWithPreferContentBuilderBeforeSwift6_4() {
+        let input = """
+        struct MyView: View {
+            var body: some View {
+                content
+            }
+
+            var content: some View {
+                Group {
+                    Text("foo")
+                    Text("bar")
+                }
+            }
+        }
+        """
+        let output = """
+        struct MyView: View {
+            var body: some View {
+                content
+            }
+
+            @ViewBuilder
+            var content: some View {
+                Text("foo")
+                Text("bar")
+            }
+        }
+        """
+        let options = FormatOptions(preferContentBuilder: true, swiftVersion: "6.3")
+        testFormatting(for: input, [output], rules: [.redundantSwiftUIGroup, .indent], options: options)
     }
 
     func testAddViewBuilderAfterComment() {

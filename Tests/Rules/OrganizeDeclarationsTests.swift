@@ -467,7 +467,75 @@ final class OrganizeDeclarationsTests: XCTestCase {
             for: input, output,
             rule: .organizeDeclarations,
             options: FormatOptions(categoryMarkComment: "MARK: %c", organizationMode: .type),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateStateVariables, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .contentBuilder]
+        )
+    }
+
+    func testOrganizeSwiftUIViewInTypeOrderWithContentBuilder() {
+        let input = """
+        struct ContentView: View {
+
+            private var label: String
+
+            @State
+            var isOn: Bool = false
+
+            @ContentBuilder
+            private var toggle: some View {
+                Toggle(label, isOn: $isOn)
+                    .fixedSize()
+            }
+
+            init(label: String) {
+                self.label = label
+            }
+
+            @ContentBuilder
+            var body: some View {
+                toggle
+            }
+        }
+        """
+
+        let output = """
+        struct ContentView: View {
+
+            // MARK: SwiftUI Properties
+
+            @State
+            var isOn: Bool = false
+
+            // MARK: Properties
+
+            private var label: String
+
+            // MARK: Lifecycle
+
+            init(label: String) {
+                self.label = label
+            }
+
+            // MARK: Content Properties
+
+            @ContentBuilder
+            var body: some View {
+                toggle
+            }
+
+            @ContentBuilder
+            private var toggle: some View {
+                Toggle(label, isOn: $isOn)
+                    .fixedSize()
+            }
+
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(categoryMarkComment: "MARK: %c", organizationMode: .type),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .contentBuilder]
         )
     }
 
@@ -541,7 +609,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
             for: input, output,
             rule: .organizeDeclarations,
             options: FormatOptions(categoryMarkComment: "MARK: %c", organizationMode: .type),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateStateVariables, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .contentBuilder]
         )
     }
 
@@ -578,7 +646,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
                 visibilityOrder: ["private", "internal", "public"],
                 typeOrder: DeclarationType.allCases.map(\.rawValue)
             ),
-            exclude: [.blankLinesAtStartOfScope, .privateStateVariables]
+            exclude: [.blankLinesAtStartOfScope, .privateSwiftUIDynamicProperties]
         )
     }
 
@@ -1977,7 +2045,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
         Foo(foo: 1, bar: 2, baaz: 3, quux: 4)
         """
 
-        testFormatting(for: input, [output], rules: [.organizeDeclarations, .consecutiveBlankLines], exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateStateVariables])
+        testFormatting(for: input, [output], rules: [.organizeDeclarations, .consecutiveBlankLines], exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties])
     }
 
     func testOrganizesStructPropertiesThatDontBreakMemberwiseInitializer() {
@@ -2767,7 +2835,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
         """
         let options = FormatOptions(indent: "  ", organizeTypes: ["struct"])
         testFormatting(for: input, output, rule: .organizeDeclarations,
-                       options: options, exclude: [.blankLinesAtStartOfScope])
+                       options: options, exclude: [.blankLinesAtStartOfScope, .privateSwiftUIDynamicProperties])
     }
 
     func testSortSingleSwiftUIPropertyWrapper() {
@@ -2834,7 +2902,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
             for: input, output,
             rule: .organizeDeclarations,
             options: FormatOptions(organizeTypes: ["struct"], organizationMode: .visibility),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateStateVariables, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .contentBuilder]
         )
     }
 
@@ -2901,7 +2969,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
             for: input, output,
             rule: .organizeDeclarations,
             options: FormatOptions(organizeTypes: ["struct"], organizationMode: .visibility),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateStateVariables, .redundantMemberwiseInit, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .redundantMemberwiseInit, .contentBuilder]
         )
     }
 
@@ -2972,7 +3040,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
             for: input, output,
             rule: .organizeDeclarations,
             options: FormatOptions(organizeTypes: ["struct"], organizationMode: .visibility),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .contentBuilder]
         )
     }
 
@@ -2986,9 +3054,9 @@ final class OrganizeDeclarationsTests: XCTestCase {
             }
 
             let foo: Foo
-            @Environment(\\.colorScheme) var colorScheme
+            @Environment(\\.colorScheme) private var colorScheme
             let baaz: Baaz
-            @Environment(\\.quux) let quux: Quux
+            @Environment(\\.quux) private let quux: Quux
 
             @ViewBuilder
             private var toggle: some View {
@@ -3014,9 +3082,6 @@ final class OrganizeDeclarationsTests: XCTestCase {
 
             // MARK: Internal
 
-            @Environment(\\.colorScheme) var colorScheme
-            @Environment(\\.quux) let quux: Quux
-
             let foo: Foo
             let baaz: Baaz
 
@@ -3026,6 +3091,9 @@ final class OrganizeDeclarationsTests: XCTestCase {
             }
 
             // MARK: Private
+
+            @Environment(\\.colorScheme) private var colorScheme
+            @Environment(\\.quux) private let quux: Quux
 
             @ViewBuilder
             private var toggle: some View {
@@ -3039,7 +3107,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
             for: input, output,
             rule: .organizeDeclarations,
             options: FormatOptions(organizeTypes: ["struct"], organizationMode: .visibility),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .contentBuilder]
         )
     }
 
@@ -3142,7 +3210,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
                 blankLineAfterSubgroups: false,
                 swiftUIPropertiesSortMode: .alphabetize
             ),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateStateVariables, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .contentBuilder]
         )
     }
 
@@ -3199,7 +3267,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
                 blankLineAfterSubgroups: false,
                 swiftUIPropertiesSortMode: .alphabetize
             ),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateStateVariables, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .contentBuilder]
         )
     }
 
@@ -3250,7 +3318,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
                 blankLineAfterSubgroups: false,
                 swiftUIPropertiesSortMode: .firstAppearanceSort
             ),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateStateVariables, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .contentBuilder]
         )
     }
 
@@ -3307,7 +3375,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
                 blankLineAfterSubgroups: false,
                 swiftUIPropertiesSortMode: .firstAppearanceSort
             ),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateStateVariables, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .privateSwiftUIDynamicProperties, .contentBuilder]
         )
     }
 
@@ -3549,7 +3617,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
             for: input, output,
             rule: .organizeDeclarations,
             options: FormatOptions(organizeTypes: ["struct"], organizationMode: .visibility),
-            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .redundantViewBuilder]
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .contentBuilder]
         )
     }
 
@@ -4582,26 +4650,10 @@ final class OrganizeDeclarationsTests: XCTestCase {
         """
 
         let output = """
-        struct Foo {
-
-        // MARK: Internal
-
-         // some comment
-            let x: Int
-            let y: String
-
-            // MARK: Private
-
-            private func bar() {}
-        }
-        """
-
-        let output2 = """
-        struct Foo {
+        struct Foo { // some comment
 
             // MARK: Internal
 
-            // some comment
             let x: Int
             let y: String
 
@@ -4613,10 +4665,273 @@ final class OrganizeDeclarationsTests: XCTestCase {
 
         let options = FormatOptions(organizeStructThreshold: 0)
         testFormatting(
-            for: input, [output, output2],
-            rules: [.organizeDeclarations],
+            for: input, output,
+            rule: .organizeDeclarations,
             options: options,
             exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testOpeningBraceCommentWithRemovedTypeBodyMarks() {
+        let input = """
+        struct A { // TODO: check
+            let a: Int
+
+            func f() {}
+
+            // MARK: Chips
+
+            private struct B {
+                let b: Int
+            }
+        }
+        """
+        let output = """
+        struct A { // TODO: check
+
+            // MARK: Nested Types
+
+            private struct B {
+                let b: Int
+            }
+
+            // MARK: Properties
+
+            let a: Int
+
+            // MARK: Functions
+
+            func f() {}
+
+        }
+        """
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(organizationMode: .type, typeBodyMarks: .remove),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testOpeningBraceCommentWithPreservedTypeBodyMarks() {
+        let input = """
+        struct A { // TODO: check
+            let a: Int
+
+            func f() {}
+
+            // MARK: Chips
+
+            private struct B {
+                let b: Int
+            }
+        }
+        """
+        let output = """
+        struct A { // TODO: check
+
+            // MARK: Nested Types
+
+            // MARK: Chips
+
+            private struct B {
+                let b: Int
+            }
+
+            // MARK: Properties
+
+            let a: Int
+
+            // MARK: Functions
+
+            func f() {}
+
+        }
+        """
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(organizationMode: .type),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testOpeningBraceNextDirectiveStaysWithDeclaration() throws {
+        for directive in ["disable:next", "enable:next"] {
+            let input = """
+            class A { // swiftformat:\(directive) redundantType
+                let a: Int = 0
+                private func f() {}
+            }
+            """
+            let output = """
+            class A {
+
+                // MARK: Internal
+
+                // swiftformat:\(directive) redundantType
+                let a: Int = 0
+
+                // MARK: Private
+
+                private func f() {}
+            }
+            """
+            testFormatting(
+                for: input, output,
+                rule: .organizeDeclarations,
+                exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope, .redundantType, .propertyTypes]
+            )
+            if directive == "disable:next" {
+                XCTAssertEqual(try format(output, rules: [.redundantType], options: FormatOptions(propertyTypes: .inferred)).output, output)
+            }
+        }
+    }
+
+    func testOpeningBraceNextDirectiveWithRemovedTypeBodyMarks() {
+        let input = """
+        struct A { // swiftformat:disable:next redundantType
+            let a: Int
+
+            func f() {}
+
+            // MARK: Chips
+
+            private struct B {
+                let b: Int
+            }
+        }
+        """
+        let output = """
+        struct A {
+
+            // MARK: Nested Types
+
+            private struct B {
+                let b: Int
+            }
+
+            // MARK: Properties
+
+            // swiftformat:disable:next redundantType
+            let a: Int
+
+            // MARK: Functions
+
+            func f() {}
+
+        }
+        """
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(organizationMode: .type, typeBodyMarks: .remove),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testOpeningBraceOtherDirectivesStayWithType() {
+        for directive in ["disable:this", "disable:previous", "disable", "enable"] {
+            let input = """
+            class A { // swiftformat:\(directive) redundantType
+                let a: Int
+                private func f() {}
+            }
+            """
+            let output = """
+            class A { // swiftformat:\(directive) redundantType
+
+                // MARK: Internal
+
+                let a: Int
+
+                // MARK: Private
+
+                private func f() {}
+            }
+            """
+            testFormatting(
+                for: input, output,
+                rule: .organizeDeclarations,
+                exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+            )
+        }
+    }
+
+    func testOpeningBraceCommentWithoutCategoryMarks() {
+        let input = """
+        struct A { // TODO: check
+            func f() {}
+
+            // MARK: Chips
+
+            private struct B { // TODO: nested
+                let b: Int
+            }
+        }
+        """
+        let output = """
+        struct A { // TODO: check
+            private struct B { // TODO: nested
+                let b: Int
+            }
+
+            func f() {}
+
+        }
+        """
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            options: FormatOptions(markCategories: false, organizationMode: .type, typeBodyMarks: .remove),
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testOrganizeDeclarationsAfterSplittingSemicolons() {
+        let input = """
+        public class Foo {
+            private func bar() {}; public let baz = 1
+        }
+        """
+        let output = """
+        public class Foo {
+            public let baz = 1
+
+            private func bar() {}
+        }
+        """
+        testFormatting(
+            for: input, [output],
+            rules: [.organizeDeclarations, .semicolons],
+            options: FormatOptions(semicolons: .never, markCategories: false)
+        )
+    }
+
+    func testOrganizeDeclarationsPreservesInlineSemicolons() {
+        let input = """
+        public class Foo {
+            private func bar() {}; public let baz = 1
+        }
+        """
+        testFormatting(
+            for: input,
+            rules: [.organizeDeclarations, .semicolons],
+            options: FormatOptions(semicolons: .inlineOnly, markCategories: false)
+        )
+    }
+
+    func testNoTimeoutWithDeclarationsSeparatedBySemicolon() {
+        let input = """
+        class Foo {
+            var bar = 1; func baaz() {}
+        }
+        """
+
+        testFormatting(
+            for: input,
+            rule: .organizeDeclarations,
+            exclude: [.semicolons]
         )
     }
 }

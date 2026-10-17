@@ -32,7 +32,7 @@
 import Foundation
 
 /// The current SwiftFormat version
-let swiftFormatVersion = "0.63.1"
+let swiftFormatVersion = "0.64.0"
 public let version = swiftFormatVersion
 
 /// The standard SwiftFormat config file name
@@ -116,8 +116,22 @@ public typealias FileEnumerationHandler = (
     _ options: Options
 ) throws -> () throws -> Void
 
-/// Callback for info-level logging
-public typealias Logger = (String) -> Void
+/// Callback for logging info and warnings
+public struct Logger {
+    let print: (String, CLI.OutputType) -> Void
+
+    public func info(_ message: String) {
+        print(message, .info)
+    }
+
+    public func warn(_ message: String) {
+        print(message, .warning)
+    }
+}
+
+/// Deprecated callback for informational messages.
+@available(*, deprecated, message: "Use Logger instead")
+public typealias LegacyLogger = (String) -> Void
 
 /// Enumerate all Swift files at the specified location and (optionally) calculate an output file URL for each.
 /// Ignores the file if any of the excluded file URLs is a prefix of the input file URL.
@@ -236,6 +250,7 @@ public func enumerateFiles(withInputURLs inputURLs: [URL],
                 return
             }
             let options = tempOptions
+            let fileOptions = options.fileOptions ?? .default
             let enumerationOptions: FileManager.DirectoryEnumerationOptions = .skipsHiddenFiles
             guard let files = try? manager.contentsOfDirectory(
                 at: inputURL, includingPropertiesForKeys: keys, options: enumerationOptions
@@ -243,7 +258,7 @@ public func enumerateFiles(withInputURLs inputURLs: [URL],
                 onComplete { throw FormatError.reading("Failed to read contents of directory at \(inputURL.path)") }
                 return
             }
-            for url in files where !url.path.hasPrefix(".") {
+            for url in files where !url.path.hasPrefix(".") && !fileOptions.shouldSkipBuildDirectory(url) {
                 let options = options
                 queue.async(group: group) {
                     let outputURL = outputURL.map {
@@ -312,6 +327,30 @@ public func enumerateFiles(withInputURL inputURL: URL,
                    handler: handler)
 }
 
+@available(*, deprecated, message: "Use the Logger overload")
+public func enumerateFiles(withInputURLs inputURLs: [URL], outputURL: URL? = nil,
+                           options baseOptions: Options = .default, concurrent: Bool = true,
+                           logger: @escaping LegacyLogger, skipped: FileEnumerationHandler? = nil,
+                           handler: @escaping FileEnumerationHandler) -> [Error]
+{
+    enumerateFiles(withInputURLs: inputURLs, outputURL: outputURL, options: baseOptions,
+                   concurrent: concurrent, logger: Logger { message, type in
+                       if type == .info {
+                           logger(message)
+                       }
+                   }, skipped: skipped, handler: handler)
+}
+
+@available(*, deprecated, message: "Use the Logger overload")
+public func enumerateFiles(withInputURL inputURL: URL, outputURL: URL? = nil,
+                           options baseOptions: Options = .default, concurrent: Bool = true,
+                           logger: @escaping LegacyLogger, skipped: FileEnumerationHandler? = nil,
+                           handler: @escaping FileEnumerationHandler) -> [Error]
+{
+    enumerateFiles(withInputURLs: [inputURL], outputURL: outputURL, options: baseOptions,
+                   concurrent: concurrent, logger: logger, skipped: skipped, handler: handler)
+}
+
 func collectFileInfo(inputURL: URL, options: Options, resourceValues: URLResourceValues?) -> FileInfo {
     let fileHeaderRuleEnabled = options.rules?.contains(FormatRule.fileHeader.name) ?? false
     let shouldGetGitInfo = fileHeaderRuleEnabled &&
@@ -358,7 +397,7 @@ private func processDirectory(_ inputURL: URL, with options: inout Options, logg
     }
 
     assert(options.formatOptions != nil)
-    try options.addArguments(args, in: inputURL.path)
+    try options.addArguments(args, in: inputURL.path, logger: logger)
 }
 
 private func parseConfigArguments(in inputURL: URL, options: Options, logger: Logger?) throws -> [[String: String]] {
@@ -369,26 +408,26 @@ private func parseConfigArguments(in inputURL: URL, options: Options, logger: Lo
         if let configURLs = options.configURLs {
             let standardizedConfigFile = configFile.standardizedFileURL
             if !configURLs.contains(where: { $0.standardizedFileURL == standardizedConfigFile }) {
-                logger?("Ignoring config file at \(configFile.path)")
+                logger?.info("Ignoring config file at \(configFile.path)")
             }
         } else {
-            logger?("Reading config file at \(configFile.path)")
+            logger?.info("Reading config file at \(configFile.path)")
             let data = try Data(contentsOf: configFile)
-            args = try parseConfigFile(data)
+            args = try parseConfigFile(data, logger: logger)
         }
     }
     let versionFile = inputURL.appendingPathComponent(swiftVersionFile)
     if manager.fileExists(atPath: versionFile.path) {
         // Don't read .swift-version from directories that will be excluded (affects no files)
         var tempOptions = options
-        try tempOptions.addArguments(args, in: inputURL.standardizedFileURL.path)
+        try tempOptions.addArguments(args, in: inputURL.standardizedFileURL.path, logger: logger)
         if !tempOptions.shouldSkipFile(inputURL) {
             let versionString = try String(contentsOf: versionFile, encoding: .utf8)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if args.contains(where: { $0["swift-version"] != nil }) {
-                logger?("Ignoring swift-version file at \(versionFile.path)")
+                logger?.info("Ignoring swift-version file at \(versionFile.path)")
             } else if Version(rawValue: versionString) != nil {
-                logger?("Reading swift-version file at \(versionFile.path) (version \(versionString))")
+                logger?.info("Reading swift-version file at \(versionFile.path) (version \(versionString))")
 
                 if args.isEmpty {
                     args = [["swift-version": versionString]]
@@ -402,7 +441,7 @@ private func parseConfigArguments(in inputURL: URL, options: Options, logger: Lo
             } else {
                 // Don't treat as error, per: https://github.com/nicklockwood/SwiftFormat/issues/639
                 // TODO: find a better solution for logging warnings here
-                logger?("Unrecognized swift version string '\(versionString)' in \(versionFile.path)")
+                logger?.warn("Unrecognized swift version string '\(versionString)' in \(versionFile.path)")
             }
         }
     }
@@ -538,6 +577,59 @@ public func sourceCode(for tokens: [Token]?) -> String {
     (tokens ?? []).map(\.string).joined()
 }
 
+/// Update an editor's line array without replacing unchanged lines.
+func replaceLines(in lines: NSMutableArray, with tokens: [Token]) {
+    let originalLines = lines as! [String]
+    var updatedLines = tokens.lines.map { sourceCode(for: Array($0)) }
+    // Retain the editor's terminal empty line when the output still ends at a line boundary.
+    if originalLines.last == "", tokens.last?.isLinebreak != false {
+        updatedLines.append("")
+    }
+    // String equality alone would ignore changes between canonically equivalent Unicode representations.
+    let areEqual: (String, String) -> Bool = { $0.utf8.elementsEqual($1.utf8) }
+
+    var start = 0
+    while start < min(originalLines.count, updatedLines.count),
+          areEqual(originalLines[start], updatedLines[start])
+    {
+        start += 1
+    }
+    var oldEnd = originalLines.count, newEnd = updatedLines.count
+    while oldEnd > start, newEnd > start,
+          areEqual(originalLines[oldEnd - 1], updatedLines[newEnd - 1])
+    {
+        oldEnd -= 1
+        newEnd -= 1
+    }
+    guard oldEnd > start || newEnd > start else { return }
+
+    if #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
+        let difference = updatedLines[start ..< newEnd].difference(from: originalLines[start ..< oldEnd], by: areEqual)
+        // CollectionDifference removes in descending order, then inserts in ascending order.
+        for change in difference {
+            switch change {
+            case let .remove(offset, _, _):
+                lines.removeObject(at: start + offset)
+            case let .insert(offset, line, _):
+                lines.insert(line, at: start + offset)
+            }
+        }
+    } else {
+        // On older systems, preserve the unchanged prefix and suffix of the buffer.
+        replaceLineRange(in: lines, range: start ..< oldEnd, with: Array(updatedLines[start ..< newEnd]))
+    }
+}
+
+/// Replace a line range using operations available on older systems.
+func replaceLineRange(in lines: NSMutableArray, range: Range<Int>, with updatedLines: [String]) {
+    for index in range.reversed() {
+        lines.removeObject(at: index)
+    }
+    for (offset, line) in updatedLines.enumerated() {
+        lines.insert(line, at: range.lowerBound + offset)
+    }
+}
+
 /// Apply specified rules to a token array and optionally capture list of changes
 public func applyRules(
     _ originalRules: [FormatRule],
@@ -545,6 +637,7 @@ public func applyRules(
     with options: FormatOptions,
     trackChanges: Bool,
     range originalRange: Range<Int>?,
+    logger: Logger? = nil,
     maxIterations: Int = 10
 ) throws -> (tokens: [Token], changes: [Formatter.Change]) {
     precondition(maxIterations > 1)
@@ -661,14 +754,27 @@ public func applyRules(
     var lastChanges = [Formatter.Change]()
     for iteration in 0 ..< maxIterations {
         let formatter = Formatter(tokens, options: options,
-                                  trackChanges: trackChanges, range: range)
-        for rule in rules {
-            queue.async(group: group) {
+                                  trackChanges: trackChanges, range: range,
+                                  logger: logger)
+        let progress = RuleProgress()
+        queue.async(group: group) {
+            for (index, rule) in rules.enumerated() {
+                progress.index = index
                 rule.apply(with: formatter)
             }
-            guard group.wait(timeout: .now() + timeout) != .timedOut else {
-                throw FormatError.writing("\(rule.name) rule timed out")
+            // Cached declarations retain the formatter. Release them here, on the same queue
+            // the rules ran on, so the formatter is never touched from two threads at once.
+            formatter.clearDerivedCaches()
+        }
+        // Each rule is allowed `timeout` seconds. The wait is re-armed whenever a new rule starts,
+        // so a single dispatch per iteration is enough.
+        var lastIndex = -1
+        while group.wait(timeout: .now() + timeout) == .timedOut {
+            let index = progress.index
+            guard index != lastIndex else {
+                throw FormatError.writing("\(rules[index].name) rule timed out")
             }
+            lastIndex = index
         }
 
         // Abort if there are fatal errors
@@ -840,4 +946,15 @@ func stripMarkdown(_ input: String) -> String {
         }
     }
     return result
+}
+
+/// Index of the rule currently being applied, shared between the formatting queue and the waiting thread.
+private final class RuleProgress {
+    private let queue = DispatchQueue(label: "swiftformat.ruleprogress")
+    private var _index = 0
+
+    var index: Int {
+        get { queue.sync { _index } }
+        set { queue.sync { _index = newValue } }
+    }
 }

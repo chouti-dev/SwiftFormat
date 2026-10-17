@@ -10,6 +10,18 @@ import XCTest
 @testable import SwiftFormat
 
 final class OptionDescriptorTests: XCTestCase {
+    func testWrapClosureBodiesList() throws {
+        var options = FormatOptions.default
+        XCTAssertEqual(options.wrapClosureBodies, ["Task", "Task.detached"])
+        try Descriptors.wrapClosureBodies.toOptions("perform,Service.run,perform", &options)
+        XCTAssertEqual(options.wrapClosureBodies, ["perform", "Service.run"])
+        XCTAssertEqual(Descriptors.wrapClosureBodies.fromOptions(options), "Service.run,perform")
+        try Descriptors.wrapClosureBodies.toOptions("always", &options)
+        XCTAssertEqual(options.wrapClosureBodies, ["always"])
+        try Descriptors.wrapClosureBodies.toOptions("", &options)
+        XCTAssertEqual(options.wrapClosureBodies, [])
+    }
+
     private typealias OptionArgumentMapping<T> = (optionValue: T, argumentValue: String)
 
     private func validateDescriptorThrowsOptionsError(_ descriptor: OptionDescriptor,
@@ -228,6 +240,18 @@ final class OptionDescriptorTests: XCTestCase {
         validateFromOptionalArguments(descriptor, keyPath: \FormatOptions.fileHeader, expectations: fromArgumentExpectations, testCaseVariation: false)
     }
 
+    func testUnknownOptions() {
+        let descriptor = Descriptors.unknownOptions
+        let expectations: [OptionArgumentMapping<UnknownOptionsMode>] = [
+            (optionValue: .ignore, argumentValue: "ignore"),
+            (optionValue: .warn, argumentValue: "warn"),
+            (optionValue: .error, argumentValue: "error"),
+        ]
+        validateFromOptions(descriptor, keyPath: \FormatOptions.unknownOptions, expectations: expectations)
+        validateFromArguments(descriptor, keyPath: \FormatOptions.unknownOptions, expectations: expectations)
+        validateDescriptorThrowsOptionsError(descriptor)
+    }
+
     func testLocale() {
         let descriptor = Descriptors.locale
         let expectations: [OptionArgumentMapping<FormatLocale>] = [
@@ -329,6 +353,18 @@ final class OptionDescriptorTests: XCTestCase {
         XCTAssertNoThrow(try descriptor.toOptions(argument, &options))
     }
 
+    func testExcludedDeclarationTypes() {
+        let descriptor = Descriptors.excludedDeclarationTypes
+        var options = FormatOptions()
+        XCTAssertNoThrow(try descriptor.toOptions("case,var,let", &options))
+    }
+
+    func testExcludedDeclarationTypesUnknownType() {
+        let descriptor = Descriptors.excludedDeclarationTypes
+        var options = FormatOptions()
+        XCTAssertThrowsError(try descriptor.toOptions("case,variable", &options))
+    }
+
     func testTypeOrderUnparseableArgument() {
         let argument = "_beforeMarks, nestedType, instanceProperty, instanceLifecycle, instanceMethod"
 
@@ -367,6 +403,80 @@ final class OptionDescriptorTests: XCTestCase {
         let argument = "#fileID"
         var options: FormatOptions = .default
         XCTAssertNoThrow(try Descriptors.preferFileMacro.toOptions(argument, &options))
+    }
+
+    func testTypoVisibilityAcceptsSupportedVisibilityThresholds() throws {
+        let descriptor = Descriptors.typoVisibility
+        XCTAssertEqual(descriptor.defaultArgument, "fileprivate")
+        XCTAssertEqual(descriptor.validArguments, ["public", "package", "internal", "fileprivate", "private"])
+
+        var options: FormatOptions = .default
+        try descriptor.toOptions("public", &options)
+        XCTAssertEqual(options.typoVisibility, .public)
+        try descriptor.toOptions("fileprivate", &options)
+        XCTAssertEqual(options.typoVisibility, .fileprivate)
+        try descriptor.toOptions("private", &options)
+        XCTAssertEqual(options.typoVisibility, .private)
+    }
+
+    func testAcronymVisibilityAcceptsSupportedVisibilityThresholds() throws {
+        let descriptor = Descriptors.acronymVisibility
+        XCTAssertEqual(descriptor.defaultArgument, "internal")
+        XCTAssertEqual(descriptor.validArguments, ["public", "package", "internal", "fileprivate", "private"])
+
+        var options: FormatOptions = .default
+        try descriptor.toOptions("public", &options)
+        XCTAssertEqual(options.acronymVisibility, .public)
+        try descriptor.toOptions("fileprivate", &options)
+        XCTAssertEqual(options.acronymVisibility, .fileprivate)
+        try descriptor.toOptions("private", &options)
+        XCTAssertEqual(options.acronymVisibility, .private)
+    }
+
+    func testAcronymVisibilityRejectsOpenVisibility() {
+        XCTAssertFalse(Descriptors.acronymVisibility.validateArgument("open"))
+    }
+
+    func testTypoVisibilityRejectsUnsupportedVisibilityThresholds() {
+        let descriptor = Descriptors.typoVisibility
+        for visibility in ["open"] {
+            XCTAssertFalse(descriptor.validateArgument(visibility))
+        }
+    }
+
+    func testIgnoredTyposAcceptsCommaDelimitedList() throws {
+        let descriptor = Descriptors.ignoredTypos
+        XCTAssertEqual(descriptor.argumentName, "ignore-typos")
+        XCTAssertEqual(descriptor.defaultArgument, "")
+
+        var options: FormatOptions = .default
+        try descriptor.toOptions("retreive,prefered", &options)
+        XCTAssertEqual(options.ignoredTypos, ["retreive", "prefered"])
+    }
+
+    func testTyposAcceptsCommaDelimitedMappings() throws {
+        let descriptor = Descriptors.typos
+        XCTAssertEqual(descriptor.defaultArgument, "")
+
+        var options: FormatOptions = .default
+        try descriptor.toOptions("statuz=status,colour=color", &options)
+        XCTAssertEqual(options.typos, ["statuz": "status", "colour": "color"])
+        XCTAssertEqual(descriptor.fromOptions(options), "colour=color,statuz=status")
+    }
+
+    func testTyposRejectsInvalidMappings() {
+        let descriptor = Descriptors.typos
+        for mappings in [
+            "statuz",
+            "=status",
+            "statuz=",
+            "statuz=status=state",
+            "statuz-code=status",
+            "statuz=status,STATUZ=state",
+            "adress=location",
+        ] {
+            XCTAssertFalse(descriptor.validateArgument(mappings), mappings)
+        }
     }
 
     // MARK: - importGrouping
@@ -411,5 +521,18 @@ final class OptionDescriptorTests: XCTestCase {
         var options: FormatOptions = .default
         XCTAssertNoThrow(try Descriptors.importGrouping.toOptions("testable-top", &options))
         XCTAssertEqual(options.importGrouping, [.testableFirst])
+    }
+
+    func testImportGroupingAcceptsAttributesLast() {
+        var options: FormatOptions = .default
+        XCTAssertNoThrow(try Descriptors.importGrouping.toOptions("attributes-last", &options))
+        XCTAssertEqual(options.importGrouping, [.attributesLast])
+    }
+
+    func testImportGroupingPreservesOptionOrder() {
+        var options: FormatOptions = .default
+        XCTAssertNoThrow(try Descriptors.importGrouping.toOptions("attributes-last,alpha,testable-last", &options))
+        XCTAssertEqual(options.importGrouping, [.attributesLast, .alpha, .testableLast])
+        XCTAssertEqual(Descriptors.importGrouping.fromOptions(options), "attributes-last,alpha,testable-last")
     }
 }
