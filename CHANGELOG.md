@@ -1,5 +1,36 @@
 # Change Log
 
+## [0.64.4](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.64.4) (2026-10-27)
+
+- Fixed `redundantReturn` removing required returns when nested conditional branches all throw
+- Updated `nestedIf` to flatten nested `else { if ... }` branches into `else if` chains
+- Fixed command-line handling of paths after the `--` end-of-options separator
+- Fixed CLI warning tests hanging while waiting for stdin when run in isolation
+
+## [0.64.3](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.64.3) (2026-10-26)
+
+- Fixed `andOperator` replacing `&&` with commas inside ternary expression branches
+- Fixed `trailingClosures` attaching a parenthesized closure on a new line to the preceding statement
+
+## [0.64.2](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.64.2) (2026-10-25)
+
+- Fixed severe `indent` performance regression on large arrays of multiline initializers
+- Improved handling of `#if` directives in single-expression bodies, including return removal and SwiftUI formatting
+- Fixed unreachable-code warnings when building JSON encoding code with newer Swift versions
+- Fixed Windows release build setup
+
+## [0.64.1](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.64.1) (2026-10-22)
+
+- Fixed `nestedIf` and `repeatedGuard` losing condition wrapping when merging statements
+- Fixed `wrapArguments` wrapping condition lists when line breaks occur only inside individual clauses
+- Fixed `wrapEnumCases` skipping cases declared after a raw value
+- Fixed `propertyTypes` dropping `.init` before a force unwrap or trailing closure
+- Fixed `redundantReturn` removing required bare returns from `do throws(...)` bodies
+- Fixed `redundantSelf` missing local variables declared after a trailing closure
+- Fixed `redundantOverload` removing overloads in types that declare a conformance
+- Fixed `braces` moving opening braces onto conditional compilation directive lines
+- Improved indentation and wrapping of multiline `if` and `guard` conditions
+
 ## [0.64.0](https://github.com/nicklockwood/SwiftFormat/releases/tag/0.64.0) (2026-10-16)
 
 - Added `--snapshot` feature for incrementally adopting formatting without changing files that match a saved snapshot

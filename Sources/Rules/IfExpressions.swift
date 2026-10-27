@@ -13,7 +13,7 @@ public extension FormatRule {
     static let ifExpressions = FormatRule(
         help: "Prefer if expressions over ternary operators in functions and computed properties.",
         disabledByDefault: true,
-        orderAfter: [.redundantReturn],
+        orderAfter: [.nestedIf, .redundantReturn],
         options: ["single-line-ternary"],
         sharedOptions: ["linebreaks", "indent"]
     ) { formatter in
@@ -63,10 +63,9 @@ public extension FormatRule {
             }
 
             // Make sure the body is a single statement (the same check redundantReturn uses)
-            guard formatter.blockBodyHasSingleStatement(
-                atStartOfScope: startOfScopeIndex,
-                includingConditionalStatements: true,
-                includingReturnStatements: true
+            guard formatter.scopeBodyIsSingleExpression(
+                at: startOfScopeIndex,
+                allowing: [.returnStatement, .conditionalExpressions, .returnStatementsInConditionalBranches]
             ) else {
                 return
             }
@@ -166,11 +165,9 @@ extension Formatter {
         let conditionRange = index ... (self.index(of: .nonSpaceOrCommentOrLinebreak, before: questionMarkIndex) ?? index)
 
         // Parse the true branch (between ? and :)
-        guard let trueStart = self.index(of: .nonSpaceOrCommentOrLinebreak, after: questionMarkIndex) else {
-            return nil
-        }
-
-        guard let colonIndex = findTernaryColon(after: questionMarkIndex) else {
+        guard let trueStart = self.index(of: .nonSpaceOrCommentOrLinebreak, after: questionMarkIndex),
+              let colonIndex = findTernaryColon(after: questionMarkIndex)
+        else {
             return nil
         }
 
@@ -466,11 +463,7 @@ extension Formatter {
             let endOfBranch = branch.endOfBranch
 
             // Check that the branch body is a single statement
-            guard blockBodyHasSingleStatement(
-                atStartOfScope: startOfBranch,
-                includingConditionalStatements: false,
-                includingReturnStatements: false
-            ) else {
+            guard scopeBodyIsSingleExpression(at: startOfBranch) else {
                 continue
             }
 

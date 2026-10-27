@@ -163,14 +163,15 @@ extension Formatter {
             .union(_FormatRules.globalSwiftFunctions)
             .union(staticSelf ? [] : options.selfRequired)
         guard let dotIndex = index(of: .nonSpaceOrLinebreak, after: i, if: {
-            $0 == .operator(".", .infix)
-        }), !exclude.contains(selfKeyword),
-        let nextIndex = index(of: .nonSpaceOrLinebreak, after: dotIndex),
-        isEnabled(at: nextIndex - 1),
-        let token = token(at: nextIndex), token.isIdentifier,
-        case let name = token.unescaped(), (include.map { $0.contains(name) } ?? true),
-        !isSymbol(at: nextIndex, in: exclusionList),
-        !backticksRequired(at: nextIndex, ignoreLeadingDot: true)
+                  $0 == .operator(".", .infix)
+              }),
+              !exclude.contains(selfKeyword),
+              let nextIndex = index(of: .nonSpaceOrLinebreak, after: dotIndex),
+              isEnabled(at: nextIndex - 1),
+              let token = token(at: nextIndex), token.isIdentifier,
+              case let name = token.unescaped(), (include.map { $0.contains(name) } ?? true),
+              !isSymbol(at: nextIndex, in: exclusionList),
+              !backticksRequired(at: nextIndex, ignoreLeadingDot: true)
         else {
             return false
         }
@@ -325,11 +326,12 @@ extension Formatter {
                     case .identifier(removeSelfKeyword ?? "") where isEnabled(at: nextIndex):
                         _ = removeSelf(at: nextIndex, exclude: names, include: include)
                     case .startOfScope("<"), .startOfScope("["), .startOfScope("("),
-                         .startOfScope where token.isStringDelimiter:
+                         .startOfScope where token.isStringDelimiter || isStartOfClosure(at: nextIndex):
                         guard let endIndex = endOfScope(at: nextIndex) else {
                             return fatalError("Expected end of scope", at: nextIndex)
                         }
-                        if let removeSelfKeyword {
+                        // Closure bodies are processed separately (the walk below skips them too)
+                        if let removeSelfKeyword, token != .startOfScope("{") {
                             var i = endIndex - 1
                             while i > nextIndex {
                                 switch tokens[i] {
@@ -349,6 +351,12 @@ extension Formatter {
                         fallthrough
                     case .number, .identifier:
                         index = max(index, nextIndex)
+                        // A trailing closure continues the expression
+                        if let braceIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index),
+                           isStartOfClosure(at: braceIndex)
+                        {
+                            continue inner
+                        }
                         if next(.nonSpaceOrCommentOrLinebreak, after: index, if: {
                             $0.isOperator(ofType: .infix) || $0.isOperator(ofType: .postfix) || [
                                 .keyword("is"), .keyword("as"), .delimiter(","),
@@ -427,6 +435,57 @@ extension Formatter {
             }
             index += 1
         }
+    }
+
+    /// Whether conditions wrap outside nested closures and parenthesized expressions.
+    func conditionsAreWrapped(after keywordIndex: Int, before endIndex: Int) -> Bool {
+        guard let lastConditionIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: endIndex) else {
+            return false
+        }
+        return index(of: .linebreak, in: keywordIndex + 1 ..< lastConditionIndex) != nil
+    }
+
+    /// Normalize condition separators without changing line breaks inside expressions.
+    func wrapConditionSeparators(after keywordIndex: Int, endToken: Token) {
+        guard options.wrapConditions == .disabled || options.wrapConditions == .beforeFirst ||
+            options.wrapConditions == .afterFirst,
+            let endIndex = index(of: endToken, after: keywordIndex),
+            conditionsAreWrapped(after: keywordIndex, before: endIndex)
+        else { return }
+
+        // Work backwards so changes do not invalidate the remaining separator indices.
+        var cursor = endIndex
+        while let comma = index(of: .delimiter(","), before: cursor), comma > keywordIndex {
+            cursor = comma
+            guard let nextIndex = index(of: .nonSpaceOrLinebreak, after: comma),
+                  nextIndex < endIndex, !tokens[nextIndex].isComment
+            else { continue }
+            if options.wrapConditions == .disabled, !onSameLine(comma, nextIndex) {
+                let joinedLength = lineLength(upTo: comma + 1) + 1 +
+                    lineLength(from: nextIndex, upTo: endOfLine(at: nextIndex))
+                guard options.maxWidth == 0 || joinedLength <= options.maxWidth else { continue }
+                replaceTokens(in: comma + 1 ..< nextIndex, with: .space(" "))
+            } else if options.wrapConditions != .disabled,
+                      !options.allowPartialWrapping || conditionContainsMultilineClosure(before: comma, after: keywordIndex),
+                      onSameLine(comma, nextIndex)
+            {
+                replaceTokens(in: comma + 1 ..< nextIndex, with: linebreakToken(for: comma))
+            }
+        }
+    }
+
+    func conditionContainsMultilineClosure(before comma: Int, after keywordIndex: Int) -> Bool {
+        let previousComma = index(of: .delimiter(","), before: comma)
+        var cursor = max(keywordIndex, previousComma ?? keywordIndex)
+        while let nextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: cursor), nextIndex < comma {
+            if tokens[nextIndex] == .startOfScope("{"), isStartOfClosure(at: nextIndex),
+               let endIndex = endOfScope(at: nextIndex), !onSameLine(nextIndex, endIndex)
+            {
+                return true
+            }
+            cursor = nextIndex
+        }
+        return false
     }
 
     /// Shared wrap implementation
@@ -534,12 +593,11 @@ extension Formatter {
 
                     // TODO: handle where clause
                     if let nextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: cursorIndex - 1),
-                       tokens[nextIndex] == .startOfScope("{")
+                       tokens[nextIndex] == .startOfScope("{"),
+                       // Don't unwrap the brace line if using Allman braces
+                       !options.allmanBraces
                     {
-                        // Don't unwrap the brace line if using Allman braces
-                        if !options.allmanBraces {
-                            unwrapLine(before: nextIndex, preservingComments: true)
-                        }
+                        unwrapLine(before: nextIndex, preservingComments: true)
                     }
                 }
             }
@@ -631,14 +689,14 @@ extension Formatter {
 
             if closingParenOnSameLine {
                 removeLinebreakBeforeEndOfScope(at: &endOfScope)
-            } else if hasLineBreakAfterOpeningParen {
-                // Insert linebreak before closing paren
-                if let lastIndex = self.index(of: .nonSpace, before: endOfScope) {
-                    endOfScope += insertSpace(indent, at: lastIndex + 1)
-                    if !tokens[lastIndex].isLinebreak {
-                        insertLinebreak(at: lastIndex + 1)
-                        endOfScope += 1
-                    }
+            } else if hasLineBreakAfterOpeningParen,
+                      // Insert linebreak before closing paren
+                      let lastIndex = self.index(of: .nonSpace, before: endOfScope)
+            {
+                endOfScope += insertSpace(indent, at: lastIndex + 1)
+                if !tokens[lastIndex].isLinebreak {
+                    insertLinebreak(at: lastIndex + 1)
+                    endOfScope += 1
                 }
             }
 
@@ -868,13 +926,9 @@ extension Formatter {
             }
             guard mode != .disabled, let firstIdentifierIndex =
                 index(of: .nonSpaceOrCommentOrLinebreak, after: i),
-                !isInStringLiteralWithWrappingDisabled(at: i)
+                !isInStringLiteralWithWrappingDisabled(at: i),
+                isEnabled
             else {
-                lastIndex = i
-                return
-            }
-
-            guard isEnabled else {
                 lastIndex = i
                 return
             }
@@ -1000,10 +1054,12 @@ extension Formatter {
                 return
             }
 
-            // Only wrap when this is a control flow condition that spans multiple lines
+            wrapConditionSeparators(after: index, endToken: endOfConditionsToken)
+
+            // Line breaks inside a clause do not make the conditions themselves wrapped.
             guard let endIndex = self.index(of: endOfConditionsToken, after: index),
                   let nextTokenIndex = self.index(of: .nonSpaceOrLinebreak, after: index),
-                  !(onSameLine(index, endIndex) || self.index(of: .nonSpaceOrLinebreak, after: endOfLine(at: index)) == endIndex)
+                  conditionsAreWrapped(after: index, before: endIndex)
             else { return }
 
             switch options.wrapConditions {
@@ -1196,7 +1252,7 @@ extension Formatter {
             case .startOfScope("{"):
                 if !isStartOfClosure(at: i) ||
                     next(.keyword, after: i) != .keyword("in"),
-                    next(.nonSpace, after: i) != .endOfScope("}")
+                   next(.nonSpace, after: i) != .endOfScope("}")
                 {
                     addBreakPoint(at: i, relativePriority: -6)
                 }
@@ -1574,74 +1630,6 @@ extension Formatter {
         }
 
         removeTokens(in: effectIndex ... endIndex)
-    }
-
-    /// Whether or not the code block starting at the given `.startOfScope` token
-    /// has a single statement. This makes it eligible to be used with implicit return.
-    func blockBodyHasSingleStatement(
-        atStartOfScope startOfScopeIndex: Int,
-        includingConditionalStatements: Bool,
-        includingReturnStatements: Bool,
-        includingReturnInConditionalStatements: Bool? = nil
-    ) -> Bool {
-        guard let endOfScopeIndex = endOfScope(at: startOfScopeIndex) else { return false }
-        let startOfBody = startOfBody(atStartOfScope: startOfScopeIndex)
-
-        // The body should contain exactly one expression.
-        // We can confirm this by parsing the body with `parseExpressionRange`,
-        // and checking that the token after that expression is just the end of the scope.
-        guard var firstTokenInBody = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfBody) else {
-            return false
-        }
-
-        // Skip over any optional `return` keyword
-        if includingReturnStatements, tokens[firstTokenInBody] == .keyword("return") {
-            guard let tokenAfterReturnKeyword = index(of: .nonSpaceOrCommentOrLinebreak, after: firstTokenInBody) else { return false }
-            firstTokenInBody = tokenAfterReturnKeyword
-        }
-
-        // In Swift 5.9+, if and switch statements where each branch is a single statement
-        // are also considered single statements
-        if options.swiftVersion >= "5.9",
-           includingConditionalStatements,
-           let conditionalBranches = conditionalBranches(at: firstTokenInBody)
-        {
-            let isSupportedSingleStatement = conditionalBranches.allSatisfy { branch in
-                // In Swift 5.9, there's a bug that prevents you from writing an
-                // if or switch expression using an `as?` on one of the branches:
-                // https://github.com/apple/swift/issues/68764
-                //
-                //  if condition {
-                //    foo as? String
-                //  } else {
-                //    "bar"
-                //  }
-                //
-                if conditionalBranchHasUnsupportedCastOperator(startOfScopeIndex: branch.startOfBranch) {
-                    return false
-                }
-
-                return blockBodyHasSingleStatement(
-                    atStartOfScope: branch.startOfBranch,
-                    includingConditionalStatements: true,
-                    includingReturnStatements: includingReturnInConditionalStatements ?? includingReturnStatements,
-                    includingReturnInConditionalStatements: includingReturnInConditionalStatements
-                )
-            }
-
-            let endOfStatement = conditionalBranches.last?.endOfBranch ?? firstTokenInBody
-            let isOnlyStatement = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfStatement) == endOfScopeIndex
-
-            return isSupportedSingleStatement && isOnlyStatement
-        }
-
-        guard let expressionRange = parseExpressionRange(startingAt: firstTokenInBody),
-              let nextIndexAfterExpression = index(of: .nonSpaceOrCommentOrLinebreak, after: expressionRange.upperBound)
-        else {
-            return false
-        }
-
-        return nextIndexAfterExpression == endOfScopeIndex
     }
 
     /// The token before the body of the scope following the given `startOfScopeIndex`.
@@ -3027,9 +3015,10 @@ extension Formatter {
 
                     for tokens in localDefiningDeclarations {
                         guard let localIdentifier = tokens.first(where: {
-                            $0.isIdentifier && !_FormatRules.ownershipModifiers.contains($0.string)
-                        }), case let .identifier(name) = localIdentifier,
-                        name != "_"
+                                  $0.isIdentifier && !_FormatRules.ownershipModifiers.contains($0.string)
+                              }),
+                              case let .identifier(name) = localIdentifier,
+                              name != "_"
                         else {
                             continue
                         }
@@ -3595,9 +3584,13 @@ extension Formatter {
 
             // The attribute is redundant if:
             // 1. It's the body protocol requirement of a View/ViewModifier, OR
-            // 2. The body contains only a single non-conditional expression
+            // 2. The body contains only a single non-conditional expression,
+            //    even after processing directives
             let isRedundant = isBodyMember
-                || scopeBodyIsSingleNonConditionalExpression(at: bodyScope.lowerBound)
+                || scopeBodyIsSingleExpression(
+                    at: bodyScope.lowerBound,
+                    allowing: [.returnStatement, .conditionalCompilationBlocks]
+                )
 
             if isRedundant {
                 attributeIndicesToRemove.append(viewBuilderIndex)

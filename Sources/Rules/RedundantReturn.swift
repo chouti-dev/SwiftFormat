@@ -11,7 +11,8 @@ import Foundation
 public extension FormatRule {
     /// Remove redundant return keyword
     static let redundantReturn = FormatRule(
-        help: "Remove unneeded `return` keyword."
+        help: "Remove unneeded `return` keyword.",
+        orderAfter: [.nestedIf]
     ) { formatter in
         // indices of returns that are safe to remove
         var returnIndices = [Int]()
@@ -82,8 +83,8 @@ public extension FormatRule {
                 }), let startIndex = formatter.index(of: .startOfScope("{"), before: endIndex) else {
                     return
                 }
-                if !formatter.isStartOfClosure(at: startIndex), !["func", "throws", "rethrows"]
-                    .contains(formatter.lastSignificantKeyword(at: startIndex, excluding: ["where"]) ?? "")
+                if !formatter.isStartOfClosure(at: startIndex), !["func", "rethrows"]
+                    .contains(formatter.lastSignificantKeyword(at: startIndex, excluding: ["where", "throws"]) ?? "")
                 {
                     return
                 }
@@ -175,12 +176,11 @@ public extension FormatRule {
             }
 
             // Make sure the body only has a single statement
-            guard formatter.blockBodyHasSingleStatement(
-                atStartOfScope: startOfScopeIndex,
-                includingConditionalStatements: true,
-                includingReturnStatements: true,
-                includingReturnInConditionalStatements: stripConditionalReturn
-            ) else {
+            var allowed: Formatter.SingleExpressionOptions = [.returnStatement, .conditionalExpressions, .conditionalCompilationBlocks]
+            if stripConditionalReturn {
+                allowed.insert(.returnStatementsInConditionalBranches)
+            }
+            guard formatter.scopeBodyIsSingleExpression(at: startOfScopeIndex, allowing: allowed) else {
                 return
             }
 
@@ -196,7 +196,12 @@ public extension FormatRule {
 
             // Find all of the return keywords to remove before we remove any of them,
             // so we can apply additional validation first.
-            guard let returnKeywordRangesToRemove = formatter.returnKeywordRangesToRemove(atStartOfScope: startOfScopeIndex, returnIndices: &returnIndices) else { return }
+            guard let endOfScopeIndex = formatter.endOfScope(at: startOfScopeIndex),
+                  let returnKeywordRangesToRemove = formatter.returnKeywordRangesToRemove(
+                      in: formatter.startOfBody(atStartOfScope: startOfScopeIndex) + 1 ..< endOfScopeIndex,
+                      returnIndices: &returnIndices
+                  )
+            else { return }
 
             for returnKeywordRangeToRemove in returnKeywordRangesToRemove.sorted(by: { $0.startIndex > $1.startIndex }) {
                 formatter.removeTokens(in: returnKeywordRangeToRemove)
@@ -253,11 +258,11 @@ extension Formatter {
     /// that returns `Void`, either implicitly or with an explicit return type.
     func isBodyOfVoidFunction(at startOfScopeIndex: Int) -> Bool {
         guard let keywordIndex = indexOfLastSignificantKeyword(
-            at: startOfScopeIndex, excluding: ["throws", "rethrows", "where"]
-        ),
-            tokens[keywordIndex] == .keyword("func"),
-            let function = parseFunctionDeclaration(keywordIndex: keywordIndex),
-            function.bodyRange?.lowerBound == startOfScopeIndex
+                  at: startOfScopeIndex, excluding: ["throws", "rethrows", "where"]
+              ),
+              tokens[keywordIndex] == .keyword("func"),
+              let function = parseFunctionDeclaration(keywordIndex: keywordIndex),
+              function.bodyRange?.lowerBound == startOfScopeIndex
         else {
             return false
         }
@@ -265,16 +270,23 @@ extension Formatter {
         return [nil, "Void", "Swift.Void", "()"].contains(function.returnType?.string)
     }
 
-    func returnKeywordRangesToRemove(atStartOfScope startOfScopeIndex: Int, returnIndices: inout [Int]) -> [Range<Int>]? {
+    /// The ranges of the `return` keywords to remove from the given body, including from each branch
+    func returnKeywordRangesToRemove(in range: Range<Int>, returnIndices: inout [Int]) -> [Range<Int>]? {
         var returnKeywordRangesToRemove = [Range<Int>]()
+        guard let firstTokenInBody = index(of: .nonSpaceOrCommentOrLinebreak, in: range) else {
+            return returnKeywordRangesToRemove
+        }
 
-        // If this scope is a single-statement if or switch statement then we have to recursively
+        // If this is an `#if` block, remove the return from each branch
+        if let branches = conditionalCompilationBranches(at: firstTokenInBody) {
+            for branch in branches.reversed() {
+                returnKeywordRangesToRemove.append(contentsOf: self.returnKeywordRangesToRemove(in: branch.startOfBranch + 1 ..< branch.endOfBranch, returnIndices: &returnIndices) ?? [])
+            }
+        }
+
+        // If this is a single-statement if or switch statement then we have to recursively
         // remove the return from each branch of the if statement
-        let startOfBody = startOfBody(atStartOfScope: startOfScopeIndex)
-
-        if let firstTokenInBody = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfBody),
-           let conditionalBranches = conditionalBranches(at: firstTokenInBody)
-        {
+        else if let conditionalBranches = conditionalBranches(at: firstTokenInBody) {
             for branch in conditionalBranches.reversed() {
                 // In Swift 5.9, there's a bug that prevents you from writing an
                 // if or switch expression using an `as?` on one of the branches:
@@ -292,27 +304,38 @@ extension Formatter {
                     return nil
                 }
 
-                returnKeywordRangesToRemove.append(contentsOf: self.returnKeywordRangesToRemove(atStartOfScope: branch.startOfBranch, returnIndices: &returnIndices) ?? [])
+                let branchRange = branch.startOfBranch + 1 ..< branch.endOfBranch
+                let branchRanges = self.returnKeywordRangesToRemove(in: branchRange, returnIndices: &returnIndices) ?? []
+
+                // A nested if / switch whose branches all throw has no value,
+                // so it can't be used as an expression
+                if branchRanges.isEmpty,
+                   let firstInBranch = index(of: .nonSpaceOrCommentOrLinebreak, in: branchRange),
+                   self.conditionalBranches(at: firstInBranch) != nil
+                {
+                    return nil
+                }
+
+                returnKeywordRangesToRemove.append(contentsOf: branchRanges)
             }
         }
 
-        // Otherwise this is a simple case with a single return at the start of the scope
-        else if let endOfScopeIndex = endOfScope(at: startOfScopeIndex),
-                let returnIndex = index(of: .keyword("return"), after: startOfScopeIndex),
-                returnIndices.contains(returnIndex),
-                returnIndex < endOfScopeIndex,
-                let nextIndex = index(of: .nonSpaceOrLinebreak, after: returnIndex),
-                index(of: .nonSpaceOrCommentOrLinebreak, after: returnIndex)! < endOfScopeIndex
+        // Otherwise this is a simple case with a single return at the start of the body
+        else if tokens[firstTokenInBody] == .keyword("return"),
+                returnIndices.contains(firstTokenInBody),
+                let nextIndex = index(of: .nonSpaceOrLinebreak, after: firstTokenInBody),
+                index(of: .nonSpaceOrCommentOrLinebreak, in: firstTokenInBody + 1 ..< range.upperBound) != nil
         {
-            let range = returnIndex ..< nextIndex
+            let returnIndex = firstTokenInBody
+            let returnKeywordRange = returnIndex ..< nextIndex
             for (i, index) in returnIndices.enumerated().reversed() {
-                if range.contains(index) {
+                if returnKeywordRange.contains(index) {
                     returnIndices.remove(at: i)
                 } else if index > returnIndex {
-                    returnIndices[i] -= range.count
+                    returnIndices[i] -= returnKeywordRange.count
                 }
             }
-            returnKeywordRangesToRemove.append(range)
+            returnKeywordRangesToRemove.append(returnKeywordRange)
         }
 
         return returnKeywordRangesToRemove

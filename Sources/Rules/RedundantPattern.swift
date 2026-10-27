@@ -33,14 +33,14 @@ public extension FormatRule {
                formatter.last(.nonSpaceOrComment, before: prevIndex)?.string == "."
             {
                 if let endOfScopeIndex = formatter.index(
-                    before: prevIndex,
-                    where: { tkn in tkn == .endOfScope("case") || tkn == .keyword("case") }
-                ),
-                    let varOrLetIndex = formatter.index(after: endOfScopeIndex, where: { tkn in
-                        tkn == .keyword("let") || tkn == .keyword("var")
-                    }),
-                    let operatorIndex = formatter.index(of: .operator, before: prevIndex),
-                    varOrLetIndex < operatorIndex
+                       before: prevIndex,
+                       where: { tkn in tkn == .endOfScope("case") || tkn == .keyword("case") }
+                   ),
+                   let varOrLetIndex = formatter.index(after: endOfScopeIndex, where: { tkn in
+                       tkn == .keyword("let") || tkn == .keyword("var")
+                   }),
+                   let operatorIndex = formatter.index(of: .operator, before: prevIndex),
+                   varOrLetIndex < operatorIndex
                 {
                     formatter.removeTokens(in: varOrLetIndex ..< operatorIndex)
                 }

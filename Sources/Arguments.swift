@@ -417,7 +417,17 @@ func preprocessArguments(
     var namedArgs: [String: String] = [:]
     var name = ""
     var ignoringUnknownOption = false
+    var optionsEnded = false
     for arg in args {
+        if optionsEnded {
+            namedArgs[String(anonymousArgs)] = arg
+            anonymousArgs += 1
+            continue
+        }
+        if arg == "--" {
+            optionsEnded = true
+            continue
+        }
         if arg.hasPrefix("--") {
             ignoringUnknownOption = false
             name = ""
@@ -511,6 +521,9 @@ private func unknownOptionsMode(in args: [String]) -> UnknownOptionsMode? {
     var result: UnknownOptionsMode?
     for index in args.indices.dropLast() {
         let argument = args[index].lowercased()
+        if argument == "--" {
+            break
+        }
         guard ["--unknown-options", "--unknownoptions", "--unknown-rules", "--unknownrules"].contains(argument) else {
             continue
         }
@@ -668,11 +681,11 @@ func mergeArguments(_ args: [String: String], into config: [String: String],
                 input["disable"] = Set(disable).subtracting(_enable).sorted().joined(separator: ",")
             }
         }
-        if let _lintonly = try output["lint-only"].map(parseRules) {
-            if let lintonly = try input["lint-only"].map(parseRules) {
-                input["lint-only"] = Set(lintonly).union(_lintonly).sorted().joined(separator: ",")
-                output["lint-only"] = nil
-            }
+        if let _lintonly = try output["lint-only"].map(parseRules),
+           let lintonly = try input["lint-only"].map(parseRules)
+        {
+            input["lint-only"] = Set(lintonly).union(_lintonly).sorted().joined(separator: ",")
+            output["lint-only"] = nil
         }
     }
     // Merge other arguments

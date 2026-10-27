@@ -55,7 +55,7 @@ Table of Contents
     - [Via Applescript](#via-applescript)
     - [VSCode plugin](#vscode-plugin)
     - [Sublime Text plugin](#sublime-text-plugin)
-    - [Nova plugin](nova-plugin)
+    - [Nova plugin](#nova-plugin)
     - [Git pre-commit hook](#git-pre-commit-hook)
     - [GitHub Actions](#github-actions)
     - [On CI using Danger](#on-ci-using-danger)
@@ -335,7 +335,7 @@ let package = Package(
     name: "BuildTools",
     platforms: [.macOS(.v10_11)],
     dependencies: [
-        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.0"),
+        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.4"),
     ],
     targets: [.target(name: "BuildTools", path: "")]
 )
@@ -412,7 +412,7 @@ You can use `SwiftFormat` as a SwiftPM command plugin.
 ```swift
 dependencies: [
     // ...
-    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.0"),
+    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.4"),
 ]
 ```
 
