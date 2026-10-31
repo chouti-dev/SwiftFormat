@@ -69,6 +69,16 @@ public extension FormatRule {
             }
 
             guard currentIndex != forEachIndex else { return }
+
+            let isUnsafe: Bool
+            if let unsafeIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: currentIndex),
+               formatter.isUnsafeExpression(at: unsafeIndex)
+            {
+                isUnsafe = true
+                currentIndex = unsafeIndex
+            } else {
+                isUnsafe = false
+            }
             forLoopSubjectRange = currentIndex ... indexBeforeFunctionCallDot
 
             // If there is a `try` before the `forEach` we cannot know if the subject is async/throwing or the body,
@@ -82,6 +92,25 @@ public extension FormatRule {
                 if [.keyword("try"), .keyword("await")].contains(prevToken) {
                     return
                 }
+
+                // A `for` loop is a statement, so we can only convert a `forEach` call
+                // that is used as a statement, not one whose result is used in an expression
+                // like `let result = foo.forEach { ... }` or `return !foo.forEach { ... }`.
+                switch prevToken {
+                case .operator(_, .infix), .operator(_, .prefix),
+                     .keyword("return"), .keyword("throw"), .identifier("yield"):
+                    return
+                default:
+                    break
+                }
+            }
+
+            // A `forEach` call inside parens or brackets is a function argument,
+            // collection element or tuple element, so it is also an expression.
+            if let scope = formatter.currentScope(at: currentIndex),
+               [.startOfScope("("), .startOfScope("[")].contains(scope)
+            {
+                return
             }
 
             // If the chain includes linebreaks, don't convert it to a for loop.
@@ -198,6 +227,9 @@ public extension FormatRule {
                 .keyword("for"),
                 .space(" "),
             ]
+            if isUnsafe {
+                newTokens.append(contentsOf: [.identifier("unsafe"), .space(" ")])
+            }
 
             let forEachValueNameTokens: [Token]
             if forEachValueNames.count == 1 {
@@ -284,6 +316,10 @@ extension Formatter {
             guard let startOfScopeIndex = startOfScope(at: closingParenIndex),
                   let previousNonSpaceNonCommentIndex = self.index(of: .nonSpaceOrComment, before: startOfScopeIndex)
             else { return nil }
+
+            if isUnsafeExpression(at: previousNonSpaceNonCommentIndex) {
+                return startOfScopeIndex
+            }
 
             // When we find parens for a function call or braces for a subscript,
             // continue parsing at the previous non-space non-comment token.

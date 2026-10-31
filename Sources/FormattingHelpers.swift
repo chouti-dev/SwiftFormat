@@ -1445,17 +1445,15 @@ extension Formatter {
             } else if spaceAfter, spaceBefore {
                 removeToken(at: index - 1)
             }
-        } else {
-            if tokenInsideParenRequiresSpacing(at: index - 1),
-               tokenOutsideParenRequiresSpacing(at: index)
-            {
-                if !spaceBefore, !spaceAfter {
-                    // Need to insert one
-                    insert(.space(" "), at: index)
-                }
-            } else if spaceBefore {
-                removeToken(at: index - 1)
+        } else if tokenInsideParenRequiresSpacing(at: index - 1),
+                  tokenOutsideParenRequiresSpacing(at: index)
+        {
+            if !spaceBefore, !spaceAfter {
+                // Need to insert one
+                insert(.space(" "), at: index)
             }
+        } else if spaceBefore {
+            removeToken(at: index - 1)
         }
     }
 
@@ -1508,7 +1506,7 @@ extension Formatter {
         }
 
         var insertIndex = scopeStart
-        loop: while let i = index(of: .nonSpace, before: insertIndex) {
+        loop: while let i = index(of: .nonSpaceOrComment, before: insertIndex) {
             let prevToken = tokens[insertIndex]
             switch tokens[i] {
             case .identifier where [.startOfScope("("), .startOfScope("[")].contains(prevToken):
@@ -1527,7 +1525,10 @@ extension Formatter {
                 break loop
             case let .keyword(name) where ["is", "as", "try", "await"].contains(name):
                 break
-            case .endOfScope("}") where prevToken.isOperator(ofType: .infix):
+            case .endOfScope("}") where prevToken.isOperator(ofType: .infix) || (
+                // A member chain continuing on the next line, e.g. `}` followed by `.connect(...)`
+                prevToken.isLinebreak && next(.nonSpaceOrCommentOrLinebreak, after: i)?.isOperator(ofType: .infix) == true
+            ):
                 guard let startOfScope = startOfScope(at: i),
                       let previousIndex = index(of: .nonSpace, before: startOfScope)
                 else {
@@ -1569,8 +1570,12 @@ extension Formatter {
             case .linebreak:
                 if prevToken.isOperator(ofType: .infix) || prevToken.isStringBody {
                     break
-                } else if let i = index(of: .nonSpaceOrLinebreak, before: i, if: {
-                    $0.isOperator(ofType: .infix)
+                } else if next(.nonSpaceOrCommentOrLinebreak, after: i)?.isOperator(ofType: .infix) == true {
+                    // The expression continues with an operator after a line containing only a comment
+                    break
+                } else if let i = index(of: .nonSpaceOrCommentOrLinebreak, before: i, if: {
+                    // An `=` at the end of the previous line ends the expression, as it does on a single line
+                    $0.isOperator(ofType: .infix) && !$0.isOperator("=")
                 }) {
                     insertIndex = i
                     continue
@@ -2680,6 +2685,8 @@ extension Formatter {
                 switch token {
                 case .keyword("is"), .keyword("as"), .keyword("try"), .keyword("await"):
                     break
+                case .identifier("unsafe") where lastKeyword == "for" || isUnsafeExpression(at: index):
+                    break
                 case .keyword("init"), .keyword("subscript"),
                      .keyword("func") where lastKeyword != "import":
                     lastKeyword = ""
@@ -2832,11 +2839,12 @@ extension Formatter {
                     lastKeyword = ""
                     var localNames = localNames
                     guard let keywordIndex = self.index(of: .keyword("in"), before: index),
-                          let prevKeywordIndex = self.index(of: .keyword("for"), before: keywordIndex)
+                          let prevKeywordIndex = self.index(of: .keyword("for"), before: keywordIndex),
+                          let patternStart = startOfForLoopPattern(after: prevKeywordIndex)
                     else {
                         return fatalError("Expected for keyword", at: index)
                     }
-                    for token in tokens[prevKeywordIndex + 1 ..< keywordIndex] {
+                    for token in tokens[patternStart ..< keywordIndex] {
                         if case let .identifier(name) = token, name != "_" {
                             localNames.insert(token.unescaped())
                         }
@@ -3161,6 +3169,8 @@ extension Formatter {
                        let prevToken = last(.nonSpaceOrCommentOrLinebreak, before: index)
                     {
                         switch prevToken {
+                        case .identifier("unsafe") where lastKeyword == "for":
+                            isAssignment = true
                         case .identifier, .number, .endOfScope,
                              .operator where ![
                                  .operator("=", .infix), .operator(".", .prefix),

@@ -1649,6 +1649,103 @@ final class UnusedArgumentsTests: XCTestCase {
         testFormatting(for: input, rule: .unusedArguments)
     }
 
+    func testUsedForUnsafeLoopVariable() {
+        let input = """
+        for unsafe value in unsafe buffer {
+            print(value)
+        }
+        """
+        testFormatting(for: input, rule: .unusedArguments)
+    }
+
+    func testUnsafeForLoopTupleWithUnsafeIdentifier() {
+        let input = """
+        for unsafe (unused, unsafe) in unsafe entries {
+            print(unsafe)
+        }
+        """
+        let output = """
+        for unsafe (_, unsafe) in unsafe entries {
+            print(unsafe)
+        }
+        """
+        testFormatting(for: input, output, rule: .unusedArguments)
+    }
+
+    func testUnusedMultilineUnsafeForLoopVariable() {
+        let input = """
+        for unsafe
+            value in unsafe buffer
+        {
+            print("hello")
+        }
+        """
+        let output = """
+        for unsafe
+            _ in unsafe buffer
+        {
+            print("hello")
+        }
+        """
+        testFormatting(for: input, output, rule: .unusedArguments)
+    }
+
+    func testUnusedAsyncUnsafeForLoopVariable() {
+        let input = """
+        for try await unsafe value in unsafe sequence {
+            print("hello")
+        }
+        """
+        let output = """
+        for try await unsafe _ in unsafe sequence {
+            print("hello")
+        }
+        """
+        testFormatting(for: input, output, rule: .unusedArguments)
+    }
+
+    func testUnusedForUnsafeLoopVariableNamedUnsafe() {
+        let input = """
+        for unsafe unsafe in unsafe buffer {
+            print("hello")
+        }
+        """
+        let output = """
+        for unsafe _ in unsafe buffer {
+            print("hello")
+        }
+        """
+        testFormatting(for: input, output, rule: .unusedArguments)
+    }
+
+    func testUnusedForUnsafeLoopVariable() {
+        let input = """
+        for unsafe value in unsafe buffer {
+            print("hello")
+        }
+        """
+        let output = """
+        for unsafe _ in unsafe buffer {
+            print("hello")
+        }
+        """
+        testFormatting(for: input, output, rule: .unusedArguments)
+    }
+
+    func testUnusedForLoopVariableNamedUnsafe() {
+        let input = """
+        for unsafe in array {
+            print("hello")
+        }
+        """
+        let output = """
+        for _ in array {
+            print("hello")
+        }
+        """
+        testFormatting(for: input, output, rule: .unusedArguments)
+    }
+
     func testUnusedForLoopTupleVariable() {
         let input = """
         for (key, value) in dictionary {
@@ -1939,5 +2036,62 @@ final class UnusedArgumentsTests: XCTestCase {
         }
         """
         testFormatting(for: input, rule: .unusedArguments)
+    }
+
+    // MARK: lifetime attributes
+
+    func testArgumentUsedInLifetimeAttributeNotRemoved() {
+        let input = """
+        @_lifetime(borrow source)
+        func overrideLifetime<T: ~Escapable>(_ dependent: consuming T, borrowing source: borrowing some ~Copyable) -> T {
+            dependent
+        }
+        """
+        testFormatting(for: input, rule: .unusedArguments, exclude: [.noExplicitOwnership])
+    }
+
+    func testArgumentUsedInLifetimeAttributeWithTargetNotRemoved() {
+        let input = """
+        @_lifetime(self: copy source)
+        mutating func update(from source: Source) {
+            print("updated")
+        }
+        """
+        testFormatting(for: input, rule: .unusedArguments, exclude: [.noExplicitOwnership])
+    }
+
+    func testArgumentUsedAsLifetimeAttributeTargetNotRemoved() {
+        let input = """
+        @_lifetime(dependent: borrow source)
+        func overrideLifetime<T: ~Escapable>(_ dependent: inout T, borrowing source: borrowing some ~Copyable) {}
+        """
+        testFormatting(for: input, rule: .unusedArguments, exclude: [.noExplicitOwnership])
+    }
+
+    func testArgumentUsedInLifetimeAttributeAfterOtherAttributesNotRemoved() {
+        let input = """
+        @inlinable
+        @_lifetime(copy source)
+        public func foo<T: ~Escapable>(_ source: T, _ dependent: consuming T) -> T {
+            dependent
+        }
+        """
+        testFormatting(for: input, rule: .unusedArguments, exclude: [.noExplicitOwnership])
+    }
+
+    func testUnusedArgumentNotInLifetimeAttributeStillRemoved() {
+        let input = """
+        @_lifetime(borrow source)
+        func foo<T: ~Escapable>(source: borrowing T, other: Int) -> T {
+            fatalError()
+        }
+        """
+        let output = """
+        @_lifetime(borrow source)
+        func foo<T: ~Escapable>(source: borrowing T, other _: Int) -> T {
+            fatalError()
+        }
+        """
+        testFormatting(for: input, output, rule: .unusedArguments, exclude: [.noExplicitOwnership])
     }
 }

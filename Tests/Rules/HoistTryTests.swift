@@ -10,6 +10,30 @@ import XCTest
 @testable import SwiftFormat
 
 final class HoistTryTests: XCTestCase {
+    func testHoistTryOverCommentBeforeOperator() {
+        let input = """
+        let x = a // comment
+            + foo(try b())
+        let y = foo(try c()) /* comment */ + bar(try d())
+        let z = a + // comment
+            foo(try e())
+        let w = a
+            // comment
+            + foo(try f())
+        """
+        let output = """
+        let x = try a // comment
+            + foo(b())
+        let y = try foo(c()) /* comment */ + bar(d())
+        let z = try a + // comment
+            foo(e())
+        let w = try a
+            // comment
+            + foo(f())
+        """
+        testFormatting(for: input, output, rule: .hoistTry)
+    }
+
     func testHoistTry() {
         let input = """
         greet(try name(), try surname())
@@ -20,12 +44,56 @@ final class HoistTryTests: XCTestCase {
         testFormatting(for: input, output, rule: .hoistTry)
     }
 
+    func testHoistTryInDeclarationWithValueOnNextLine() {
+        let input = """
+        let foo =
+            [try bar()]
+        let baz: [Quux] =
+            (condition ? [] : [try quux()])
+        """
+        let output = """
+        let foo =
+            try [bar()]
+        let baz: [Quux] =
+            try (condition ? [] : [quux()])
+        """
+        testFormatting(for: input, output, rule: .hoistTry)
+    }
+
     func testHoistTryWithOptionalTry() {
         let input = """
         greet(try name(), try? surname())
         """
         let output = """
         try greet(name(), try? surname())
+        """
+        testFormatting(for: input, output, rule: .hoistTry)
+    }
+
+    func testHoistTryInMemberChainAfterClosure() {
+        let input = """
+        let channel = try ClientBootstrap(group: group)
+            .channelInitializer { channel in
+                channel.pipeline.addHandler(Handler())
+            }
+            .connect(to: try address())
+            .wait()
+        let bootstrap = makeBootstrap {
+            $0
+        }
+        .connect(to: try address())
+        """
+        let output = """
+        let channel = try ClientBootstrap(group: group)
+            .channelInitializer { channel in
+                channel.pipeline.addHandler(Handler())
+            }
+            .connect(to: address())
+            .wait()
+        let bootstrap = try makeBootstrap {
+            $0
+        }
+        .connect(to: address())
         """
         testFormatting(for: input, output, rule: .hoistTry)
     }
