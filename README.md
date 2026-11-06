@@ -335,7 +335,7 @@ let package = Package(
     name: "BuildTools",
     platforms: [.macOS(.v10_11)],
     dependencies: [
-        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.5"),
+        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.6"),
     ],
     targets: [.target(name: "BuildTools", path: "")]
 )
@@ -412,7 +412,7 @@ You can use `SwiftFormat` as a SwiftPM command plugin.
 ```swift
 dependencies: [
     // ...
-    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.5"),
+    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.6"),
 ]
 ```
 

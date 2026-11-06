@@ -10,6 +10,54 @@ import XCTest
 @testable import SwiftFormat
 
 final class RedundantClosureTests: XCTestCase {
+    func testKeepsUnsafeDiscardableResultClosure() {
+        let input = """
+        let value: Void = unsafe {
+            unsafe foo()
+        }()
+        """
+        testFormatting(for: input, rule: .redundantClosure)
+    }
+
+    func testKeepsUnsafeDiscardableResultClosureWithOtherEffects() {
+        let input = """
+        let value: Void = try await unsafe {
+            try await unsafe foo()
+        }()
+        """
+        testFormatting(for: input, rule: .redundantClosure)
+    }
+
+    func testRemovesUnsafeClosureWithoutDuplicateEffect() {
+        let input = """
+        let value = unsafe {
+            unsafe foo()
+        }()
+        """
+        let output = """
+        let value = unsafe foo()
+        """
+        testFormatting(for: input, output, rule: .redundantClosure)
+    }
+
+    func testPreservesCommentAfterUnsafe() {
+        let input = """
+        let value = unsafe /* keep */ {
+            unsafe foo()
+        }()
+        """
+        testFormatting(for: input, rule: .redundantClosure)
+    }
+
+    func testPreservesFunctionNamedUnsafeWithTrailingClosure() {
+        let input = """
+        let value = unsafe {
+            foo()
+        }
+        """
+        testFormatting(for: input, rule: .redundantClosure)
+    }
+
     func testClosureAroundConditionalAssignmentNotRedundantForExplicitReturn() {
         let input = """
         let myEnum = MyEnum.a
@@ -1197,5 +1245,52 @@ final class RedundantClosureTests: XCTestCase {
         #endif
         """
         testFormatting(for: input, [output], rules: [.redundantClosure, .indent])
+    }
+
+    func testTrailingClosureArgumentFollowedByCallNotRemoved() {
+        let input = """
+        struct Container {
+            func callAsFunction(_ make: @escaping () -> Int) -> () -> Int {
+                make
+            }
+
+            func value() -> Int {
+                self { 1 }()
+            }
+
+            func otherValue() -> Int {
+                makeFactory { 2 }()
+            }
+        }
+        """
+        testFormatting(for: input, rule: .redundantClosure)
+    }
+
+    func testLabeledTrailingClosureArgumentFollowedByCallNotRemoved() {
+        let input = """
+        let value = makePair { 1 } second: { 2 }()
+        """
+        testFormatting(for: input, rule: .redundantClosure)
+    }
+
+    func testTrailingClosureArgumentOnNextLineFollowedByCallNotRemoved() {
+        let input = """
+        let value = makeFactory
+        {
+            2
+        }()
+        """
+        let options = FormatOptions(allmanBraces: true)
+        testFormatting(for: input, rule: .redundantClosure, options: options)
+    }
+
+    func testRedundantClosureAfterTryQuestionMarkRemoved() {
+        let input = """
+        let value = try? { try foo() }()
+        """
+        let output = """
+        let value = try? try foo()
+        """
+        testFormatting(for: input, output, rule: .redundantClosure)
     }
 }

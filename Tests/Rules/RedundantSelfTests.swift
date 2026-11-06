@@ -898,6 +898,40 @@ final class RedundantSelfTests: XCTestCase {
         testFormatting(for: input, rule: .redundantSelf, options: options)
     }
 
+    func testNoRemoveSelfInLoggerMethods() {
+        for method in ["notice", "info", "debug", "error", "warning", "fault", "log", "trace", "critical"] {
+            let input = """
+            import os
+
+            final class Box {
+                static let logger: Logger = .init(subsystem: "x", category: "y")
+                var count = 3
+
+                func run() {
+                    Self.logger.\(method)("count=\\(self.count, privacy: .public)")
+                }
+            }
+            """
+            testFormatting(for: input, rule: .redundantSelf, options: FormatOptions(swiftVersion: "6.0"))
+        }
+    }
+
+    func testSelfRequiredArgumentPreservesLoggerDefaults() throws {
+        let input = """
+        class Foo {
+            var count = 3
+
+            func run() {
+                logger.notice("count=\\(self.count)")
+                customLog("count=\\(self.count)")
+            }
+        }
+        """
+        var options = FormatOptions()
+        try Descriptors.selfRequired.toOptions("customLog", &options)
+        testFormatting(for: input, rule: .redundantSelf, options: options)
+    }
+
     func testNoRemoveSelfInExcludedFunction() {
         let input = """
         class Foo {
@@ -5024,5 +5058,27 @@ final class RedundantSelfTests: XCTestCase {
                                  .redundantOptionalBinding,
                                  .wrapConditionalBodies,
                                  .wrapMultilineConditionalAssignment])
+    }
+
+    func testParameterPackExpansionInReturnTypeIsNotRepeatLoop() {
+        let input = """
+        extension Store {
+            static func values<each Value>() -> (repeat each Value) {
+                self.makeValues()
+            }
+
+            static func other() {}
+        }
+        """
+        let output = """
+        extension Store {
+            static func values<each Value>() -> (repeat each Value) {
+                makeValues()
+            }
+
+            static func other() {}
+        }
+        """
+        testFormatting(for: input, output, rule: .redundantSelf)
     }
 }

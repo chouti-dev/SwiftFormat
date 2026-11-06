@@ -437,6 +437,27 @@ final class PreferSwiftTestingTests: XCTestCase {
         testFormatting(for: input, rule: .preferSwiftTesting, options: options)
     }
 
+    func testPreservesUnsupportedMethodOverrideInConditionalCompilation() {
+        let input = """
+        import XCTest
+
+        final class MyFeatureTests: XCTestCase {
+            #if os(macOS)
+                override func invokeTest() {
+                    super.invokeTest()
+                }
+            #endif
+
+            func testMyFeatureWorks() {
+                XCTAssertTrue(true)
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "6.0")
+        testFormatting(for: input, rule: .preferSwiftTesting, options: options)
+    }
+
     func testConvertsHelpersInHelperMethods() {
         let input = """
         @testable import MyFeatureLib
@@ -964,6 +985,69 @@ final class PreferSwiftTestingTests: XCTestCase {
             @Test func digestLength() {
                 let digest = [UInt8](repeating: 0, count: 32)
                 #expect(digest.count == 32)
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "6.0")
+        testFormatting(for: input, [output], rules: [.preferSwiftTesting, .sortImports], options: options)
+    }
+
+    func testPreservesTestCaseReferencingSwiftTestingTypeName() {
+        // `import Testing` would make SwiftSyntax's `SourceLocation` ambiguous
+        let input = """
+        import SwiftSyntax
+        import XCTest
+
+        final class RuleMaskTests: XCTestCase {
+            private var converter: SourceLocationConverter!
+
+            func testLocation() {
+                XCTAssertEqual(location(ofLine: 1).line, 1)
+            }
+
+            private func location(ofLine line: Int) -> SourceLocation {
+                converter.location(for: converter.position(ofLine: line, column: 0))
+            }
+        }
+        """
+
+        let options = FormatOptions(swiftVersion: "6.0")
+        testFormatting(for: input, rule: .preferSwiftTesting, options: options)
+    }
+
+    func testConvertsTestCaseWithQualifiedOrLocalSwiftTestingTypeName() {
+        let input = """
+        import SwiftSyntax
+        import XCTest
+
+        struct Tag {
+            let name: String
+        }
+
+        final class TagTests: XCTestCase {
+            func testTag() {
+                let location: SwiftSyntax.SourceLocation? = nil
+                XCTAssertNil(location)
+                XCTAssertEqual(Tag(name: "a").name, "a")
+            }
+        }
+        """
+
+        let output = """
+        import Foundation
+        import SwiftSyntax
+        import Testing
+
+        struct Tag {
+            let name: String
+        }
+
+        final class TagTests {
+            @Test func tag() {
+                let location: SwiftSyntax.SourceLocation? = nil
+                #expect(location == nil)
+                #expect(Tag(name: "a").name == "a")
             }
         }
         """

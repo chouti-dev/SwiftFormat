@@ -18,6 +18,8 @@ public extension FormatRule {
         """,
         options: ["some-any"]
     ) { formatter in
+        let closureTypealiasNames = formatter.closureTypealiasNames()
+
         formatter.forEach(.keyword) { keywordIndex, keyword in
             guard // Opaque generic parameter syntax is only supported in Swift 5.7+
                 formatter.options.swiftVersion >= "5.7",
@@ -150,6 +152,16 @@ public extension FormatRule {
                     }
                 }
 
+                // The same applies to a generic argument of a typealias for a closure type,
+                // e.g. `Handler<some Fooable>` where `typealias Handler<T> = (T) -> Void`
+                for argument in declaration.arguments {
+                    if argument.type.tokens.contains(where: { $0.isIdentifier && closureTypealiasNames.contains($0.string) }),
+                       argument.type.tokens.contains(where: { $0.string == genericType.name })
+                    {
+                        genericType.eligibleToRemove = false
+                    }
+                }
+
                 // If the generic is used as a generic argument in an `any` existential type,
                 // it can't be replaced with a `some` type.
                 for argument in declaration.arguments {
@@ -233,10 +245,12 @@ public extension FormatRule {
                 {
                     // If this instance of the type is followed by a `.` then we have to wrap the new type in parens
                     // (e.g. changing `Foo.Type` to `some Any.Type` breaks the build, it needs to be `(some Any).Type`).
-                    // Optional opaque and existential types support `some Foo?` and `any Foo?` in Swift 6.4+.
+                    // Optional opaque and existential types support `some Foo?` and `any Foo?` in Swift 6.4+,
+                    // but an optional protocol composition still needs parens, e.g. `(some Foo & Bar)?`.
                     if let nextToken = formatter.next(.nonSpaceOrCommentOrLinebreak, after: index),
                        nextToken == .operator(".", .infix) ||
-                       (nextToken == .operator("?", .postfix) && formatter.options.swiftVersion < "6.4")
+                       (nextToken == .operator("?", .postfix) && formatter.options.swiftVersion < "6.4") ||
+                       (nextToken.isUnwrapOperator && opaqueParameter.contains(.operator("&", .infix)))
                     {
                         opaqueParameter.insert(.startOfScope("("), at: 0)
                         opaqueParameter.append(.endOfScope(")"))
@@ -285,5 +299,24 @@ public extension FormatRule {
           }
         ```
         """
+    }
+}
+
+extension Formatter {
+    /// The names of the typealiases in this file that refer to a closure type,
+    /// e.g. `Handler` in `typealias Handler<T> = (T) -> Void`
+    func closureTypealiasNames() -> Set<String> {
+        var names = Set<String>()
+        forEach(.keyword("typealias")) { typealiasIndex, _ in
+            guard let nameIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: typealiasIndex),
+                  tokens[nameIndex].isIdentifier,
+                  let equalsIndex = index(of: .operator("=", .infix), after: nameIndex),
+                  let typeIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: equalsIndex),
+                  let type = parseType(at: typeIndex),
+                  type.isClosure
+            else { return }
+            names.insert(tokens[nameIndex].string)
+        }
+        return names
     }
 }

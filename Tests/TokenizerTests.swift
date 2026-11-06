@@ -1093,7 +1093,7 @@ final class TokenizerTests: XCTestCase {
             .identifier("Foo"),
             .operator(".", .infix),
             .identifier("bar"),
-            .linebreak("\n", 2),
+            .linebreak("\n", 1),
             .identifier("baz"),
         ]
         XCTAssertEqual(tokenize(input), output)
@@ -1121,7 +1121,7 @@ final class TokenizerTests: XCTestCase {
             .startOfScope("("),
             .operator("/", .none),
             .endOfScope(")"),
-            .linebreak("\n", 2),
+            .linebreak("\n", 1),
         ]
         XCTAssertEqual(tokenize(input), output)
     }
@@ -1191,6 +1191,66 @@ final class TokenizerTests: XCTestCase {
             .identifier("bar"),
         ]
         XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testRegexCannotContainUnbalancedParen() {
+        let input = "let _ = (/a)+(/b)"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("_"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("("),
+            .operator("/", .prefix),
+            .identifier("a"),
+            .endOfScope(")"),
+            .operator("+", .infix),
+            .startOfScope("("),
+            .operator("/", .prefix),
+            .identifier("b"),
+            .endOfScope(")"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testRegexCanContainParenInCharacterClass() {
+        let input = "let _ = /[)]/"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("_"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("/"),
+            .stringBody("[)]"),
+            .endOfScope("/"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testRegexCanContainParenInNestedCharacterClass() {
+        let input = "let _ = /[^[:space:])]+/"
+        let output: [Token] = [
+            .keyword("let"),
+            .space(" "),
+            .identifier("_"),
+            .space(" "),
+            .operator("=", .infix),
+            .space(" "),
+            .startOfScope("/"),
+            .stringBody("[^[:space:])]+"),
+            .endOfScope("/"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testLineNumberAfterPrefixSlashNotMistakenForRegexLiteral() {
+        let input = "let a = /E.c1\nlet b = /E.c2\n"
+        let linebreaks = tokenize(input).filter(\.isLinebreak)
+        XCTAssertEqual(linebreaks, [.linebreak("\n", 1), .linebreak("\n", 2)])
     }
 
     func testHashedRegexCanEndWithUnescapedSpace() {
@@ -2640,6 +2700,18 @@ final class TokenizerTests: XCTestCase {
             .endOfScope(">"),
         ]
         XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testNegativeValueGenericArgument() {
+        let input = """
+        Box<-1, Int, -2>
+        """
+        XCTAssertEqual(tokenize(input), [
+            .identifier("Box"), .startOfScope("<"),
+            .operator("-", .prefix), .number("1", .integer), .delimiter(","), .space(" "),
+            .identifier("Int"), .delimiter(","), .space(" "),
+            .operator("-", .prefix), .number("2", .integer), .endOfScope(">"),
+        ])
     }
 
     func testValueGeneric() {
@@ -4417,6 +4489,32 @@ final class TokenizerTests: XCTestCase {
             .keyword("@unchecked"),
             .space(" "),
             .identifier("Sendable"),
+            .space(" "),
+            .startOfScope("{"),
+            .space(" "),
+            .keyword("case"),
+            .space(" "),
+            .identifier("bar"),
+            .space(" "),
+            .endOfScope("}"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testEnumWithValueGeneric() {
+        let input = "enum Foo<let N: Int> { case bar }"
+        let output: [Token] = [
+            .keyword("enum"),
+            .space(" "),
+            .identifier("Foo"),
+            .startOfScope("<"),
+            .keyword("let"),
+            .space(" "),
+            .identifier("N"),
+            .delimiter(":"),
+            .space(" "),
+            .identifier("Int"),
+            .endOfScope(">"),
             .space(" "),
             .startOfScope("{"),
             .space(" "),

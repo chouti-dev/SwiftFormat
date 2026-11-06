@@ -19,6 +19,8 @@ public extension FormatRule {
         formatter.forEach(.startOfScope("{")) { closureStartIndex, _ in
             var startIndex = closureStartIndex
             if formatter.isStartOfClosure(at: closureStartIndex),
+               // A closure after an expression is a trailing closure argument, like `factory { Service() }()`
+               !formatter.isTrailingClosureArgument(at: closureStartIndex),
                var closureEndIndex = formatter.endOfScope(at: closureStartIndex),
                // Closures that are called immediately are redundant
                // (as long as there's exactly one statement inside them)
@@ -80,15 +82,14 @@ public extension FormatRule {
                     }
                 }
 
-                // If closure is preceded by try and/or await then remove those too
-                if let prevIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: startIndex, if: {
-                    $0 == .keyword("await")
-                }) {
-                    startIndex = prevIndex
-                }
-                if let prevIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: startIndex, if: {
-                    $0 == .keyword("try")
-                }) {
+                // Include effects on the closure call when checking its context and removing it.
+                while let prevIndex = formatter.index(of: .nonSpaceOrCommentOrLinebreak, before: startIndex),
+                      [.keyword("try"), .keyword("await")].contains(formatter.tokens[prevIndex])
+                      || formatter.isUnsafeExpression(at: prevIndex)
+                {
+                    guard !formatter.tokens[prevIndex ..< startIndex].contains(where: \.isComment) else {
+                        return
+                    }
                     startIndex = prevIndex
                 }
 
@@ -201,5 +202,29 @@ public extension FormatRule {
         + lazy var bar = Bar(baaz: baaz, quux: quux)
         ```
         """
+    }
+}
+
+extension Formatter {
+    /// Whether the closure at the given index is a trailing closure argument of the preceding expression
+    func isTrailingClosureArgument(at closureStartIndex: Int) -> Bool {
+        // A statement condition can't take a trailing closure, like `repeat { ... } while foo` + `{ ... }()`
+        guard let prevIndex = index(of: .nonSpaceOrCommentOrLinebreak, before: closureStartIndex),
+              !isConditionalStatement(at: prevIndex)
+        else { return false }
+        switch tokens[prevIndex] {
+        case .identifier:
+            return !isUnsafeExpression(at: prevIndex)
+        case .endOfScope(")"), .endOfScope(">"):
+            return true
+        case .operator(_, .postfix):
+            // `try? { ... }()` and `try! { ... }()`
+            return token(at: prevIndex - 1) != .keyword("try")
+        case .delimiter(":"):
+            // A labeled trailing closure, like `foo { ... } bar: { ... }()`
+            return index(of: .nonSpaceOrCommentOrLinebreak, before: prevIndex).map(isTrailingClosureLabel) ?? false
+        default:
+            return false
+        }
     }
 }

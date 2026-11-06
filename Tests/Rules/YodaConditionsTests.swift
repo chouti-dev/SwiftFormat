@@ -230,6 +230,16 @@ final class YodaConditionsTests: XCTestCase {
         testFormatting(for: input, output, rule: .yodaConditions)
     }
 
+    func testMacroCallOnRhsNotMangledInYodaCondition() {
+        let input = """
+        #expect(try "A" == #require(foo))
+        """
+        let output = """
+        #expect(try #require(foo) == "A")
+        """
+        testFormatting(for: input, output, rule: .yodaConditions)
+    }
+
     func testYodaConditionInIfStatement() {
         let input = """
         if 5 != foo {}
@@ -455,6 +465,38 @@ final class YodaConditionsTests: XCTestCase {
         print(method<String>() == "string")
         print(method<String>() == stringVariable)
         print(method<String>() == StringEnum.foo.rawValue)
+        """
+        testFormatting(for: input, rule: .yodaConditions)
+    }
+
+    func testYodaConditionWithLinebreakAfterOperator() {
+        let input = """
+        let isDefault = 5 ==
+            value
+        """
+        let output = """
+        let isDefault = value ==
+            5
+        """
+        testFormatting(for: input, output, rule: .yodaConditions)
+    }
+
+    func testYodaConditionWithCommentAfterOperator() {
+        let input = """
+        let isDefault = 5 == /* value */ foo
+        """
+        let output = """
+        let isDefault = foo == /* value */ 5
+        """
+        testFormatting(for: input, output, rule: .yodaConditions)
+    }
+
+    func testNoSwapMultilineComparisonOfLiterals() {
+        let input = """
+        #expect(
+            "\\(error)" ==
+                "Server error"
+        )
         """
         testFormatting(for: input, rule: .yodaConditions)
     }

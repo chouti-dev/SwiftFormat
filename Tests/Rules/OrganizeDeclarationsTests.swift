@@ -1200,7 +1200,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
         testFormatting(
             for: input, output,
             rule: .organizeDeclarations,
-            exclude: [.blankLinesAtEndOfScope, .redundantType, .redundantClosure]
+            exclude: [.blankLinesAtEndOfScope, .redundantType]
         )
     }
 
@@ -1329,7 +1329,7 @@ final class OrganizeDeclarationsTests: XCTestCase {
             for: input, output,
             rule: .organizeDeclarations,
             options: FormatOptions(categoryMarkComment: "MARK: %c", organizationMode: .type),
-            exclude: [.blankLinesAtEndOfScope, .blankLinesAtStartOfScope, .redundantType, .redundantClosure]
+            exclude: [.blankLinesAtEndOfScope, .blankLinesAtStartOfScope, .redundantType]
         )
     }
 
@@ -4959,6 +4959,56 @@ final class OrganizeDeclarationsTests: XCTestCase {
             #if DEBUG
                 .debug()
             #endif
+
+        }
+        """
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testOrganizeDeclarationsKeepsConditionalAttributesWithDeclaration() {
+        let input = """
+        public struct Job {
+            let id: Int
+
+            public init(id: Int) {
+                self.id = id
+            }
+
+            /// The kind of work a job performs.
+            #if hasAttribute(nonexhaustive)
+                @nonexhaustive
+            #endif
+            public enum Kind: String {
+                case loadImage
+            }
+        }
+        """
+        let output = """
+        public struct Job {
+
+            // MARK: Lifecycle
+
+            public init(id: Int) {
+                self.id = id
+            }
+
+            // MARK: Public
+
+            /// The kind of work a job performs.
+            #if hasAttribute(nonexhaustive)
+                @nonexhaustive
+            #endif
+            public enum Kind: String {
+                case loadImage
+            }
+
+            // MARK: Internal
+
+            let id: Int
 
         }
         """

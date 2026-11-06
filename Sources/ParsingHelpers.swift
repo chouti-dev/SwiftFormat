@@ -212,7 +212,7 @@ public extension Formatter {
                 if self.token(at: i + 1)?.isUnwrapOperator == true {
                     i += 1
                 }
-            case .number, .identifier:
+            case .keyword where token.isMacro, .number, .identifier:
                 guard wasOperator else {
                     return lastIndex
                 }
@@ -220,7 +220,8 @@ public extension Formatter {
             case .startOfScope("<"),
                  .startOfScope where wasOperator,
                  .startOfScope("{") where isStartOfClosure(at: i),
-                 .startOfScope("(") where isSubscriptOrFunctionCall(at: i),
+                 .startOfScope("(") where isSubscriptOrFunctionCall(at: i) ||
+                     last(.nonSpaceOrComment, before: i)?.isMacro == true,
                  .startOfScope("[") where isSubscriptOrFunctionCall(at: i):
                 wasOperator = false
                 guard let endIndex = endOfScope(at: i) else {
@@ -1573,7 +1574,9 @@ extension Formatter {
                     // TODO: check for other cases where it's safe to use unescaped
                     return false
                 }
-            case "Type":
+            case "Type", "Protocol":
+                // A type member can't be named `Type` or `Protocol` without backticks,
+                // since `Foo.Type` and `Foo.Protocol` are metatype expressions
                 if currentScope(at: i) == .startOfScope("{") {
                     // TODO: check it's actually inside a type declaration, otherwise backticks aren't needed
                     return true
@@ -1777,6 +1780,25 @@ extension Formatter {
         return baseType
     }
 
+    /// Parses an integer literal used as a generic argument or constraint.
+    func parseGenericValue(at index: Int) -> TypeName? {
+        var valueIndex = index
+        if tokens[valueIndex].isOperator("-"),
+           let nextIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: valueIndex)
+        {
+            valueIndex = nextIndex
+        }
+        switch tokens[valueIndex] {
+        case .number(_, .integer), .number(_, .binary), .number(_, .octal):
+            break
+        case let .number(value, .hex) where !value.lowercased().contains("p"):
+            break
+        default:
+            return nil
+        }
+        return TypeName(range: index ... valueIndex, formatter: self)
+    }
+
     private func parseNonOptionalType(
         at startOfTypeIndex: Int,
         excludeLowercaseIdentifiers: Bool,
@@ -1795,20 +1817,23 @@ extension Formatter {
 
         // Parse types of the form `[...]`
         if startToken == .startOfScope("["), let endOfScope = endOfScope(at: startOfTypeIndex) {
-            // Validate that the inner type is also valid
-            guard let innerTypeStartIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfTypeIndex),
-                  let innerType = parseType(at: innerTypeStartIndex),
-                  let indexAfterType = index(of: .nonSpaceOrCommentOrLinebreak, after: innerType.range.upperBound)
+            guard let innerTypeStartIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: startOfTypeIndex)
+            else { return nil }
+            let innerType = parseType(at: innerTypeStartIndex)
+            guard let firstElement = innerType ?? parseGenericValue(at: innerTypeStartIndex),
+                  let indexAfterType = index(of: .nonSpaceOrCommentOrLinebreak, after: firstElement.range.upperBound)
             else { return nil }
 
-            // This is either an array type of the form `[Element]`,
-            // or a dictionary type of the form `[Key: Value]`.
-            if indexAfterType != endOfScope {
-                guard tokens[indexAfterType] == .delimiter(":"),
-                      let secondTypeIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: indexAfterType),
-                      let secondType = parseType(at: secondTypeIndex),
-                      let indexAfterSecondType = index(of: .nonSpaceOrCommentOrLinebreak, after: secondType.range.upperBound),
-                      indexAfterSecondType == endOfScope
+            // Arrays contain a type; dictionaries use `:`, and inline arrays use `of`.
+            if indexAfterType == endOfScope {
+                guard innerType != nil else { return nil }
+            } else {
+                guard tokens[indexAfterType] == .identifier("of") ||
+                    (tokens[indexAfterType] == .delimiter(":") && innerType != nil),
+                    let secondTypeIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: indexAfterType),
+                    let secondType = parseType(at: secondTypeIndex),
+                    let indexAfterSecondType = index(of: .nonSpaceOrCommentOrLinebreak, after: secondType.range.upperBound),
+                    indexAfterSecondType == endOfScope
                 else { return nil }
             }
 
@@ -1836,8 +1861,10 @@ extension Formatter {
 
             // If we find an expression-only keyword (like `as`, `is`, `try`) then this is
             // an expression, not a type. But we allow function-type keywords like `throws`,
-            // `rethrows`, `async` that can appear in nested closure types like `(() throws -> Void)`
-            let expressionKeywords = Set(["as", "is", "try", "await", "if", "switch", "for", "while", "repeat", "guard", "in", "return", "throw"])
+            // `rethrows`, `async` that can appear in nested closure types like `(() throws -> Void)`.
+            // `repeat` isn't included, since it can be a parameter pack expansion like `(repeat each T)`,
+            // and a `repeat` loop always includes `while`.
+            let expressionKeywords = Set(["as", "is", "try", "await", "if", "switch", "for", "while", "guard", "in", "return", "throw"])
             if tokens[startOfTypeIndex ... endOfScope].contains(where: {
                 $0.isKeyword && expressionKeywords.contains($0.string)
             }) {
@@ -2327,6 +2354,57 @@ extension Formatter {
         return branches
     }
 
+    /// The index of the `#endif` of the `#if` block at the given index, if the block
+    /// only contains attributes of the declaration that directly follows it, like:
+    ///
+    ///     #if hasAttribute(nonexhaustive)
+    ///         @nonexhaustive
+    ///     #endif
+    ///     public enum Kind { ... }
+    ///
+    func endOfConditionalAttributeBlock(at ifIndex: Int) -> Int? {
+        guard tokens[ifIndex] == .startOfScope("#if"),
+              let firstTokenInBlock = index(of: .nonSpaceOrCommentOrLinebreak, after: endOfLine(at: ifIndex)),
+              tokens[firstTokenInBlock].isAttribute || [.keyword("#else"), .keyword("#elseif")].contains(tokens[firstTokenInBlock]),
+              let branches = conditionalCompilationBranches(at: ifIndex),
+              let endifIndex = branches.last?.endOfBranch,
+              let nextIndex = index(of: .nonSpaceOrCommentOrLinebreak, after: endifIndex),
+              let declarationIndex = indexOfNextDeclarationStart(after: endifIndex),
+              startOfModifiers(at: declarationIndex, includingAttributes: true) == nextIndex,
+              // Another block of conditional attributes can follow, but not other conditional code
+              tokens[declarationIndex] != .startOfScope("#if") || endOfConditionalAttributeBlock(at: declarationIndex) != nil
+        else { return nil }
+
+        var containsAttribute = false
+        for branch in branches {
+            var index = branch.startOfBranch
+            while let attributeIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index),
+                  attributeIndex < branch.endOfBranch
+            {
+                guard tokens[attributeIndex].isAttribute,
+                      let endOfAttribute = endOfAttribute(at: attributeIndex)
+                else { return nil }
+                containsAttribute = true
+                index = endOfAttribute
+            }
+        }
+        return containsAttribute ? endifIndex : nil
+    }
+
+    /// The start of any conditional attribute blocks directly before the given index,
+    /// or the index itself if there are none
+    func startOfConditionalAttributeBlocks(before index: Int) -> Int {
+        var startIndex = index
+        while let endifIndex = self.index(of: .nonSpaceOrLinebreak, before: startIndex),
+              tokens[endifIndex] == .endOfScope("#endif"),
+              let ifIndex = self.index(of: .startOfScope("#if"), before: endifIndex),
+              endOfConditionalAttributeBlock(at: ifIndex) == endifIndex
+        {
+            startIndex = ifIndex
+        }
+        return startIndex
+    }
+
     /// Constructs a single expression body can contain besides a plain expression
     struct SingleExpressionOptions: OptionSet {
         let rawValue: Int
@@ -2505,7 +2583,10 @@ extension Formatter {
 
         let isDeclarationStart = { [self] (index: Int, token: Token) in
             token.isDeclarationTypeKeyword
-                || token == .startOfScope("#if")
+                // Conditional attributes are part of the declaration that follows them.
+                // `indexOfNextDeclarationStart` still treats them as a declaration start,
+                // so the previous declaration ends before the `#if`.
+                || (token == .startOfScope("#if") && endOfConditionalAttributeBlock(at: index) == nil)
                 || isFreestandingMacroExpansion(at: index, in: range)
         }
 
@@ -3396,6 +3477,11 @@ extension Formatter {
     func isLikelyToBeSubclassed(_ typeDecl: TypeDeclaration) -> Bool {
         guard let name = typeDecl.name else { return false }
 
+        // An `open` class exists to be subclassed, often from other files or modules
+        if typeDecl.modifiers.contains("open") {
+            return true
+        }
+
         // Check if name contains "Base" (common convention for base classes)
         if name.contains("Base") {
             return true
@@ -4015,7 +4101,7 @@ extension Formatter {
     func parseDocCommentRange(forDeclarationAt keywordIndex: Int) -> ClosedRange<Int>? {
         let startOfModifiers = startOfModifiers(at: keywordIndex, includingAttributes: true)
 
-        var parseIndex = startOfModifiers
+        var parseIndex = startOfConditionalAttributeBlocks(before: startOfModifiers)
         var endOfComment: Int?
 
         while let endOfPreviousLine = index(of: .linebreak, before: parseIndex),
@@ -5034,7 +5120,9 @@ extension Formatter {
             if isStartOfStatement(at: i, treatingCollectionKeysAsStart: false),
                // Immediately following an `=` operator, if or switch keywords
                // are expressions rather than statements.
-               lastToken(before: i, where: { !$0.isSpaceOrCommentOrLinebreak })?.isOperator("=") != true
+               lastToken(before: i, where: { !$0.isSpaceOrCommentOrLinebreak })?.isOperator("=") != true,
+               // The operand of an `unsafe` expression isn't a new statement either.
+               index(of: .nonSpaceOrCommentOrLinebreak, before: i).map({ !isUnsafeExpression(at: $0) }) ?? true
             {
                 pushLocals()
                 wasDeclaration = false

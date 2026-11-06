@@ -21,6 +21,10 @@ public extension FormatRule {
         // before we start converting any test cases.
         guard !formatter.hasUnsupportedXCTestHelper() else { return }
 
+        // Adding `import Testing` would make types with the same name as a
+        // Swift Testing type (like SwiftSyntax's `SourceLocation`) ambiguous.
+        guard !formatter.referencesSwiftTestingTypeName() else { return }
+
         let declarations = formatter.parseDeclarations()
 
         let xcTestSuites = declarations
@@ -138,6 +142,20 @@ extension TypeDeclaration {
     /// Whether or not this declaration uses XCTest functionality that is
     /// not supported by the preferSwiftTesting rule.
     func hasUnsupportedXCTestFunctionality() -> Bool {
+        // Overrides inside `#if` blocks (like `invokeTest` under `#if os(macOS)`)
+        // aren't converted, so they would be left without a superclass.
+        var hasOverrideInConditionalCompilation = false
+        for case let .conditionalCompilation(conditionalCompilation) in body.map(\.kind) {
+            conditionalCompilation.body.forEachRecursiveDeclaration { declaration in
+                if declaration.modifiers.contains("override") {
+                    hasOverrideInConditionalCompilation = true
+                }
+            }
+        }
+        if hasOverrideInConditionalCompilation {
+            return true
+        }
+
         let overriddenMethods = body.filter {
             $0.modifiers.contains("override")
         }
@@ -278,6 +296,47 @@ extension Formatter {
                     }
                 }
             }
+        }
+
+        return false
+    }
+
+    /// Whether or not this file references a type from another module whose name is
+    /// also declared by Swift Testing, so it would become ambiguous after `import Testing`.
+    func referencesSwiftTestingTypeName() -> Bool {
+        // Public types declared by the Swift Testing module
+        let swiftTestingTypeNames: Set = [
+            "Attachable", "AttachableAsImage", "AttachableImageFormat", "AttachableWrapper", "Attachment",
+            "Bug", "Comment", "ConditionTrait", "Confirmation", "CustomTestArgumentEncodable",
+            "CustomTestReflectable", "CustomTestStringConvertible", "ExitStatus", "ExitTest", "Expectation",
+            "ExpectationFailedError", "Issue", "IssueHandlingTrait", "KnownIssueMatcher",
+            "ParallelizationTrait", "SourceLocation", "SuiteTrait", "Tag", "Test", "TestScoping",
+            "TestTrait", "TimeLimitTrait", "Trait",
+        ]
+
+        // Types declared in this file shadow the imported ones, so they stay unambiguous
+        var typesDeclaredInFile = Set<String>()
+        let typeKeywords: Set = ["struct", "class", "enum", "actor", "protocol", "typealias"]
+        for index in tokens.indices where tokens[index].isKeyword && typeKeywords.contains(tokens[index].string) {
+            if let nameIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, after: index) {
+                typesDeclaredInFile.insert(tokens[nameIndex].string)
+            }
+        }
+
+        for index in tokens.indices where tokens[index].isIdentifier {
+            let identifier = tokens[index].string
+            guard swiftTestingTypeNames.contains(identifier),
+                  !typesDeclaredInFile.contains(identifier)
+            else { continue }
+
+            // A qualified name like `SwiftSyntax.SourceLocation` or a member like `foo.Tag` is unaffected
+            if let previousIndex = self.index(of: .nonSpaceOrCommentOrLinebreak, before: index),
+               tokens[previousIndex].isOperator(".")
+            {
+                continue
+            }
+
+            return true
         }
 
         return false

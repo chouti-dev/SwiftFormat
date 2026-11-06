@@ -10,6 +10,49 @@ import XCTest
 @testable import SwiftFormat
 
 final class OpaqueGenericParametersTests: XCTestCase {
+    func testTypeParameterFollowingValueParameter() {
+        let input = """
+        func foo<let N: Int, T>(_: T, _: InlineArray<N, Int>) where T: Equatable {}
+        """
+        let output = """
+        func foo<let N: Int>(_: some Equatable, _: InlineArray<N, Int>) {}
+        """
+        testFormatting(for: input, output, rule: .opaqueGenericParameters, options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testValueParameterIsNotOpaqueType() {
+        let input = """
+        func foo<let N: Int>(_: InlineArray<N, Int>) {}
+        """
+        testFormatting(for: input, rule: .opaqueGenericParameters, options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testIntegerConstraintPreservesBodyTypeReference() {
+        let input = """
+        struct Outer<let N: Int> {
+            func foo<T: Equatable>(_ value: T) where N == 3 {
+                let copy: T = value
+                print(copy)
+            }
+        }
+        """
+        testFormatting(for: input, rule: .opaqueGenericParameters, options: FormatOptions(swiftVersion: "6.2"))
+    }
+
+    func testTypeConstraintFollowingIntegerConstraint() {
+        let input = """
+        struct Outer<let N: Int> {
+            func foo<T>(_: T) where N == -3, T: Equatable {}
+        }
+        """
+        let output = """
+        struct Outer<let N: Int> {
+            func foo(_: some Equatable) where N == -3 {}
+        }
+        """
+        testFormatting(for: input, output, rule: .opaqueGenericParameters, options: FormatOptions(swiftVersion: "6.2"))
+    }
+
     func testGenericNotModifiedBelowSwift5_7() {
         let input = """
         func foo<T>(_ value: T) {
@@ -607,6 +650,25 @@ final class OpaqueGenericParametersTests: XCTestCase {
         testFormatting(for: input, rule: .opaqueGenericParameters, options: options, exclude: [.simplifyGenericConstraints])
     }
 
+    func testDoesntConvertGenericArgumentOfClosureTypealias() {
+        let input = """
+        typealias Handler<Success, Failure: Error> = @Sendable (Result<Success, Failure>) throws -> Void
+
+        func foo<Success: Sendable>(_: @escaping Handler<Success, Never>) {}
+        func bar<Value: Sendable>(_: Box<Value>) {}
+        """
+
+        let output = """
+        typealias Handler<Success, Failure: Error> = @Sendable (Result<Success, Failure>) throws -> Void
+
+        func foo<Success: Sendable>(_: @escaping Handler<Success, Never>) {}
+        func bar(_: Box<some Sendable>) {}
+        """
+
+        let options = FormatOptions(swiftVersion: "5.7")
+        testFormatting(for: input, output, rule: .opaqueGenericParameters, options: options)
+    }
+
     func testFinalGenericParamRemovedProperlyWithoutHangingComma() {
         let input = """
         func foo<Bar, Baaz>(
@@ -654,6 +716,21 @@ final class OpaqueGenericParametersTests: XCTestCase {
 
         let options = FormatOptions(swiftVersion: "6.4")
         testFormatting(for: input, output, rule: .opaqueGenericParameters, options: options, exclude: [.simplifyGenericConstraints])
+    }
+
+    func testKeepsParensAroundOptionalOpaqueProtocolCompositionInSwift64() {
+        let input = """
+        func foo<Foo: Fooable & Barable>(_: Foo?) {}
+        func bar<Bar: Fooable & Barable>(_: Bar!) {}
+        """
+
+        let output = """
+        func foo(_: (some Fooable & Barable)?) {}
+        func bar(_: (some Fooable & Barable)!) {}
+        """
+
+        let options = FormatOptions(swiftVersion: "6.4")
+        testFormatting(for: input, output, rule: .opaqueGenericParameters, options: options)
     }
 
     func testHandlesSingleExactTypeGenericConstraint() {

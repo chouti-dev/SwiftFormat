@@ -1340,6 +1340,8 @@ public func tokenize(_ source: String) -> [Token] {
     func processStringBody(regex: Bool, hashCount: Int) {
         var string = ""
         var escaped = false
+        // A regex literal without `#` can't contain an unbalanced `)` outside a character class
+        var parenDepth = 0, characterClassDepth = 0
         let hashes = String(repeating: "#", count: hashCount)
         let delimiter: UnicodeScalar = regex ? "/" : "\""
         while let c = characters.popFirst() {
@@ -1379,6 +1381,24 @@ public func tokenize(_ source: String) -> [Token] {
                 }
                 return
             default:
+                if regex, hashCount == 0, !escaped {
+                    switch c {
+                    case "[":
+                        characterClassDepth += 1
+                    case "]" where characterClassDepth > 0:
+                        characterClassDepth -= 1
+                    case "(" where characterClassDepth == 0:
+                        parenDepth += 1
+                    case ")" where characterClassDepth == 0:
+                        parenDepth -= 1
+                        if parenDepth < 0 {
+                            // Not a regex literal, like `{ /Foo.bar ~= $0 }).map(/Foo.bar)`
+                            return
+                        }
+                    default:
+                        break
+                    }
+                }
                 escaped = false
             }
             string.append(Character(c))
@@ -1982,6 +2002,11 @@ public func tokenize(_ source: String) -> [Token] {
                 switch token {
                 case let .operator(string, _):
                     switch string {
+                    case "-" where characters.first?.isDigit == true &&
+                        index(of: .nonSpaceOrCommentOrLinebreak, before: count - 1).map {
+                            [.startOfScope("<"), .delimiter(","), .operator("==", .infix)].contains(tokens[$0])
+                        } == true:
+                        break
                     case ".", "==", "?", "!", "&", "->", "~", "::":
                         if index(of: .nonSpaceOrCommentOrLinebreak, before: count - 1) == scopeIndex {
                             // These are allowed in a generic, but not as the first character
@@ -2045,11 +2070,13 @@ public func tokenize(_ source: String) -> [Token] {
                         processToken()
                         return
                     case "case":
-                        if let keywordIndex = index(of: .keyword, before: scopeIndex) {
+                        if var keywordIndex = index(of: .keyword, before: scopeIndex) {
                             var keyword = tokens[keywordIndex]
-                            if keyword == .keyword("where"),
-                               let keywordIndex = index(of: .keyword, before: keywordIndex)
+                            // Skip `where` clauses and value generic parameters like `enum Foo<let N: Int>`
+                            while [.keyword("where"), .keyword("let")].contains(keyword),
+                                  let prevIndex = index(of: .keyword, before: keywordIndex)
                             {
+                                keywordIndex = prevIndex
                                 keyword = tokens[keywordIndex]
                             }
                             if case .keyword("enum") = keyword {
@@ -2102,10 +2129,11 @@ public func tokenize(_ source: String) -> [Token] {
                 return
             }
             scopeIndexStack.append(count - 1)
-            let start = characters
+            let start = characters, startLineNumber = lineNumber
             processStringBody(regex: true, hashCount: 0)
             if scopeIndexStack.last == count - 1 {
                 characters = start
+                lineNumber = startLineNumber
                 scopeIndexStack.removeLast()
                 tokens.removeLast(tokens.count - count)
                 token = .operator("/", .none)
