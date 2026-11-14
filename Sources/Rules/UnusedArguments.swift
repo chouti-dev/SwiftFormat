@@ -38,7 +38,10 @@ public extension FormatRule {
             // An argument named in a lifetime attribute is used, even if the body doesn't reference it
             let startOfAttributes = formatter.startOfModifiers(at: i, includingAttributes: true)
             for attributeIndex in startOfAttributes ..< i where ["@_lifetime", "@lifetime"].contains(formatter.tokens[attributeIndex].string) {
-                guard let endOfAttribute = formatter.endOfAttribute(at: attributeIndex) else { continue }
+                // An attribute without arguments ends at its own index
+                guard let endOfAttribute = formatter.endOfAttribute(at: attributeIndex),
+                      endOfAttribute > attributeIndex
+                else { continue }
                 for index in attributeIndex + 1 ... endOfAttribute {
                     if case .identifier = formatter.tokens[index],
                        let nameIndex = argNames.firstIndex(of: formatter.tokens[index].unescaped())
@@ -49,7 +52,15 @@ public extension FormatRule {
                 }
             }
 
-            for argument in arguments.reversed() {
+            // Also simplify arguments already written as `_ _:`, preserving any intervening comments.
+            arguments += declaration.arguments.filter { argument in
+                guard argument.internalLabel == nil, argument.externalLabel == nil,
+                      let externalLabelIndex = argument.externalLabelIndex
+                else { return false }
+                return formatter.index(of: .comment, in: externalLabelIndex + 1 ..< argument.internalLabelIndex) == nil
+            }
+
+            for argument in arguments.sorted(by: { $0.internalLabelIndex > $1.internalLabelIndex }) {
                 // In subscripts and operators, external function labels are unnecessary
                 if isOperator {
                     // Convert `_ name:` to just `_:`

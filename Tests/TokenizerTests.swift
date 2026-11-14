@@ -2631,6 +2631,152 @@ final class TokenizerTests: XCTestCase {
         XCTAssertEqual(tokenize(input), output)
     }
 
+    func testShiftsByNegativeIntegersOnSeparateLines() {
+        let input = """
+        x << -1
+        y >> -1
+        """
+        let output: [Token] = [
+            .identifier("x"),
+            .space(" "),
+            .operator("<<", .infix),
+            .space(" "),
+            .operator("-", .prefix),
+            .number("1", .integer),
+            .linebreak("\n", 1),
+            .identifier("y"),
+            .space(" "),
+            .operator(">>", .infix),
+            .space(" "),
+            .operator("-", .prefix),
+            .number("1", .integer),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testShiftsByNegativeIntegersInArgumentList() {
+        let input = "f(x << -1, y >> -1)"
+        let output: [Token] = [
+            .identifier("f"),
+            .startOfScope("("),
+            .identifier("x"),
+            .space(" "),
+            .operator("<<", .infix),
+            .space(" "),
+            .operator("-", .prefix),
+            .number("1", .integer),
+            .delimiter(","),
+            .space(" "),
+            .identifier("y"),
+            .space(" "),
+            .operator(">>", .infix),
+            .space(" "),
+            .operator("-", .prefix),
+            .number("1", .integer),
+            .endOfScope(")"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testLeftShiftByImplicitMemberFollowedByGreaterThan() {
+        let input = """
+        x << .foo
+        y > .bar
+        """
+        let output: [Token] = [
+            .identifier("x"),
+            .space(" "),
+            .operator("<<", .infix),
+            .space(" "),
+            .operator(".", .prefix),
+            .identifier("foo"),
+            .linebreak("\n", 1),
+            .identifier("y"),
+            .space(" "),
+            .operator(">", .infix),
+            .space(" "),
+            .operator(".", .prefix),
+            .identifier("bar"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testLeftShiftAssignByImplicitMemberFollowedByGreaterThan() {
+        let input = "f(x <<= .foo, y > .bar)"
+        let output: [Token] = [
+            .identifier("f"),
+            .startOfScope("("),
+            .identifier("x"),
+            .space(" "),
+            .operator("<<=", .infix),
+            .space(" "),
+            .operator(".", .prefix),
+            .identifier("foo"),
+            .delimiter(","),
+            .space(" "),
+            .identifier("y"),
+            .space(" "),
+            .operator(">", .infix),
+            .space(" "),
+            .operator(".", .prefix),
+            .identifier("bar"),
+            .endOfScope(")"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testComparisonBeforeGenericTypeMemberInTuple() {
+        let input = "(lhs < rhs, MemoryLayout<T>.size > 8)"
+        let output: [Token] = [
+            .startOfScope("("),
+            .identifier("lhs"),
+            .space(" "),
+            .operator("<", .infix),
+            .space(" "),
+            .identifier("rhs"),
+            .delimiter(","),
+            .space(" "),
+            .identifier("MemoryLayout"),
+            .startOfScope("<"),
+            .identifier("T"),
+            .endOfScope(">"),
+            .operator(".", .infix),
+            .identifier("size"),
+            .space(" "),
+            .operator(">", .infix),
+            .space(" "),
+            .number("8", .integer),
+            .endOfScope(")"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
+    func testLeftShiftBeforeGenericTypeMemberInTuple() {
+        let input = "(x << 1, MemoryLayout<T>.size > y)"
+        let output: [Token] = [
+            .startOfScope("("),
+            .identifier("x"),
+            .space(" "),
+            .operator("<<", .infix),
+            .space(" "),
+            .number("1", .integer),
+            .delimiter(","),
+            .space(" "),
+            .identifier("MemoryLayout"),
+            .startOfScope("<"),
+            .identifier("T"),
+            .endOfScope(">"),
+            .operator(".", .infix),
+            .identifier("size"),
+            .space(" "),
+            .operator(">", .infix),
+            .space(" "),
+            .identifier("y"),
+            .endOfScope(")"),
+        ]
+        XCTAssertEqual(tokenize(input), output)
+    }
+
     func testBitshiftThatLooksLikeAGeneric() {
         let input = "a<b, b<c, d>>e"
         let output: [Token] = [

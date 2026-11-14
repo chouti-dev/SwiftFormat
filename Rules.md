@@ -693,6 +693,8 @@ Option | Description
 `--typo-visibility` | Correct typos at or below this visibility threshold: "public", "package", "internal", "fileprivate" (default) or "private"
 `--typos` | Comma-delimited list of typo=correction mappings
 `--ignore-typos` | Comma-delimited list of typos to ignore
+`--prefer-us-spelling` | Prefer US spellings: "true" or "false" (default)
+`--preserve-iff` | Preserve 'iff' ('if and only if') instead of correcting to 'if': "true" (default) or "false"
 
 <details>
 <summary>Examples</summary>
@@ -703,6 +705,22 @@ Option | Description
 + // Retrieve the cached value if it exists
 + private func retrieveCachedValue() -> Value? { ... }
 ```
+
+With `--prefer-us-spelling true`:
+
+```diff
+- // Initialise the favourite colour
+- private let favouriteColour = "blue"
++ // Initialize the favorite color
++ private let favoriteColor = "blue"
+```
+
+US spelling corrections respect `--typo-visibility` and `--ignore-typos`.
+Explicit `--typos` mappings take precedence over US spelling preferences.
+
+By default, `iff` is preserved as shorthand for "if and only if".
+Use `--preserve-iff false` to correct it to `if` instead.
+Explicit `--typos` mappings and `--ignore-typos` take precedence over this preference.
 
 </details>
 <br/>
@@ -1598,6 +1616,47 @@ Option | Description
   }
 ```
 
+**Member chains**
+
+By default, a member chain on a new line is aligned with the previous line
+when that line's code consists only of closing parentheses, brackets or braces.
+If there is other code on that line, such as an inline trailing closure,
+the member chain is indented one level:
+
+```swift
+let a = Foo(
+    x: 1
+)
+.load(2)
+
+let b = [
+    1,
+    2,
+]
+.map { $0 }
+
+let c = Foo(
+    x: 1
+) { $0 }
+    .load(2)
+```
+
+Wrapping the trailing closure puts its closing brace on a separate line,
+so the member chain is aligned with that brace:
+
+```swift
+let d = Foo(
+    x: 1
+) {
+    $0
+}
+.load(2)
+```
+
+With `--xcode-indentation enabled`, the member chain after the standalone `]`
+in the array example is indented one level. Chains after a standalone `)`
+or `}` remain aligned with that line, as shown above.
+
 </details>
 <br/>
 
@@ -1766,7 +1825,7 @@ Option | Description
 ```
 
 **NOTE:** If the `--modifier-order` option isn't set, the default order will be:
-`override`, `private`, `fileprivate`, `internal`, `package`, `public`, `open`, `private(set)`, `fileprivate(set)`, `internal(set)`, `package(set)`, `public(set)`, `open(set)`, `final`, `dynamic`, `optional`, `required`, `indirect`, `isolated`, `nonisolated`, `nonisolated(unsafe)`, `lazy`, `weak`, `unowned`, `unowned(safe)`, `unowned(unsafe)`, `static`, `class`, `borrowing`, `consuming`, `mutating`, `nonmutating`, `prefix`, `infix`, `postfix`, `async`, `convenience`
+`override`, `private`, `fileprivate`, `internal`, `package`, `public`, `open`, `private(set)`, `fileprivate(set)`, `internal(set)`, `package(set)`, `public(set)`, `open(set)`, `final`, `dynamic`, `optional`, `required`, `indirect`, `isolated`, `nonisolated`, `nonisolated(unsafe)`, `lazy`, `weak`, `unowned`, `unowned(safe)`, `unowned(unsafe)`, `static`, `class`, `borrowing`, `consuming`, `__consuming`, `mutating`, `nonmutating`, `prefix`, `infix`, `postfix`, `async`, `convenience`
 
 </details>
 <br/>
@@ -1957,10 +2016,11 @@ Option | Description
 
 ## numberFormatting
 
-Use consistent grouping for numeric literals. Groups will be separated by `_`
-delimiters to improve readability. For each numeric type you can specify a group
-size (the number of digits in each group) and a threshold (the minimum number of
-digits in a number before grouping is applied).
+Use consistent grouping and letter case for numeric literals. Groups will be
+separated by `_` delimiters to improve readability. For each numeric type you
+can specify a group size (the number of digits in each group) and a threshold
+(the minimum number of digits in a number before grouping is applied). The case
+of letters in hex literals and of the exponent marker is also normalized.
 
 Option | Description
 --- | ---

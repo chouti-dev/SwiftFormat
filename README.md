@@ -335,7 +335,7 @@ let package = Package(
     name: "BuildTools",
     platforms: [.macOS(.v10_11)],
     dependencies: [
-        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.6"),
+        .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.7"),
     ],
     targets: [.target(name: "BuildTools", path: "")]
 )
@@ -412,7 +412,7 @@ You can use `SwiftFormat` as a SwiftPM command plugin.
 ```swift
 dependencies: [
     // ...
-    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.6"),
+    .package(url: "https://github.com/nicklockwood/SwiftFormat", from: "0.64.7"),
 ]
 ```
 
@@ -1114,6 +1114,11 @@ FAQ
 *Q. SwiftFormat made changes I didn't want it to. How can I find out which rules to disable?*
 
 > A. If you run SwiftFormat using the `--verbose` option, it will tell you which rules were applied to each file. You can then selectively disable certain rules using the `--disable` argument (see below).
+
+
+*Q. Why are chained calls sometimes indented differently?*
+
+> A. By default, a chain aligns with a preceding line containing only closing parentheses, brackets or braces. Other code on that line, such as an inline trailing closure, causes an extra level of indentation. See the [`indent` rule's examples](https://github.com/nicklockwood/SwiftFormat/blob/develop/Rules.md#indent), including how `--xcode-indentation` affects this behavior.
 
 
 *Q. People on my team have different SwiftFormat versions installed. How can we ensure consistent formatting?

@@ -13,12 +13,20 @@ public extension FormatRule {
     static let commonTypos = FormatRule(
         help: "Correct common spelling mistakes in comments and identifiers.",
         disabledByDefault: true,
-        options: ["typo-visibility", "typos", "ignore-typos"]
+        options: ["typo-visibility", "typos", "ignore-typos", "prefer-us-spelling", "preserve-iff"]
     ) { formatter in
         let ignoredTypos = Set(formatter.options.ignoredTypos.map { $0.lowercased() })
         var typoCorrections = commonTypoCorrections
         for (typo, correction) in formatter.options.typos where typoCorrections[typo.lowercased()] == nil {
             typoCorrections[typo.lowercased()] = correction
+        }
+        if !formatter.options.preserveIff, typoCorrections["iff"] == nil {
+            typoCorrections["iff"] = "if"
+        }
+        if formatter.options.preferUSSpelling {
+            for (spelling, correction) in usSpellingCorrections where typoCorrections[spelling] == nil {
+                typoCorrections[spelling] = correction
+            }
         }
         let declarations = formatter.parseDeclarations()
         var declaredNames = Set<String>()
@@ -108,7 +116,9 @@ public extension FormatRule {
                     return
                 }
                 guard correctedName != name else { return }
-                formatter.replaceToken(at: index, with: .identifier(correctedName))
+                let escapedName = !correctedName.hasPrefix("`") && formatter.backticksRequired(forName: correctedName, at: index)
+                    ? "`\(correctedName)`" : correctedName
+                formatter.replaceToken(at: index, with: .identifier(escapedName))
             case let .commentBody(comment):
                 let correctedComment = formatter.correctingCommonTypos(
                     in: comment,
@@ -129,6 +139,22 @@ public extension FormatRule {
         + // Retrieve the cached value if it exists
         + private func retrieveCachedValue() -> Value? { ... }
         ```
+
+        With `--prefer-us-spelling true`:
+
+        ```diff
+        - // Initialise the favourite colour
+        - private let favouriteColour = "blue"
+        + // Initialize the favorite color
+        + private let favoriteColor = "blue"
+        ```
+
+        US spelling corrections respect `--typo-visibility` and `--ignore-typos`.
+        Explicit `--typos` mappings take precedence over US spelling preferences.
+
+        By default, `iff` is preserved as shorthand for "if and only if".
+        Use `--preserve-iff false` to correct it to `if` instead.
+        Explicit `--typos` mappings and `--ignore-typos` take precedence over this preference.
         """
     }
 }
@@ -332,4 +358,120 @@ let commonTypoCorrections = [
     "validitiy": "validity",
     "visiblity": "visibility",
     "widht": "width",
+]
+
+/// Common British spellings and inflections with explicit US equivalents.
+let usSpellingCorrections = [
+    "analogue": "analog",
+    "analogues": "analogs",
+    "analyse": "analyze",
+    "analysed": "analyzed",
+    "analysing": "analyzing",
+    "behaviour": "behavior",
+    "behavioural": "behavioral",
+    "behaviours": "behaviors",
+    "cancelled": "canceled",
+    "cancelling": "canceling",
+    "catalogue": "catalog",
+    "catalogues": "catalogs",
+    "centre": "center",
+    "centred": "centered",
+    "centres": "centers",
+    "centring": "centering",
+    "colour": "color",
+    "coloured": "colored",
+    "colourful": "colorful",
+    "colouring": "coloring",
+    "colourless": "colorless",
+    "colours": "colors",
+    "customisation": "customization",
+    "customise": "customize",
+    "customised": "customized",
+    "customises": "customizes",
+    "customising": "customizing",
+    "defence": "defense",
+    "defences": "defenses",
+    "dialogue": "dialog",
+    "dialogues": "dialogs",
+    "favour": "favor",
+    "favourable": "favorable",
+    "favourably": "favorably",
+    "favoured": "favored",
+    "favouring": "favoring",
+    "favourite": "favorite",
+    "favourites": "favorites",
+    "favours": "favors",
+    "grey": "gray",
+    "greyish": "grayish",
+    "honour": "honor",
+    "honourable": "honorable",
+    "honoured": "honored",
+    "honouring": "honoring",
+    "honours": "honors",
+    "initialisation": "initialization",
+    "initialisations": "initializations",
+    "initialise": "initialize",
+    "initialised": "initialized",
+    "initialiser": "initializer",
+    "initialisers": "initializers",
+    "initialises": "initializes",
+    "initialising": "initializing",
+    "labelled": "labeled",
+    "labelling": "labeling",
+    "licence": "license",
+    "licences": "licenses",
+    "litre": "liter",
+    "litres": "liters",
+    "metre": "meter",
+    "metres": "meters",
+    "normalisation": "normalization",
+    "normalise": "normalize",
+    "normalised": "normalized",
+    "normalises": "normalizes",
+    "normalising": "normalizing",
+    "offence": "offense",
+    "offences": "offenses",
+    "optimisation": "optimization",
+    "optimisations": "optimizations",
+    "optimise": "optimize",
+    "optimised": "optimized",
+    "optimiser": "optimizer",
+    "optimisers": "optimizers",
+    "optimises": "optimizes",
+    "optimising": "optimizing",
+    "organisation": "organization",
+    "organisations": "organizations",
+    "organise": "organize",
+    "organised": "organized",
+    "organiser": "organizer",
+    "organisers": "organizers",
+    "organises": "organizes",
+    "organising": "organizing",
+    "practise": "practice",
+    "practised": "practiced",
+    "practises": "practices",
+    "practising": "practicing",
+    "programme": "program",
+    "programmes": "programs",
+    "realise": "realize",
+    "realised": "realized",
+    "realises": "realizes",
+    "realising": "realizing",
+    "recognise": "recognize",
+    "recognised": "recognized",
+    "recognises": "recognizes",
+    "recognising": "recognizing",
+    "serialisation": "serialization",
+    "serialise": "serialize",
+    "serialised": "serialized",
+    "serialiser": "serializer",
+    "serialisers": "serializers",
+    "serialises": "serializes",
+    "serialising": "serializing",
+    "theatre": "theater",
+    "theatres": "theaters",
+    "travelled": "traveled",
+    "traveller": "traveler",
+    "travellers": "travelers",
+    "travelling": "traveling",
 ]

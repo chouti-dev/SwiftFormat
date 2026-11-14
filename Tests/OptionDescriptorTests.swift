@@ -456,6 +456,36 @@ final class OptionDescriptorTests: XCTestCase {
         }
     }
 
+    func testPreserveIff() throws {
+        let descriptor = Descriptors.preserveIff
+        XCTAssertEqual(descriptor.argumentName, "preserve-iff")
+        XCTAssertEqual(descriptor.defaultArgument, "true")
+        var options = FormatOptions.default
+        XCTAssertTrue(options.preserveIff)
+        try descriptor.toOptions("false", &options)
+        XCTAssertFalse(options.preserveIff)
+        XCTAssertEqual(descriptor.fromOptions(options), "false")
+        try descriptor.toOptions("true", &options)
+        XCTAssertTrue(options.preserveIff)
+        XCTAssertEqual(descriptor.fromOptions(options), "true")
+        XCTAssertThrowsError(try descriptor.toOptions("invalid", &options))
+    }
+
+    func testPreferUSSpelling() throws {
+        let descriptor = Descriptors.preferUSSpelling
+        XCTAssertEqual(descriptor.argumentName, "prefer-us-spelling")
+        XCTAssertEqual(descriptor.defaultArgument, "false")
+        var options = FormatOptions.default
+        XCTAssertFalse(options.preferUSSpelling)
+        try descriptor.toOptions("true", &options)
+        XCTAssertTrue(options.preferUSSpelling)
+        XCTAssertEqual(descriptor.fromOptions(options), "true")
+        try descriptor.toOptions("false", &options)
+        XCTAssertFalse(options.preferUSSpelling)
+        XCTAssertEqual(descriptor.fromOptions(options), "false")
+        XCTAssertThrowsError(try descriptor.toOptions("invalid", &options))
+    }
+
     func testIgnoredTyposAcceptsCommaDelimitedList() throws {
         let descriptor = Descriptors.ignoredTypos
         XCTAssertEqual(descriptor.argumentName, "ignore-typos")

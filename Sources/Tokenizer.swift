@@ -682,6 +682,14 @@ extension Collection<Token> where Index == Int {
                 while self[index].isSpace, index < indices.endIndex {
                     index += 1
                 }
+
+                // Keep the space around `&` and `->` in a wrapped type, like `Foo &` + `Bar`
+                let spacedOperators: [Token] = [.operator("&", .infix), .operator("->", .infix)]
+                if let lastToken = tokens.last, !lastToken.isSpace, index < indices.endIndex,
+                   spacedOperators.contains(lastToken) || spacedOperators.contains(self[index])
+                {
+                    tokens.append(.space(" "))
+                }
             }
 
             if index < indices.endIndex {
@@ -1623,13 +1631,19 @@ public func tokenize(_ source: String) -> [Token] {
         assert(tokens[i] == .endOfScope(">"))
         tokens[i] = .operator(">", .none)
         stitchOperators(at: i)
+        // The most recently closed scope comes first, and is the one closed by this
+        // chevron. Later entries can be earlier generics that are still valid, such
+        // as `Baz<Qux>` in `f(a < x, Baz<Qux>.x > y)`, so they must not be popped.
+        var scopeIndex: Int?
+        if andOpeningChevron, !closedGenericScopeIndexes.isEmpty {
+            scopeIndex = closedGenericScopeIndexes.removeFirst()
+        }
         if let previousIndex = index(of: .nonSpaceOrComment, before: i),
            tokens[previousIndex] == .endOfScope(">")
         {
             convertClosingChevronToOperator(at: previousIndex, andOpeningChevron: true)
         }
-        if andOpeningChevron, let scopeIndex = closedGenericScopeIndexes.last {
-            closedGenericScopeIndexes.removeLast()
+        if let scopeIndex {
             convertOpeningChevronToOperator(at: scopeIndex)
         }
     }
@@ -1819,8 +1833,19 @@ public func tokenize(_ source: String) -> [Token] {
                 return
             }
         }
+        var i = i
         if type == .prefix, prevNonSpaceToken == .endOfScope(">") {
+            // A prefix operator can't follow the end of a generic argument list, so the
+            // `<` and `>` we previously tokenized as generic brackets must actually be
+            // operators (e.g. in `x << -1 ... y >> -1`, the `<<` and `>>` were first read
+            // as two nested generic scopes). Turning them back into operators merges
+            // adjacent ones into a single token (`<` + `<` becomes `<<`), so the token
+            // array gets shorter and every index after the merge point (including `i`)
+            // shifts left. Adjust `i` by the number of removed tokens so we still update
+            // the operator we were called for.
+            let count = tokens.count
             convertClosingChevronToOperator(at: prevNonSpaceIndex, andOpeningChevron: true)
+            i -= count - tokens.count
         }
         tokens[i] = .operator(string, type)
     }
@@ -2015,6 +2040,11 @@ public func tokenize(_ source: String) -> [Token] {
                     default:
                         // Not a generic scope
                         convertOpeningChevronToOperator(at: scopeIndex)
+                        if scopeIndex > 0, tokens[scopeIndex - 1] == .startOfScope("<") {
+                            // A generic argument list can't start with `<`, so the preceding
+                            // chevron is part of the same operator (e.g. `<<` or `<<=`)
+                            convertOpeningChevronToOperator(at: scopeIndex - 1)
+                        }
                     }
                 case .delimiter(":") where scopeIndexStack.count > 1 &&
                     [.endOfScope("case"), .operator("?", .infix)].contains(tokens[scopeIndexStack[scopeIndexStack.count - 2]]):

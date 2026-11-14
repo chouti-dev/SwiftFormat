@@ -539,6 +539,56 @@ final class OrganizeDeclarationsTests: XCTestCase {
         )
     }
 
+    func testOrganizeDeclarationWithLegacyConsumingModifier() {
+        let input = """
+        public struct Foo {
+            typealias Storage = Int
+
+            public __consuming func dispose() -> Int {
+                0
+            }
+
+            static func extract() -> Int {
+                0
+            }
+
+            public static func load() -> Int {
+                0
+            }
+        }
+        """
+
+        let output = """
+        public struct Foo {
+
+            // MARK: Public
+
+            public static func load() -> Int {
+                0
+            }
+
+            public __consuming func dispose() -> Int {
+                0
+            }
+
+            // MARK: Internal
+
+            typealias Storage = Int
+
+            static func extract() -> Int {
+                0
+            }
+
+        }
+        """
+
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
     func testOrganizeSwiftUIViewModifierInTypeOrder() {
         let input = """
         struct Modifier: ViewModifier {
@@ -5012,6 +5062,44 @@ final class OrganizeDeclarationsTests: XCTestCase {
 
         }
         """
+        testFormatting(
+            for: input, output,
+            rule: .organizeDeclarations,
+            exclude: [.blankLinesAtStartOfScope, .blankLinesAtEndOfScope]
+        )
+    }
+
+    func testPropertyNamedOpenWithoutTypeIsNotAModifierOfNextDeclaration() {
+        let input = """
+        struct Foo: View {
+            @Environment(\\.openAction) private var open
+
+            var model: Model
+
+            var body: some View {
+                Text("")
+            }
+        }
+        """
+
+        let output = """
+        struct Foo: View {
+
+            // MARK: Internal
+
+            var model: Model
+
+            var body: some View {
+                Text("")
+            }
+
+            // MARK: Private
+
+            @Environment(\\.openAction) private var open
+
+        }
+        """
+
         testFormatting(
             for: input, output,
             rule: .organizeDeclarations,

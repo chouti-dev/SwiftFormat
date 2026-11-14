@@ -443,9 +443,10 @@ extension Formatter {
             case let token where isModifier(at: prevIndex) || token.isAttribute:
                 if case .identifier = token,
                    let nextToken = last(.nonSpaceOrCommentOrLinebreak, before: prevIndex),
-                   nextToken == .keyword("case") || nextToken.isOperator(ofType: .infix) || nextToken.isOperator(ofType: .prefix)
+                   nextToken == .keyword("case") || nextToken == .keyword("var") || nextToken == .keyword("let")
+                   || nextToken.isOperator(ofType: .infix) || nextToken.isOperator(ofType: .prefix)
                 {
-                    // Part of previous declaration
+                    // Part of previous declaration, e.g. a property named `open` without a type annotation
                     return false
                 }
 
@@ -1480,6 +1481,9 @@ extension Formatter {
              .endOfScope("]"), .endOfScope(")"), .endOfScope(">"), .endOfScope("}"),
              .endOfScope where prevToken.isStringDelimiter:
             return true
+        case let .keyword(name) where name.isMacro:
+            // Freestanding macro expansion, e.g. `#URL("...")`
+            return string == "("
         default:
             return false
         }
@@ -4805,6 +4809,35 @@ extension Formatter {
         }
     }
 
+    /// Whether the token binds less tightly than `&&` (`||`, a ternary or an assignment),
+    /// so an `&&` in the same condition can't be swapped with a comma, and the condition
+    /// can't be joined to another one with `&&`, without changing its meaning.
+    func hasLowerPrecedenceThanAnd(at index: Int) -> Bool {
+        switch tokens[index] {
+        case .operator("||", .infix), .operator("?", .infix), .operator("=", .infix):
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Whether the condition in the given range contains a top-level operator that binds
+    /// less tightly than `&&`. Shared by the `andOperator` and `forWhere` rules.
+    func conditionHasLowerPrecedenceThanAnd(in range: Range<Int>) -> Bool {
+        var index = range.lowerBound
+        while index < range.upperBound {
+            if hasLowerPrecedenceThanAnd(at: index) {
+                return true
+            }
+            if tokens[index].isStartOfScope {
+                guard let endIndex = endOfScope(at: index) else { return true }
+                index = endIndex
+            }
+            index += 1
+        }
+        return false
+    }
+
     /// Parse conditions in a guard or if statement
     func parseConditionalStatement(at guardOrIfIndex: Int) -> [ConditionalStatementElement] {
         assert(tokens[guardOrIfIndex] == .keyword("guard") || tokens[guardOrIfIndex] == .keyword("if"))
@@ -4838,7 +4871,9 @@ extension Formatter {
             }
 
             let conditionEnd: Int
-            if let commaIndex = index(of: .delimiter(","), after: conditionStart),
+            // Search from before the condition, so a condition that starts with `(`
+            // is skipped as a scope rather than searched inside
+            if let commaIndex = index(of: .delimiter(","), after: conditionStart - 1),
                commaIndex < endIndex
             {
                 conditionEnd = index(of: .nonSpaceOrCommentOrLinebreak, before: commaIndex) ?? conditionStart
@@ -4917,7 +4952,7 @@ extension _FormatRules {
     static let aclSetterModifiers = aclModifiers.map { "\($0)(set)" }
 
     /// Mutating modifiers
-    static let mutatingModifiers = ["borrowing", "consuming", "mutating", "nonmutating"]
+    static let mutatingModifiers = ["borrowing", "consuming", "__consuming", "mutating", "nonmutating"]
 
     /// Ownership modifiers
     static let ownershipModifiers = ["weak", "unowned", "unowned(safe)", "unowned(unsafe)"]

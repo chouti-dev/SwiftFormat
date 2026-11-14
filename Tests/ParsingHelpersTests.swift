@@ -931,7 +931,7 @@ final class ParsingHelpersTests: XCTestCase {
             "lazy",
             "weak", "unowned", "unowned(safe)", "unowned(unsafe)",
             "static", "class",
-            "borrowing", "consuming", "mutating", "nonmutating",
+            "borrowing", "consuming", "__consuming", "mutating", "nonmutating",
             "prefix", "infix", "postfix",
             "async",
             "convenience",
@@ -953,7 +953,7 @@ final class ParsingHelpersTests: XCTestCase {
             "indirect",
             "isolated", "nonisolated", "nonisolated(unsafe)",
             "static", "class",
-            "borrowing", "consuming", "mutating", "nonmutating",
+            "borrowing", "consuming", "__consuming", "mutating", "nonmutating",
             "lazy",
             "final",
             "optional", "required",
@@ -2784,6 +2784,21 @@ final class ParsingHelpersTests: XCTestCase {
         let foo: Module::Type.Module::Subtype
         """))
         XCTAssertEqual(formatter.parseType(at: 5)?.string, "Module::Type.Module::Subtype")
+    }
+
+    func testWrappedTypeStringKeepsSpacesAroundAmpersandAndArrow() throws {
+        let formatter = Formatter(tokenize("""
+        let a: Foo &
+            Bar
+        let b: (Foo) ->
+            Bar
+        """))
+        let firstColon = try XCTUnwrap(formatter.index(of: .delimiter(":"), after: 0))
+        let secondColon = try XCTUnwrap(formatter.index(of: .delimiter(":"), after: firstColon))
+        let firstType = try XCTUnwrap(formatter.index(of: .nonSpace, after: firstColon))
+        let secondType = try XCTUnwrap(formatter.index(of: .nonSpace, after: secondColon))
+        XCTAssertEqual(formatter.parseType(at: firstType)?.string, "Foo & Bar")
+        XCTAssertEqual(formatter.parseType(at: secondType)?.string, "(Foo) -> Bar")
     }
 
     func testParseModuleQualifiedTypeWithNewlineBeforeDoubleColon() {
